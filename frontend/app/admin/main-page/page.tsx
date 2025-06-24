@@ -18,8 +18,6 @@ interface MainPageData {
   aboutContent?: string;
 }
 
-interface User { email: string; }
-
 export default function AdminMainPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -113,7 +111,7 @@ export default function AdminMainPage() {
         updatedAt: new Date()
       });
       alert('메인 페이지가 성공적으로 업데이트되었습니다.');
-    } catch (error: unknown) {
+    } catch {
       // updateDoc 실패 시 setDoc을 항상 시도
       try {
         await setDoc(docRef, {
