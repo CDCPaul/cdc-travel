@@ -7,8 +7,10 @@ import { auth } from '@/lib/firebase';
 import { isAdmin } from '@/lib/auth';
 import Link from 'next/link';
 
+interface User { email: string; }
+
 export default function AdminDashboard() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [adminStatus, setAdminStatus] = useState(false);
   const router = useRouter();
@@ -16,8 +18,8 @@ export default function AdminDashboard() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
+        setUser({ email: user.email ?? '' });
         const adminCheck = isAdmin(user);
-        setUser(user);
         setAdminStatus(adminCheck);
         
         if (!adminCheck) {

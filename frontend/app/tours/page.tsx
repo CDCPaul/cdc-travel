@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { fetchProducts } from "@/lib/firebase-sample";
+import { fetchProducts, Product } from "@/lib/firebase-sample";
 import Navigation from "@/components/Navigation";
 
 const cardVariants = {
@@ -12,7 +12,7 @@ const cardVariants = {
 };
 
 export default function Tours() {
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   useEffect(() => {
     fetchProducts().then(setProducts);
   }, []);

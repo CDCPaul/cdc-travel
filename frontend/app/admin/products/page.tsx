@@ -7,6 +7,7 @@ import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc } from 'firebase
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '@/lib/firebase';
 import Link from 'next/link';
+import Image from "next/image";
 
 interface Product {
   id: string;
@@ -22,12 +23,14 @@ interface Product {
   createdAt: any;
 }
 
+interface User { email: string; }
+
 export default function AdminProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const router = useRouter();
 
   // Form states
@@ -49,7 +52,7 @@ export default function AdminProducts() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        setUser(user);
+        setUser({ email: user.email ?? '' });
         fetchProducts();
       } else {
         router.push('/admin/login');
@@ -252,7 +255,13 @@ export default function AdminProducts() {
                     {imageUploading && <div className="text-blue-600 text-sm mt-1">이미지 업로드 중...</div>}
                     {imageUploadError && <div className="text-red-600 text-sm mt-1">{imageUploadError}</div>}
                     {formData.imageUrl && formData.imageUrl !== "" && (
-                      <img src={formData.imageUrl} alt="미리보기" className="mt-2 h-24 rounded-md border" />
+                      <Image
+                        src={formData.imageUrl}
+                        alt="미리보기"
+                        width={400}
+                        height={250}
+                        className="mt-2 h-24 rounded-md border"
+                      />
                     )}
                   </div>
                   <div>
@@ -438,10 +447,12 @@ export default function AdminProducts() {
                 <li key={product.id} className="px-6 py-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
-                      <img
+                      <Image
                         src={product.imageUrl}
                         alt={product.title}
-                        className="h-16 w-16 object-cover rounded-md"
+                        width={400}
+                        height={250}
+                        className="w-full h-48 object-cover rounded-t-xl"
                       />
                       <div className="ml-4">
                         <h3 className="text-lg font-medium text-gray-900">{product.title}</h3>

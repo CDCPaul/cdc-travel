@@ -1,6 +1,22 @@
 import { db } from "./firebase";
 import { collection, getDocs, addDoc } from "firebase/firestore";
 
+// Product 타입 정의
+export interface Product {
+  id?: string;
+  title?: string;
+  description?: string;
+  price?: string;
+  duration?: string;
+  imageUrl?: string;
+  schedule?: string[];
+  highlights?: string[];
+  included?: string[];
+  notIncluded?: string[];
+  createdAt?: Date;
+  [key: string]: any;
+}
+
 // 상품 리스트 불러오기
 export async function fetchProducts() {
   const querySnapshot = await getDocs(collection(db, "products"));
@@ -15,7 +31,7 @@ export async function fetchProducts() {
 }
 
 // 상품 추가하기 (예시)
-export async function addProduct(product: Record<string, any>) {
+export async function addProduct(product: Product) {
   const docRef = await addDoc(collection(db, "products"), product);
   return docRef.id;
 } 

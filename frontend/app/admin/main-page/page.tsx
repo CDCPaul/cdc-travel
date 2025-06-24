@@ -7,6 +7,7 @@ import { doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from '@/lib/firebase';
 import Link from 'next/link';
+import Image from "next/image";
 
 interface MainPageData {
   bannerVideo?: string;
@@ -17,11 +18,13 @@ interface MainPageData {
   aboutContent?: string;
 }
 
+interface User { email: string; }
+
 export default function AdminMainPage() {
   const [mainPageData, setMainPageData] = useState<MainPageData>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const router = useRouter();
 
   // Form states
@@ -37,7 +40,7 @@ export default function AdminMainPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        setUser(user);
+        setUser({ email: user.email ?? '' });
         fetchMainPageData();
       } else {
         router.push('/admin/login');
@@ -201,10 +204,12 @@ export default function AdminMainPage() {
                     <div className="mt-2">
                       <p className="text-sm text-gray-600">현재 이미지 URL:</p>
                       <p className="text-sm text-blue-600 break-all">{formData.bannerImage}</p>
-                      <img 
-                        src={formData.bannerImage} 
-                        alt="Banner" 
-                        className="mt-2 max-w-md rounded-md"
+                      <Image
+                        src={formData.bannerImage}
+                        alt="배너 이미지 미리보기"
+                        width={400}
+                        height={200}
+                        className="mt-2 rounded-md border"
                       />
                     </div>
                   )}

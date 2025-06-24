@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
 import { auth, storage } from '@/lib/firebase';
 import Link from 'next/link';
+import Image from "next/image";
 
 interface FileItem {
   name: string;
@@ -19,7 +20,7 @@ export default function AdminFiles() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<null | { email: string }>(null);
   const [selectedCategory, setSelectedCategory] = useState('products');
   const router = useRouter();
 
@@ -30,25 +31,11 @@ export default function AdminFiles() {
     { id: 'content', name: '콘텐츠' }
   ];
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setUser(user);
-        fetchFiles();
-      } else {
-        router.push('/admin/login');
-      }
-    });
-
-    return () => unsubscribe();
-  }, [router, selectedCategory]);
-
-  const fetchFiles = async () => {
+  const fetchFiles = useCallback(async () => {
     try {
       setLoading(true);
       const listRef = ref(storage, selectedCategory);
       const res = await listAll(listRef);
-      
       const filePromises = res.items.map(async (itemRef) => {
         const url = await getDownloadURL(itemRef);
         return {
@@ -57,7 +44,6 @@ export default function AdminFiles() {
           path: itemRef.fullPath
         };
       });
-
       const fileList = await Promise.all(filePromises);
       setFiles(fileList);
     } catch (error) {
@@ -65,7 +51,19 @@ export default function AdminFiles() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedCategory]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUser({ email: user.email ?? '' });
+        fetchFiles();
+      } else {
+        router.push('/admin/login');
+      }
+    });
+    return () => unsubscribe();
+  }, [router, fetchFiles]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -192,9 +190,11 @@ export default function AdminFiles() {
                   <div key={file.path} className="border border-gray-200 rounded-lg p-4">
                     <div className="aspect-w-16 aspect-h-9 mb-4">
                       {file.url.match(/\.(jpg|jpeg|png|gif|webp)$/i) && file.url && file.url !== "" ? (
-                        <img
+                        <Image
                           src={file.url}
                           alt={file.name}
+                          width={400}
+                          height={200}
                           className="w-full h-48 object-cover rounded-md"
                         />
                       ) : file.url.match(/\.(mp4|webm|ogg)$/i) ? (

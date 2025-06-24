@@ -3,10 +3,17 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { fetchProducts } from "@/lib/firebase-sample";
+import { fetchProducts, Product } from "@/lib/firebase-sample";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Navigation from "@/components/Navigation";
+
+interface MainPageData {
+  bannerVideo?: string;
+  bannerImage?: string;
+  mainTitle?: string;
+  mainSubtitle?: string;
+}
 
 const cardVariants = {
   hidden: { opacity: 0, y: 40 },
@@ -14,8 +21,8 @@ const cardVariants = {
 };
 
 export default function Home() {
-  const [products, setProducts] = useState<any[]>([]);
-  const [mainPage, setMainPage] = useState<any>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [mainPage, setMainPage] = useState<MainPageData | null>(null);
 
   useEffect(() => {
     fetchProducts().then(setProducts);
@@ -24,7 +31,7 @@ export default function Home() {
       const docRef = doc(db, "settings", "mainPage");
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
-        const data = docSnap.data();
+        const data = docSnap.data() as MainPageData;
         console.log("Firestore mainPage data:", data);
         console.log("bannerVideo URL:", data.bannerVideo);
         console.log("bannerImage URL:", data.bannerImage);
@@ -67,12 +74,14 @@ export default function Home() {
             <source src={mainPage.bannerVideo} type="video/mp4" />
             Your browser does not support the video tag.
           </video>
-        ) : mainPage && mainPage.bannerImage ? (
-          <img
+        ) : mainPage && typeof mainPage.bannerImage === 'string' && !!mainPage.bannerImage ? (
+          <Image
             src={mainPage.bannerImage}
             alt="Banner"
+            fill
             className="absolute inset-0 w-full h-full object-cover z-0"
             style={{ objectFit: "cover" }}
+            priority
           />
         ) : (
           <div className="absolute inset-0 w-full h-full bg-black z-0" />
@@ -137,7 +146,7 @@ export default function Home() {
             인기 투어
           </motion.h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {products.slice(0, 3).map((product: any, i: number) => (
+            {products.slice(0, 3).map((product: Product, i: number) => (
               <motion.div
                 key={product.id}
                 custom={i}
