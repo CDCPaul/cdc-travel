@@ -157,10 +157,10 @@ export default function Home() {
               >
                 <Link href={`/tours/${product.id}`} className="block bg-white rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300">
                   <div className="relative">
-                    {product.image && product.image !== "" ? (
+                    {typeof product.imageUrl === 'string' && product.imageUrl ? (
                       <Image 
-                        src={product.image} 
-                        alt={product.title} 
+                        src={product.imageUrl} 
+                        alt={product.title || 'Tour Image'} 
                         width={400} 
                         height={250} 
                         className="w-full h-48 object-cover rounded-t-xl" 
@@ -174,7 +174,6 @@ export default function Home() {
                     <h3 className="text-xl font-semibold mb-2 text-gray-900">{product.title}</h3>
                     <p className="text-gray-600 mb-4 line-clamp-2">{product.description}</p>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">{product.date}</span>
                       <span className="text-blue-600 font-semibold">자세히 보기 →</span>
                     </div>
                   </div>
