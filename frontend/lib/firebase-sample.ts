@@ -14,7 +14,6 @@ export interface Product {
   included?: string[];
   notIncluded?: string[];
   createdAt?: Date;
-  [key: string]: any;
 }
 
 // 상품 리스트 불러오기
