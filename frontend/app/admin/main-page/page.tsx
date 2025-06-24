@@ -21,10 +21,8 @@ interface MainPageData {
 interface User { email: string; }
 
 export default function AdminMainPage() {
-  const [mainPageData, setMainPageData] = useState<MainPageData>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
   const router = useRouter();
 
   // Form states
@@ -40,7 +38,6 @@ export default function AdminMainPage() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        setUser({ email: user.email ?? '' });
         fetchMainPageData();
       } else {
         router.push('/admin/login');
@@ -57,7 +54,6 @@ export default function AdminMainPage() {
       
       if (docSnap.exists()) {
         const data = docSnap.data() as MainPageData;
-        setMainPageData(data);
         setFormData({
           bannerVideo: data.bannerVideo || '',
           bannerImage: data.bannerImage || '',
@@ -116,19 +112,17 @@ export default function AdminMainPage() {
         ...formData,
         updatedAt: new Date()
       });
-      setMainPageData(formData);
       alert('메인 페이지가 성공적으로 업데이트되었습니다.');
-    } catch (error: any) {
-      // 문서가 없으면 setDoc으로 생성
-      if (error.code === 'not-found' || error.message.includes('No document to update')) {
+    } catch (error: unknown) {
+      // updateDoc 실패 시 setDoc을 항상 시도
+      try {
         await setDoc(docRef, {
           ...formData,
           updatedAt: new Date()
         });
-        setMainPageData(formData);
         alert('메인 페이지가 새로 생성되었습니다.');
-      } else {
-        console.error('Error updating main page:', error);
+      } catch (e) {
+        console.error('Error updating main page:', e);
         alert('업데이트에 실패했습니다.');
       }
     } finally {

@@ -20,8 +20,6 @@ export default function AdminFiles() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [user, setUser] = useState<null | { email: string }>(null);
-  const [selectedCategory, setSelectedCategory] = useState('products');
   const router = useRouter();
 
   const categories = [
@@ -34,7 +32,7 @@ export default function AdminFiles() {
   const fetchFiles = useCallback(async () => {
     try {
       setLoading(true);
-      const listRef = ref(storage, selectedCategory);
+      const listRef = ref(storage, 'products');
       const res = await listAll(listRef);
       const filePromises = res.items.map(async (itemRef) => {
         const url = await getDownloadURL(itemRef);
@@ -51,12 +49,11 @@ export default function AdminFiles() {
     } finally {
       setLoading(false);
     }
-  }, [selectedCategory]);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        setUser({ email: user.email ?? '' });
         fetchFiles();
       } else {
         router.push('/admin/login');
@@ -72,7 +69,7 @@ export default function AdminFiles() {
     setUploading(true);
     try {
       const uploadPromises = Array.from(files).map(async (file) => {
-        const storageRef = ref(storage, `${selectedCategory}/${Date.now()}_${file.name}`);
+        const storageRef = ref(storage, `products/${Date.now()}_${file.name}`);
         await uploadBytes(storageRef, file);
         return await getDownloadURL(storageRef);
       });
@@ -136,9 +133,9 @@ export default function AdminFiles() {
               {categories.map((category) => (
                 <button
                   key={category.id}
-                  onClick={() => setSelectedCategory(category.id)}
+                  onClick={() => fetchFiles()}
                   className={`p-4 rounded-lg border-2 transition-colors ${
-                    selectedCategory === category.id
+                    category.id === 'products'
                       ? 'border-blue-500 bg-blue-50 text-blue-700'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
@@ -155,7 +152,7 @@ export default function AdminFiles() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {categories.find(c => c.id === selectedCategory)?.name} 업로드
+                  {categories.find(c => c.id === 'products')?.name} 업로드
                 </label>
                 <input
                   type="file"
@@ -176,7 +173,7 @@ export default function AdminFiles() {
           <div className="bg-white shadow rounded-lg">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold">
-                {categories.find(c => c.id === selectedCategory)?.name} 목록
+                {categories.find(c => c.id === 'products')?.name} 목록
               </h2>
             </div>
             

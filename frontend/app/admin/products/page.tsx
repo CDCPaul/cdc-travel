@@ -20,17 +20,14 @@ interface Product {
   highlights: string[];
   included: string[];
   notIncluded: string[];
-  createdAt: any;
+  createdAt?: Date | string;
 }
-
-interface User { email: string; }
 
 export default function AdminProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [user, setUser] = useState<User | null>(null);
   const router = useRouter();
 
   // Form states
@@ -52,7 +49,6 @@ export default function AdminProducts() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        setUser({ email: user.email ?? '' });
         fetchProducts();
       } else {
         router.push('/admin/login');
@@ -244,7 +240,7 @@ export default function AdminProducts() {
                         try {
                           const url = await handleImageUpload(file);
                           setFormData((prev) => ({ ...prev, imageUrl: url }));
-                        } catch (err) {
+                        } catch {
                           setImageUploadError('이미지 업로드에 실패했습니다.');
                         } finally {
                           setImageUploading(false);
