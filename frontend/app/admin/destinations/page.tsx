@@ -5,6 +5,7 @@ import { useLanguage } from "../../../components/LanguageContext";
 import Script from "next/script";
 import { collection, addDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import Image from 'next/image';
 
 // 구글맵 타입 오류 방지용 글로벌 선언
 declare global {
@@ -428,7 +429,7 @@ export default function DestinationsPage() {
             />
             <label htmlFor="main-image" className="cursor-pointer">
               {imageUrl ? (
-                <img src={imageUrl} alt="Main" className="max-w-full h-48 object-cover mx-auto" />
+                <Image src={imageUrl} alt="Main" width={400} height={192} className="max-w-full h-48 object-cover mx-auto" />
               ) : (
                 <div>
                   <p className="text-gray-500">{TEXT.dragDropImage[lang]}</p>
@@ -462,7 +463,7 @@ export default function DestinationsPage() {
             {extraImages.length > 0 && (
               <div className="grid grid-cols-3 gap-4 mt-4">
                 {extraImages.map((url, index) => (
-                  <img key={index} src={url} alt={`Extra ${index + 1}`} className="w-full h-32 object-cover rounded" />
+                  <Image key={index} src={url} alt={`Extra ${index + 1}`} width={200} height={128} className="w-full h-32 object-cover rounded" />
                 ))}
               </div>
             )}

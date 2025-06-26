@@ -5,6 +5,7 @@ import { useLanguage } from "@/components/LanguageContext";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import MainLayout from '@/components/MainLayout';
+import Image from 'next/image';
 
 interface TravelInfo {
   id: string;
@@ -261,7 +262,7 @@ export default function TravelInfoPage() {
                   >
                     <div className="w-40 h-40 flex-shrink-0 bg-gray-100 flex items-center justify-center">
                       {spot.imageUrl ? (
-                        <img src={spot.imageUrl} alt="img" className="w-full h-full object-cover" />
+                        <Image src={spot.imageUrl} alt="img" width={160} height={160} className="w-full h-full object-cover" />
                       ) : (
                         <span className="text-gray-400 text-3xl">🖼️</span>
                       )}
@@ -327,9 +328,11 @@ export default function TravelInfoPage() {
                   return (
                     <>
                       {/* 메인 이미지 */}
-                      <img 
+                      <Image 
                         src={images[currentImageIndex]} 
                         alt={`Image ${currentImageIndex + 1}`} 
+                        width={800}
+                        height={224}
                         className="h-56 w-full object-cover rounded-t-2xl transition-opacity duration-300" 
                       />
                       

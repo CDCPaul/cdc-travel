@@ -8,6 +8,7 @@ import { db } from "@/lib/firebase";
 import { CheckIcon } from '@heroicons/react/24/solid';
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "@/lib/firebase";
+import Image from 'next/image';
 
 // Google Maps API 타입은 런타임에서 확인되므로 타입 단언 사용
 
@@ -199,6 +200,18 @@ function PillButton({ selected, children, ...props }: React.ButtonHTMLAttributes
       {children}
     </button>
   );
+}
+
+// Google Maps API 타입 정의
+interface GooglePlaceDetails {
+  editorial_summary?: {
+    overview?: string;
+  };
+  types?: string[];
+  address_components?: Array<{
+    long_name?: string;
+    types: string[];
+  }>;
 }
 
 export default function SpotsPage() {
@@ -458,7 +471,7 @@ export default function SpotsPage() {
                 // 설명(영문만)
                 setDescription({
                   ko: '',
-                  en: ((detailsEn as any).editorial_summary?.overview || detailsEn.types?.join(', ') || ''),
+                  en: ((detailsEn as GooglePlaceDetails).editorial_summary?.overview || detailsEn.types?.join(', ') || ''),
                   slug: ''
                 });
                 // region(시/도)
@@ -707,43 +720,33 @@ export default function SpotsPage() {
                       <td className="p-2 border">
                         {typeof spot.region === 'string'
                           ? spot.region
-                          : typeof (spot.region as any)?.[lang] === 'string'
-                            ? (spot.region as any)[lang]
-                            : typeof (spot.region as any)?.ko === 'string'
-                              ? (spot.region as any).ko
-                              : '-'}
+                          : (spot.region as { ko: string; en: string })?.[lang] || '-'
+                        }
                       </td>
                       <td className="p-2 border text-center">
                         {spot.imageUrl ? (
-                          <img src={spot.imageUrl as string} alt="img" className="w-20 h-14 object-cover rounded mx-auto" />
+                          <Image src={spot.imageUrl as string} alt="img" width={80} height={56} className="object-cover rounded mx-auto" />
                         ) : <span className="text-gray-400">-</span>}
                       </td>
                       <td className="p-2 border">
                         {typeof spot.name === 'string'
                           ? spot.name
-                          : typeof (spot.name as any)?.[lang] === 'string'
-                            ? (spot.name as any)[lang]
-                            : typeof (spot.name as any)?.ko === 'string'
-                              ? (spot.name as any).ko
-                              : '-'}
+                          : (spot.name as { ko: string; en: string })?.[lang] || '-'
+                        }
                       </td>
                       <td className="p-2 border">
                         {Array.isArray(spot.tags) && spot.tags.length > 0
                           ? spot.tags.map((t, i) =>
                               <span key={i} className="inline-block bg-gray-200 rounded-full px-2 py-1 text-xs mr-1">
-                                {typeof t === 'string'
-                                  ? t
-                                  : typeof t?.[lang] === 'string'
-                                    ? t[lang]
-                                    : typeof t?.ko === 'string'
-                                      ? t.ko
-                                      : '-'}
+                                {typeof t === 'string' ? t : '-'}
                               </span>
                             )
                           : '-'}
                       </td>
                       <td className="p-2 border text-xs">
-                        {(spot.createdAt as any)?.seconds ? new Date((spot.createdAt as any).seconds * 1000).toLocaleDateString() : '-'}
+                        {(spot.createdAt as { seconds: number })?.seconds 
+                          ? new Date((spot.createdAt as { seconds: number }).seconds * 1000).toLocaleDateString() 
+                          : '-'}
                       </td>
                       <td className="p-2 border text-center">
                         <button className="px-2 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500 text-xs" onClick={() => handleEdit(spot)}>{TEXT.edit[lang]}</button>
@@ -921,7 +924,7 @@ export default function SpotsPage() {
                 <label htmlFor="main-image" className="cursor-pointer">
                   {imageUrl && (
                     <div className="relative inline-block">
-                      <img src={imageUrl} alt="Main" className="max-w-full h-48 object-cover mx-auto rounded" />
+                      <Image src={imageUrl} alt="Main" width={400} height={192} className="max-w-full h-48 object-cover mx-auto rounded" />
                       <button type="button" onClick={() => { setImageUrl(""); }}
                         className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center text-lg font-bold hover:bg-black/80 z-10"
                         aria-label="Remove main image"
@@ -957,7 +960,7 @@ export default function SpotsPage() {
                   <div className="grid grid-cols-3 gap-4 mt-4">
                     {extraImages.map((url, index) => (
                       <div key={index} className="relative">
-                        <img src={url} alt={`Extra ${index + 1}`} className="w-full h-32 object-cover rounded" />
+                        <Image src={url} alt={`Extra ${index + 1}`} width={200} height={128} className="w-full h-32 object-cover rounded" />
                         <button type="button" onClick={() => { setExtraImages(prev => prev.filter((_, i) => i !== index)); }}
                           className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center text-lg font-bold hover:bg-black/80 z-10"
                           aria-label="Remove extra image"
