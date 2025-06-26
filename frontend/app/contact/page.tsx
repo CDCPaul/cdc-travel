@@ -1,19 +1,31 @@
-import Navigation from "@/components/Navigation";
+"use client";
+import { useLanguage } from "@/components/LanguageContext";
+import MainLayout from "@/components/MainLayout";
 
-export default function Contact() {
+const TEXT = {
+  title: { ko: "문의하기", en: "Contact" },
+  desc: {
+    ko: "궁금한 점이 있으시면 언제든지 연락주세요!",
+    en: "If you have any questions, feel free to contact us!"
+  },
+  email: { ko: "이메일 문의", en: "Email Inquiry" },
+  send: { ko: "보내기", en: "Send" }
+};
+
+export default function ContactPage() {
+  const { lang } = useLanguage();
   return (
-    <div className="min-h-screen">
-      <Navigation />
+    <MainLayout>
       <main className="bg-gray-50 flex flex-col items-center pt-28 px-4">
-        <h1 className="text-3xl font-bold mb-8 text-center">Contact Us</h1>
+        <h1 className="text-3xl font-bold mb-8 text-center">{TEXT.title[lang]}</h1>
         <section className="w-full max-w-2xl flex flex-col items-center">
-          <p className="mb-4 text-gray-700 text-center">For inquiries, please contact us via email or messenger.</p>
+          <p className="mb-4 text-gray-700 text-center">{TEXT.desc[lang]}</p>
           <div className="flex flex-col md:flex-row gap-4 mb-8">
             <a
               href="mailto:outbound@cebudirectclub.com"
               className="bg-teal-700 text-white px-6 py-3 rounded-lg font-semibold hover:bg-teal-800 transition text-center"
             >
-              Email Us
+              {TEXT.email[lang]}
             </a>
             <a
               href="https://open.kakao.com/o/gPh3aNjh"
@@ -60,6 +72,6 @@ export default function Contact() {
           </div>
         </section>
       </main>
-    </div>
+    </MainLayout>
   );
 } 

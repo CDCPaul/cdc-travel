@@ -1,7 +1,17 @@
 import Image from "next/image";
 import Link from "next/link";
+import { useLanguage } from "./LanguageContext";
+
+const NAV_LABELS = {
+  home: { ko: "홈", en: "Home" },
+  about: { ko: "회사소개", en: "About Us" },
+  tours: { ko: "투어상품", en: "Tours" },
+  info: { ko: "여행정보", en: "Travel Info" },
+  contact: { ko: "문의하기", en: "Contact" }
+};
 
 export default function Navigation() {
+  const { lang, setLang } = useLanguage();
   return (
     <nav className="bg-white shadow-lg fixed w-full z-50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -20,20 +30,34 @@ export default function Navigation() {
           </div>
           <div className="hidden md:flex space-x-8">
             <Link href="/" className="text-gray-700 hover:text-blue-600 transition-colors">
-              홈
+              {NAV_LABELS.home[lang]}
             </Link>
             <Link href="/about-us" className="text-gray-700 hover:text-blue-600 transition-colors">
-              회사소개
+              {NAV_LABELS.about[lang]}
             </Link>
             <Link href="/tours" className="text-gray-700 hover:text-blue-600 transition-colors">
-              투어상품
+              {NAV_LABELS.tours[lang]}
             </Link>
             <Link href="/travel-info" className="text-gray-700 hover:text-blue-600 transition-colors">
-              여행정보
+              {NAV_LABELS.info[lang]}
             </Link>
             <Link href="/contact" className="text-gray-700 hover:text-blue-600 transition-colors">
-              문의하기
+              {NAV_LABELS.contact[lang]}
             </Link>
+          </div>
+          <div className="flex items-center gap-2 md:ml-4">
+            <button
+              className={`px-3 py-1 rounded text-sm font-semibold border transition-colors ${lang === 'ko' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300'}`}
+              onClick={() => setLang('ko')}
+            >
+              KOR
+            </button>
+            <button
+              className={`px-3 py-1 rounded text-sm font-semibold border transition-colors ${lang === 'en' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300'}`}
+              onClick={() => setLang('en')}
+            >
+              ENG
+            </button>
           </div>
           <div className="md:hidden">
             <button className="text-gray-700">
