@@ -24,7 +24,7 @@ interface Product {
   highlights?: Array<string | { ko: string; en: string }>;
   isActive?: boolean;
   isFeatured?: boolean;
-  createdAt?: any;
+  createdAt?: Date | string;
 }
 
 const cardVariants = {
@@ -175,7 +175,7 @@ export default function ToursPage() {
                       
                       {product.highlights && product.highlights.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
-                          {product.highlights.slice(0, 3).map((highlight: any, idx: number) => (
+                          {product.highlights.slice(0, 3).map((highlight: string | { ko: string; en: string }, idx: number) => (
                             <span key={idx} className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
                               {typeof highlight === 'object' ? safeLang(highlight, lang) : highlight}
                             </span>

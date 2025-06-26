@@ -1,21 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { onAuthStateChanged } from 'firebase/auth';
-import { ref, uploadBytes, getDownloadURL, listAll, deleteObject } from 'firebase/storage';
-import { auth, storage } from '@/lib/firebase';
 import Link from 'next/link';
-import Image from "next/image";
 import { useLanguage } from "../../../components/LanguageContext";
-
-interface FileItem {
-  name: string;
-  url: string;
-  path: string;
-  size?: number;
-  type?: string;
-}
 
 const TEXT = {
   title: { ko: "파일 관리", en: "File Management" },

@@ -17,7 +17,7 @@ interface TravelInfo {
   category: string | { ko: string; en: string };
   imageUrls?: string[];
   tags?: Array<string | { ko: string; en: string }>;
-  createdAt?: any;
+  createdAt?: Date | string | { seconds: number; nanoseconds: number };
 }
 
 const TEXT = {
@@ -157,7 +157,7 @@ export default function TravelInfoDetailPage() {
             <div className="mb-6">
               <h3 className="text-lg font-semibold mb-3">{TEXT.tags[lang]}</h3>
               <div className="flex flex-wrap gap-2">
-                {info.tags.map((tag: any, idx: number) => (
+                {info.tags.map((tag: string | { ko: string; en: string }, idx: number) => (
                   <span key={idx} className="inline-block bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm">
                     {typeof tag === 'object' ? safeLang(tag, lang) : tag}
                   </span>
@@ -191,7 +191,13 @@ export default function TravelInfoDetailPage() {
 
           {/* Footer */}
           <div className="text-sm text-gray-500 pt-6 border-t">
-            {TEXT.createdAt[lang]}: {info.createdAt ? new Date(info.createdAt.seconds * 1000).toLocaleDateString() : 'N/A'}
+            {TEXT.createdAt[lang]}: {
+              info.createdAt ? 
+                typeof info.createdAt === 'object' && 'seconds' in info.createdAt ?
+                  new Date((info.createdAt as { seconds: number; nanoseconds: number }).seconds * 1000).toLocaleDateString() :
+                  new Date(info.createdAt as string | Date).toLocaleDateString()
+                : 'N/A'
+            }
           </div>
         </motion.section>
       </motion.main>

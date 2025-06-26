@@ -463,7 +463,7 @@ export default function AdminContent() {
                       {content.imageUrl && (
                         <Image
                           src={content.imageUrl}
-                          alt={typeof content.title === 'object' ? ((content.title as any)?.[lang] || (content.title as any)?.ko || '') : (content.title || '')}
+                          alt={typeof content.title === 'object' ? ((content.title as Record<string, string>)?.[lang] || (content.title as Record<string, string>)?.ko || '') : (content.title || '')}
                           width={100}
                           height={100}
                           className="w-16 h-16 object-cover rounded-md mr-4"
@@ -471,7 +471,7 @@ export default function AdminContent() {
                       )}
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-medium text-gray-900">{typeof content.title === 'object' ? ((content.title as any)?.[lang] || (content.title as any)?.ko || '') : (content.title || '')}</h3>
+                          <h3 className="text-lg font-medium text-gray-900">{typeof content.title === 'object' ? ((content.title as Record<string, string>)?.[lang] || (content.title as Record<string, string>)?.ko || '') : (content.title || '')}</h3>
                           <span className={`px-2 py-1 text-xs rounded-full ${
                             content.isPublished 
                               ? 'bg-green-100 text-green-800' 
@@ -483,7 +483,7 @@ export default function AdminContent() {
                         <p className="text-sm text-gray-500">
                           {texts.categoryOptions[content.category as keyof typeof texts.categoryOptions] || content.category} • {content.author}
                         </p>
-                        <p className="text-sm text-gray-600 truncate">{typeof content.content === 'object' ? ((content.content as any)?.[lang] || (content.content as any)?.ko || '') : (content.content || '')}</p>
+                        <p className="text-sm text-gray-600 truncate">{typeof content.content === 'object' ? ((content.content as Record<string, string>)?.[lang] || (content.content as Record<string, string>)?.ko || '') : (content.content || '')}</p>
                         {content.tags && content.tags.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {content.tags.map((tag: string, index: number) => (

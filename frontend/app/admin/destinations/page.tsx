@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useLanguage } from "../../../components/LanguageContext";
 import Script from "next/script";
 import { collection, addDoc } from "firebase/firestore";
@@ -9,7 +9,21 @@ import { db } from "@/lib/firebase";
 // 구글맵 타입 오류 방지용 글로벌 선언
 declare global {
   interface Window {
-    google: any;
+    google: {
+      maps: {
+        Map: new (element: HTMLElement, options: Record<string, unknown>) => {
+          addListener: (event: string, callback: (e: { latLng: { lat: () => number; lng: () => number } }) => void) => void;
+          setCenter: (center: { lat: number; lng: number }) => void;
+          setZoom: (zoom: number) => void;
+        };
+        Marker: new (options: Record<string, unknown>) => {
+          setMap: (map: unknown) => void;
+        };
+        Geocoder: new () => {
+          geocode: (request: Record<string, unknown>, callback: (results: Array<{ formatted_address: string; address_components: Array<{ long_name: string; types: string[] }> }>, status: string) => void) => void;
+        };
+      };
+    };
   }
 }
 
@@ -81,14 +95,14 @@ export default function DestinationsPage() {
   const [price, setPrice] = useState({ ko: "", en: "" });
   const [bestTime, setBestTime] = useState<string[]>([]);
   
-  // 파일 업로드 상태
-  const [mainImageFile, setMainImageFile] = useState<File | null>(null);
-  const [extraImageFiles, setExtraImageFiles] = useState<File[]>([]);
-  
   // 구글맵 상태
   const [showMapModal, setShowMapModal] = useState(false);
-  const [tempPlace, setTempPlace] = useState<any>(null);
-  const [tempLatLng, setTempLatLng] = useState<{lat: number, lng: number} | null>(null);
+  const [tempPlace, setTempPlace] = useState<{
+    address: string;
+    region: string;
+    lat: number;
+    lng: number;
+  } | null>(null);
   
   // 저장 성공/실패 알림 상태
   const [saveMessage, setSaveMessage] = useState("");
@@ -147,10 +161,8 @@ export default function DestinationsPage() {
         const result = e.target?.result as string;
         if (isMain) {
           setImageUrl(result);
-          setMainImageFile(file);
         } else {
           setExtraImages(prev => [...prev, result]);
-          setExtraImageFiles(prev => [...prev, file]);
         }
       };
       reader.readAsDataURL(file);
@@ -160,17 +172,27 @@ export default function DestinationsPage() {
   // 구글맵 초기화
   useEffect(() => {
     if (showMapModal && window.google) {
-      const map = new window.google.maps.Map(document.getElementById('map'), {
+      const mapElement = document.getElementById('map');
+      if (!mapElement) return;
+      
+      const map = new window.google.maps.Map(mapElement, {
         center: { lat: 37.5665, lng: 126.9780 }, // 서울
         zoom: 10
       });
       
-      let marker: any = null;
+      let marker: {
+        setMap: (map: unknown) => void;
+      } | null = null;
       
-      map.addListener('click', (e: any) => {
+      map.addListener('click', (e: { latLng: { lat: () => number; lng: () => number } }) => {
         const lat = e.latLng.lat();
         const lng = e.latLng.lng();
-        setTempLatLng({ lat, lng });
+        setTempPlace({
+          address: '',
+          region: '',
+          lat: lat,
+          lng: lng
+        });
         
         if (marker) {
           marker.setMap(null);
@@ -183,7 +205,7 @@ export default function DestinationsPage() {
         
         // Geocoding API로 주소 가져오기
         const geocoder = new window.google.maps.Geocoder();
-        geocoder.geocode({ location: { lat, lng } }, (results: any, status: any) => {
+        geocoder.geocode({ location: { lat, lng } }, (results: Array<{ formatted_address: string; address_components: Array<{ long_name: string; types: string[] }> }>, status: string) => {
           if (status === 'OK' && results[0]) {
             const place = results[0];
             let region = '';
@@ -191,14 +213,16 @@ export default function DestinationsPage() {
             // 행정구역 찾기 (시/도 단위)
             for (const component of place.address_components) {
               if (component.types.includes('administrative_area_level_1')) {
-                region = component.long_name;
+                region = component.long_name || '';
                 break;
               }
             }
             
             setTempPlace({
-              address: place.formatted_address,
-              region: region
+              address: place.formatted_address || '',
+              region: region,
+              lat: lat,
+              lng: lng
             });
           }
         });
@@ -214,7 +238,6 @@ export default function DestinationsPage() {
       setMapUrl(`https://maps.google.com/?q=${tempPlace.address}`);
       setShowMapModal(false);
       setTempPlace(null);
-      setTempLatLng(null);
     }
   };
   
@@ -263,8 +286,6 @@ export default function DestinationsPage() {
       setRegion({ ko: "", en: "" });
       setImageUrl("");
       setExtraImages([]);
-      setMainImageFile(null);
-      setExtraImageFiles([]);
       setTags([]);
       setType([]);
       setCustomType("");
@@ -272,7 +293,7 @@ export default function DestinationsPage() {
       setDuration({ ko: "", en: "" });
       setPrice({ ko: "", en: "" });
       setBestTime([]);
-    } catch (err) {
+    } catch {
       setSaveMessage(TEXT.saveFailed[lang]);
     }
   };

@@ -1,14 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import Image from "next/image";
-import Link from "next/link";
-import { motion } from "framer-motion";
-import Navigation from "@/components/Navigation";
 import { useLanguage } from "@/components/LanguageContext";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
-import { safeLang } from "@/lib/types";
+import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import MainLayout from '@/components/MainLayout';
 
 interface TravelInfo {
@@ -19,7 +14,7 @@ interface TravelInfo {
   category?: string | { ko: string; en: string };
   imageUrls?: string[];
   tags?: Array<string | { ko: string; en: string }>;
-  createdAt?: any;
+  createdAt?: Date | string | { seconds: number; nanoseconds: number };
   region?: string | { ko: string; en: string };
   imageUrl?: string;
   country?: string | { ko: string; en: string };
@@ -27,11 +22,6 @@ interface TravelInfo {
   description?: string | { ko: string; en: string };
   extraImages?: string[];
 }
-
-const cardVariants = {
-  hidden: { opacity: 0, y: 40 },
-  visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.15 } })
-};
 
 const COUNTRIES = [
   { code: 'KR', name: { ko: '한국', en: 'Korea' }, flag: '/images/kr.png', enabled: true },
@@ -87,15 +77,13 @@ const pillActive = "px-4 py-1 rounded-full bg-blue-500 text-white font-semibold 
 const pillDefault = "px-4 py-1 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-blue-50";
 
 export default function TravelInfoPage() {
-  const { lang, setLang } = useLanguage();
+  const { lang } = useLanguage();
   const [travelInfos, setTravelInfos] = useState<TravelInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [country, setCountry] = useState('ALL');
   const [region, setRegion] = useState('ALL');
   const [tag, setTag] = useState('ALL');
-  const [recommended, setRecommended] = useState<any[]>([]);
-  const [search, setSearch] = useState('');
   const [selectedSpot, setSelectedSpot] = useState<TravelInfo | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
@@ -122,16 +110,6 @@ export default function TravelInfoPage() {
   }, []);
 
   useEffect(() => {
-    // 추천 스팟 불러오기
-    const fetchRecommended = async () => {
-      const q = query(collection(db, 'spots'), where('isRecommended', '==', true));
-      const snap = await getDocs(q);
-      setRecommended(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    };
-    fetchRecommended();
-  }, []);
-
-  useEffect(() => {
     // 모든 spots 불러오기
     const fetchSpots = async () => {
       const snap = await getDocs(collection(db, 'spots'));
@@ -142,7 +120,6 @@ export default function TravelInfoPage() {
     fetchSpots();
   }, [country, region]);
 
-  const regionNameEn = country !== 'ALL' && REGIONS[country] ? REGIONS[country].find(r => r.code === region)?.name.en : undefined;
   const filteredByCountry = useMemo(() => country === 'ALL' ? travelInfos : travelInfos.filter(s => {
     if (!s.country) return false;
     if (typeof s.country === 'object') return s.country.en === country || s.country.ko === country;

@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
-import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Navigation from "@/components/Navigation";
 import { useLanguage } from "@/components/LanguageContext";
@@ -59,8 +59,8 @@ interface Product {
   notes: Array<{ ko: string; en: string }>;
   isActive: boolean;
   isFeatured: boolean;
-  createdAt: any;
-  updatedAt: any;
+  createdAt: Date | string;
+  updatedAt: Date | string;
 }
 
 const TEXTS = {
@@ -118,7 +118,6 @@ export default function TourDetailPage() {
   const texts = TEXTS[lang];
   
   const [product, setProduct] = useState<Product | null>(null);
-  const [spots, setSpots] = useState<Spot[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSpot, setSelectedSpot] = useState<Spot | null>(null);
   const [activeDay, setActiveDay] = useState(1);
@@ -137,12 +136,11 @@ export default function TourDetailPage() {
         }
         
         // Fetch spots
-        const spotsSnapshot = await getDocs(collection(db, 'spots'));
-        const spotsData = spotsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Spot[];
-        setSpots(spotsData);
+        // const spotsSnapshot = await getDocs(collection(db, 'spots'));
+        // const spotsData = spotsSnapshot.docs.map(doc => ({
+        //   id: doc.id,
+        //   ...doc.data()
+        // })) as Spot[];
         
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -155,37 +153,6 @@ export default function TourDetailPage() {
       fetchData();
     }
   }, [params.id]);
-
-  // Function to find spot by name in activity text
-  const findSpotInActivity = (activityText: string): Spot | null => {
-    const activityLower = activityText.toLowerCase();
-    
-    return spots.find(spot => {
-      const spotNameKo = spot.name.ko.toLowerCase();
-      const spotNameEn = spot.name.en.toLowerCase();
-      
-      return activityLower.includes(spotNameKo) || activityLower.includes(spotNameEn);
-    }) || null;
-  };
-
-  // Function to extract spot name from activity text
-  const extractSpotName = (activityText: string): string | null => {
-    const activityLower = activityText.toLowerCase();
-    
-    for (const spot of spots) {
-      const spotNameKo = spot.name.ko.toLowerCase();
-      const spotNameEn = spot.name.en.toLowerCase();
-      
-      if (activityLower.includes(spotNameKo)) {
-        return spot.name[lang];
-      }
-      if (activityLower.includes(spotNameEn)) {
-        return spot.name[lang];
-      }
-    }
-    
-    return null;
-  };
 
   if (loading) {
     return (
@@ -450,7 +417,7 @@ interface SpotDetailModalProps {
   spot: Spot;
   onClose: () => void;
   lang: 'ko' | 'en';
-  texts: any;
+  texts: Record<string, string>;
 }
 
 function SpotDetailModal({ spot, onClose, lang, texts }: SpotDetailModalProps) {
