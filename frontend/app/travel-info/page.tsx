@@ -110,17 +110,6 @@ export default function TravelInfoPage() {
     fetchTravelInfos();
   }, []);
 
-  useEffect(() => {
-    // 모든 spots 불러오기
-    const fetchSpots = async () => {
-      const snap = await getDocs(collection(db, 'spots'));
-      const allSpots = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as TravelInfo[];
-      console.log('allSpots', allSpots);
-      setTravelInfos(allSpots);
-    };
-    fetchSpots();
-  }, [country, region]);
-
   const filteredByCountry = useMemo(() => country === 'ALL' ? travelInfos : travelInfos.filter(s => {
     if (!s.country) return false;
     if (typeof s.country === 'object') return s.country.en === country || s.country.ko === country;

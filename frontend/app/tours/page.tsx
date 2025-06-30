@@ -8,6 +8,7 @@ import { db } from "@/lib/firebase";
 import { useLanguage } from "@/components/LanguageContext";
 import { safeLang } from "@/lib/types";
 import MainLayout from "@/components/MainLayout";
+import { getPHPPrice } from "@/lib/types";
 
 interface Product {
   id: string;
@@ -25,6 +26,17 @@ interface Product {
   isActive?: boolean;
   isFeatured?: boolean;
   createdAt?: Date | string;
+  schedule?: Array<{
+    day: number;
+    spots: Array<{
+      id: string;
+      name: string;
+      name_kr: string;
+      imageUrl: string;
+      description?: string;
+      type: string;
+    }>;
+  }>;
 }
 
 const cardVariants = {
@@ -42,6 +54,28 @@ const TEXT = {
   loading: { ko: "로딩 중...", en: "Loading..." },
   noData: { ko: "투어 상품이 없습니다.", en: "No tour products available." }
 };
+
+const SUMMARY_TEXT = {
+  included: {
+    ko: "항공+호텔+가이드",
+    en: "Flight+Hotel+Guide"
+  }
+};
+
+function getPeriodText(schedule: unknown, lang: 'ko' | 'en') {
+  if (!schedule || !Array.isArray(schedule)) {
+    return lang === 'ko' ? '1일' : '1 day';
+  }
+  
+  const days = schedule.length;
+  if (days <= 1) return lang === 'ko' ? '1일' : '1 day';
+  const nights = days - 1;
+  if (lang === 'ko') {
+    return `${nights}박 ${days}일`;
+  } else {
+    return `${days} days ${nights} nights`;
+  }
+}
 
 export default function ToursPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -150,23 +184,11 @@ export default function ToursPage() {
                         <p className="text-gray-600 mb-2">{safeLang(product.subtitle, lang)}</p>
                       )}
                       
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-xl font-bold text-teal-700">{safeLang(product.price, lang)}</span>
-                        {product.originalPrice && product.discount && (
-                          <>
-                            <span className="text-gray-400 line-through text-sm">
-                              {safeLang(product.originalPrice, lang)}
-                            </span>
-                            <span className="bg-red-100 text-red-600 px-2 py-1 rounded text-xs">
-                              {product.discount}% 할인
-                            </span>
-                          </>
-                        )}
-                      </div>
-                      
-                      <div className="flex items-center gap-4 mb-2 text-sm text-gray-600">
-                        <span>{safeLang(product.duration, lang)}</span>
-                        {product.region && <span>• {safeLang(product.region, lang)}</span>}
+                      <div className="flex flex-wrap items-center gap-2 mb-2 text-sm text-gray-600">
+                        <span>{getPHPPrice(product.price)}</span>
+                        <span>• {getPeriodText(product.schedule, lang)}</span>
+                        {product.region && <span>• {typeof product.region === 'object' ? product.region[lang] : product.region}</span>}
+                        <span>• {SUMMARY_TEXT.included[lang]}</span>
                       </div>
                       
                       <p className="mb-2 text-gray-700 line-clamp-3">

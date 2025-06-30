@@ -154,4 +154,88 @@ export function safeLang(val: string | { ko: string; en: string }, lang: string)
     return (val as Record<string, string>)[lang] || (val as Record<string, string>).ko || '';
   }
   return typeof val === 'string' ? val : '';
+}
+
+// 가격 타입 가드 함수들
+export function isCurrencyPrice(price: unknown): price is { KRW?: string; PHP?: string; USD?: string } {
+  if (!price || typeof price !== 'object' || price === null) return false;
+  
+  const priceObj = price as Record<string, unknown>;
+  const hasCurrencyKey = 'KRW' in priceObj || 'PHP' in priceObj || 'USD' in priceObj;
+  
+  if (!hasCurrencyKey) return false;
+  
+  // 각 통화 키가 문자열이거나 undefined인지 확인
+  return (typeof priceObj.KRW === 'string' || typeof priceObj.KRW === 'undefined') &&
+         (typeof priceObj.PHP === 'string' || typeof priceObj.PHP === 'undefined') &&
+         (typeof priceObj.USD === 'string' || typeof priceObj.USD === 'undefined');
+}
+
+export function isLanguagePrice(price: unknown): price is { ko: string; en: string } {
+  if (!price || typeof price !== 'object' || price === null) return false;
+  
+  const priceObj = price as Record<string, unknown>;
+  
+  return 'ko' in priceObj && 'en' in priceObj &&
+         typeof priceObj.ko === 'string' && typeof priceObj.en === 'string';
+}
+
+export function isStringPrice(price: unknown): price is string {
+  return typeof price === 'string';
+}
+
+// 가격에서 PHP 값 추출 (우선순위: PHP > KRW > USD)
+export function getPHPPrice(price: unknown): string {
+  if (!price) return '-';
+  
+  if (isStringPrice(price)) {
+    return price;
+  }
+  
+  if (isCurrencyPrice(price)) {
+    if (price.PHP && price.PHP.trim()) return `₱${price.PHP}`;
+    if (price.KRW && price.KRW.trim()) return `₩${price.KRW}`;
+    if (price.USD && price.USD.trim()) return `$${price.USD}`;
+  }
+  
+  if (isLanguagePrice(price)) {
+    // 언어별 가격인 경우 한국어 값을 반환 (필리핀 고객이므로)
+    return price.ko || price.en || '-';
+  }
+  
+  return '-';
+}
+
+// 가격에서 특정 통화 값 추출
+export function getCurrencyPrice(price: unknown, currency: 'KRW' | 'PHP' | 'USD'): string {
+  if (!price) return '';
+  
+  if (isCurrencyPrice(price)) {
+    return price[currency] || '';
+  }
+  
+  return '';
+}
+
+// 가격 표시용 텍스트 생성
+export function getPriceDisplayText(price: unknown, lang: 'ko' | 'en' = 'ko'): string {
+  if (!price) return lang === 'ko' ? '가격 미지정' : 'Price not set';
+  
+  if (isStringPrice(price)) {
+    return price;
+  }
+  
+  if (isCurrencyPrice(price)) {
+    const parts: string[] = [];
+    if (price.KRW && price.KRW.trim()) parts.push(`₩${price.KRW}`);
+    if (price.PHP && price.PHP.trim()) parts.push(`₱${price.PHP}`);
+    if (price.USD && price.USD.trim()) parts.push(`$${price.USD}`);
+    return parts.length > 0 ? parts.join(' ') : (lang === 'ko' ? '가격 미지정' : 'Price not set');
+  }
+  
+  if (isLanguagePrice(price)) {
+    return price[lang] || price.ko || price.en || (lang === 'ko' ? '가격 미지정' : 'Price not set');
+  }
+  
+  return lang === 'ko' ? '가격 미지정' : 'Price not set';
 } 

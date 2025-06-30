@@ -9,6 +9,7 @@ import { db } from "@/lib/firebase";
 import Navigation from "@/components/Navigation";
 import { useLanguage } from "@/components/LanguageContext";
 import { safeLang } from "@/lib/types";
+import { getPHPPrice } from "@/lib/types";
 
 interface Spot {
   id: string;
@@ -33,7 +34,7 @@ interface Product {
   subtitle: { ko: string; en: string };
   description: { ko: string; en: string };
   duration: { ko: string; en: string };
-  price: { ko: string; en: string };
+  price: { KRW?: string; PHP?: string; USD?: string };
   originalPrice: { ko: string; en: string };
   discount: number;
   imageUrls?: string[];
@@ -109,6 +110,25 @@ const TEXTS = {
     tags: "Tags",
     viewOnMap: "View on Map",
     spotDetail: "Spot Details"
+  }
+};
+
+const SUMMARY_TEXT = {
+  included: {
+    ko: "항공 + 호텔 + 가이드",
+    en: "Flight + Hotel + Guide"
+  },
+  price: {
+    ko: "가격",
+    en: "Price"
+  },
+  period: {
+    ko: "기간",
+    en: "Period"
+  },
+  region: {
+    ko: "지역",
+    en: "Region"
   }
 };
 
@@ -196,7 +216,7 @@ export default function TourDetailPage() {
             <h1 className="text-4xl font-bold mb-2">{safeLang(product.title, lang)}</h1>
             <p className="text-xl text-gray-600 mb-4">{safeLang(product.subtitle, lang)}</p>
             <div className="flex justify-center items-center gap-4 text-lg">
-              <span className="text-2xl font-bold text-blue-600">{safeLang(product.price, lang)}</span>
+              <span className="text-2xl font-bold text-blue-600">{getPHPPrice(product.price)}</span>
               {product.discount > 0 && (
                 <>
                   <span className="text-gray-400 line-through">{safeLang(product.originalPrice, lang)}</span>
@@ -227,20 +247,20 @@ export default function TourDetailPage() {
           {/* Product Info Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <div className="bg-gray-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-gray-700">{texts.duration}</h3>
-              <p>{safeLang(product.duration, lang)}</p>
+              <h3 className="font-semibold text-gray-700">{SUMMARY_TEXT.price[lang]}</h3>
+              <p>{getPHPPrice(product.price)}</p>
             </div>
             <div className="bg-gray-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-gray-700">{texts.category}</h3>
-              <p>{safeLang(product.category, lang)}</p>
+              <h3 className="font-semibold text-gray-700">{SUMMARY_TEXT.period[lang]}</h3>
+              <p>{getPeriodText(product.schedule, lang)}</p>
             </div>
             <div className="bg-gray-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-gray-700">{texts.region}</h3>
-              <p>{safeLang(product.region, lang)}</p>
+              <h3 className="font-semibold text-gray-700">{SUMMARY_TEXT.region[lang]}</h3>
+              <p>{product.region?.[lang] || '-'}</p>
             </div>
             <div className="bg-gray-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-gray-700">{texts.difficulty}</h3>
-              <p>{safeLang(product.difficulty, lang)}</p>
+              <h3 className="font-semibold text-gray-700">{SUMMARY_TEXT.included[lang]}</h3>
+              <p>{SUMMARY_TEXT.included[lang]}</p>
             </div>
           </div>
 
@@ -551,4 +571,15 @@ function SpotDetailModal({ spot, onClose, lang, texts }: SpotDetailModalProps) {
       </motion.div>
     </motion.div>
   );
+}
+
+function getPeriodText(schedule: Product['schedule'], lang: 'ko' | 'en') {
+  const days = schedule?.length || 0;
+  if (days <= 1) return lang === 'ko' ? '1일' : '1 day';
+  const nights = days - 1;
+  if (lang === 'ko') {
+    return `${nights}박 ${days}일`;
+  } else {
+    return `${days} days ${nights} nights`;
+  }
 } 

@@ -6,9 +6,8 @@ import Script from "next/script";
 import { collection, addDoc, getDocs, Timestamp, query, orderBy, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { CheckIcon } from '@heroicons/react/24/solid';
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { storage } from "@/lib/firebase";
 import Image from 'next/image';
+import { useRouter } from "next/navigation";
 
 // Google Maps API 타입은 런타임에서 확인되므로 타입 단언 사용
 
@@ -144,14 +143,6 @@ const PLACE_TYPE_TO_TAG: Record<string, { ko: string; en: string }> = {
   // ... 필요시 추가
 };
 
-// 국가 옵션 상수 추가
-const COUNTRY_OPTIONS = [
-  { en: 'KR', ko: '대한민국' },
-  { en: 'PH', ko: '필리핀' },
-  { en: 'JP', ko: '일본' },
-  { en: 'TW', ko: '대만' },
-];
-
 // 리전 표준화 유틸리티
 const REGION_NORMALIZATION: Record<string, { ko: string; en: string; slug: string }> = {
   '서울특별시': { ko: '서울', en: 'Seoul', slug: 'seoul' },
@@ -188,6 +179,26 @@ function normalizeRegion(regionKo: string, regionEn: string) {
   return { ko: regionKo, en, slug: en.toLowerCase() };
 }
 
+// 타입 가드 함수들
+function isMultilingualTag(tag: unknown): tag is { ko: string; en: string } {
+  return tag !== null && 
+         typeof tag === 'object' && 
+         'ko' in tag && 
+         'en' in tag &&
+         typeof (tag as { ko: string; en: string }).ko === 'string' &&
+         typeof (tag as { ko: string; en: string }).en === 'string';
+}
+
+function normalizeTag(tag: unknown, lang: 'ko' | 'en'): string {
+  if (typeof tag === 'string') {
+    return tag;
+  } else if (isMultilingualTag(tag)) {
+    return tag[lang] || tag.ko || '';
+  } else {
+    return String(tag);
+  }
+}
+
 // 타입/추천시기/태그 pill 스타일 버튼 컴포넌트
 function PillButton({ selected, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { selected: boolean }) {
   return (
@@ -216,11 +227,11 @@ interface GooglePlaceDetails {
 
 export default function SpotsPage() {
   const { lang } = useLanguage();
+  const router = useRouter();
   
   // 상태 관리
   const [spots, setSpots] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddForm, setShowAddForm] = useState(false);
   const [editingSpot, setEditingSpot] = useState<Record<string, unknown> | null>(null);
   
   // 폼 상태
@@ -235,26 +246,8 @@ export default function SpotsPage() {
   const [customType, setCustomType] = useState("");
   const [mapUrl, setMapUrl] = useState("");
   const [duration, setDuration] = useState({ ko: "", en: "" });
-  const [price, setPrice] = useState({ ko: "", en: "" });
+  const [price, setPrice] = useState({ KRW: "", PHP: "", USD: "" });
   const [bestTime, setBestTime] = useState<string[]>([]);
-  const [country, setCountry] = useState("KR");
-  
-  // 파일 업로드 상태
-  const [imageUploading, setImageUploading] = useState(false);
-  const [imageUploadError, setImageUploadError] = useState("");
-  
-  // 유효성 검사 상태
-  const [validationErrors, setValidationErrors] = useState<{
-    name: { ko: boolean; en: boolean };
-    description: { ko: boolean; en: boolean };
-    address: { ko: boolean; en: boolean };
-    region: { ko: boolean; en: boolean };
-  }>({
-    name: { ko: false, en: false },
-    description: { ko: false, en: false },
-    address: { ko: false, en: false },
-    region: { ko: false, en: false }
-  });
   
   // 구글맵 상태
   const [showMapModal, setShowMapModal] = useState(false);
@@ -263,6 +256,8 @@ export default function SpotsPage() {
     region: string;
     lat: number;
     lng: number;
+    addressEn: string;
+    regionEn: string;
   } | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   
@@ -284,8 +279,8 @@ export default function SpotsPage() {
   };
 
   useEffect(() => {
-    if (!showAddForm) fetchSpots();
-  }, [showAddForm]);
+    fetchSpots();
+  }, []);
   
   // 태그 추가
   const addTag = (tag: string) => {
@@ -341,13 +336,6 @@ export default function SpotsPage() {
     }
   };
   
-  // Firebase Storage 업로드 함수
-  const uploadImageToStorage = async (file: File, folder: string = "spots") => {
-    const storageRef = ref(storage, `${folder}/${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
-  };
-
   // 이미지 파일 처리 (Storage 업로드)
   const handleImageFile = (file: File, isMain: boolean = true) => {
     if (file && file.type.startsWith('image/')) {
@@ -378,7 +366,9 @@ export default function SpotsPage() {
           address: '',
           region: '',
           lat,
-          lng
+          lng,
+          addressEn: '',
+          regionEn: ''
         });
         
         if (marker) {
@@ -390,26 +380,63 @@ export default function SpotsPage() {
           map: map
         });
         
-        // Geocoding API로 주소 가져오기
+        // Geocoding API로 주소 가져오기 (영어와 한국어 모두)
         const geocoder = new google.maps.Geocoder();
-        geocoder.geocode({ location: { lat, lng } }, (results: google.maps.GeocoderResult[] | null, status: google.maps.GeocoderStatus) => {
-          if (status === 'OK' && results && results[0]) {
-            const place = results[0];
-            let region = '';
+        
+        // 영어 주소 가져오기
+        geocoder.geocode({ location: { lat, lng }, language: 'en' }, (resultsEn: google.maps.GeocoderResult[] | null, statusEn: google.maps.GeocoderStatus) => {
+          if (statusEn === 'OK' && resultsEn && resultsEn[0]) {
+            const placeEn = resultsEn[0];
+            let regionEn = '';
             
-            // 행정구역 찾기 (시/도 단위)
-            for (const component of place.address_components) {
+            // 영어 지역 찾기
+            for (const component of placeEn.address_components) {
               if (component.types.includes('administrative_area_level_1')) {
-                region = component.long_name || '';
+                regionEn = component.long_name || '';
                 break;
               }
             }
             
-            setTempPlace({
-              address: place.formatted_address || '',
-              region: region,
-              lat,
-              lng
+            console.log('English address:', placeEn.formatted_address);
+            console.log('English region:', regionEn);
+            
+            // 한국어 주소 가져오기
+            geocoder.geocode({ location: { lat, lng }, language: 'ko' }, (resultsKo: google.maps.GeocoderResult[] | null, statusKo: google.maps.GeocoderStatus) => {
+              if (statusKo === 'OK' && resultsKo && resultsKo[0]) {
+                const placeKo = resultsKo[0];
+                let regionKo = '';
+                
+                // 한국어 지역 찾기
+                for (const component of placeKo.address_components) {
+                  if (component.types.includes('administrative_area_level_1')) {
+                    regionKo = component.long_name || '';
+                    break;
+                  }
+                }
+                
+                console.log('Korean address:', placeKo.formatted_address);
+                console.log('Korean region:', regionKo);
+                
+                setTempPlace({
+                  address: placeKo.formatted_address || placeEn.formatted_address || '',
+                  region: regionKo || regionEn,
+                  lat,
+                  lng,
+                  addressEn: placeEn.formatted_address || '',
+                  regionEn: regionEn
+                });
+              } else {
+                // 한국어 주소 실패 시 영어 주소만 사용
+                console.log('Korean geocoding failed, using English only');
+                setTempPlace({
+                  address: placeEn.formatted_address || '',
+                  region: regionEn,
+                  lat,
+                  lng,
+                  addressEn: placeEn.formatted_address || '',
+                  regionEn: regionEn
+                });
+              }
             });
           }
         });
@@ -441,7 +468,9 @@ export default function SpotsPage() {
             address: place.formatted_address || '',
             region: regionString,
             lat,
-            lng
+            lng,
+            addressEn: place.formatted_address || '',
+            regionEn: regionString
           });
           
           // Place Details API로 상세 정보 요청
@@ -456,23 +485,28 @@ export default function SpotsPage() {
                 const addressEn = (detailsEn.formatted_address || '') as string;
                 const addressKo = (statusKo === 'OK' && detailsKo && detailsKo.formatted_address) ? detailsKo.formatted_address : addressEn;
                 
+                console.log('Search - English address:', addressEn);
+                console.log('Search - Korean address:', addressKo);
+                console.log('Search - English name:', nameEn);
+                console.log('Search - Korean name:', nameKo);
+                
                 // 이름
                 setName({
                   ko: nameKo,
                   en: nameEn,
-                  slug: ''
+                  slug: (detailsEn as GooglePlaceDetails).editorial_summary?.overview || detailsEn.types?.join(', ') || ''
                 });
                 // 주소
                 setAddress({
                   ko: addressKo,
                   en: addressEn,
-                  slug: ''
+                  slug: (detailsEn as GooglePlaceDetails).editorial_summary?.overview || detailsEn.types?.join(', ') || ''
                 });
                 // 설명(영문만)
                 setDescription({
                   ko: '',
                   en: ((detailsEn as GooglePlaceDetails).editorial_summary?.overview || detailsEn.types?.join(', ') || ''),
-                  slug: ''
+                  slug: (detailsEn as GooglePlaceDetails).editorial_summary?.overview || detailsEn.types?.join(', ') || ''
                 });
                 // region(시/도)
                 let regionKo = '';
@@ -511,8 +545,16 @@ export default function SpotsPage() {
   // 지도 선택 적용
   const applyMapSelection = () => {
     if (tempPlace) {
-      setAddress({ ko: tempPlace.address, en: '', slug: '' });
-      setRegion({ ko: tempPlace.region, en: '', slug: '' });
+      setAddress({ 
+        ko: tempPlace.address, 
+        en: tempPlace.addressEn || tempPlace.address, 
+        slug: (tempPlace as { slug?: string })?.slug || '' 
+      });
+      setRegion({ 
+        ko: tempPlace.region, 
+        en: tempPlace.regionEn || tempPlace.region, 
+        slug: (tempPlace as { slug?: string })?.slug || '' 
+      });
       setMapUrl(`https://maps.google.com/?q=${tempPlace.address}`);
       setShowMapModal(false);
       setTempPlace(null);
@@ -536,20 +578,37 @@ export default function SpotsPage() {
   // 편집 버튼 클릭 시 폼에 값 세팅
   const handleEdit = (spot: Record<string, unknown>) => {
     setEditingSpot(spot);
-    setName(spot.name as { ko: string; en: string; slug: string } || { ko: '', en: '', slug: '' });
-    setDescription(spot.description as { ko: string; en: string; slug: string } || { ko: '', en: '', slug: '' });
-    setAddress(spot.address as { ko: string; en: string; slug: string } || { ko: '', en: '', slug: '' });
-    setRegion(spot.region as { ko: string; en: string; slug: string } || { ko: '', en: '', slug: '' });
-    setImageUrl("");
-    setExtraImages(spot.extraImages as string[] || []);
-    setTags(spot.tags as string[] || []);
-    setType(Array.isArray(spot.type) ? spot.type as string[] : spot.type ? [spot.type as string] : []);
-    setCustomType('');
-    setMapUrl(spot.mapUrl as string || '');
-    setDuration(spot.duration as { ko: string; en: string } || { ko: '', en: '' });
-    setPrice(spot.price as { ko: string; en: string } || { ko: '', en: '' });
-    setBestTime(Array.isArray(spot.bestTime) ? spot.bestTime as string[] : (spot.bestTime as { ko: string; en: string })?.ko ? (spot.bestTime as { ko: string; en: string }).ko.split(',').map((s:string)=>s.trim()) : []);
-    setShowAddForm(true);
+    setName({
+      ko: (spot.name as { ko: string; en: string })?.ko || "",
+      en: (spot.name as { ko: string; en: string })?.en || "",
+      slug: (spot.name as { ko: string; en: string; slug?: string })?.slug || "",
+    });
+    setDescription({
+      ko: (spot.description as { ko: string; en: string })?.ko || "",
+      en: (spot.description as { ko: string; en: string })?.en || "",
+      slug: (spot.description as { ko: string; en: string; slug?: string })?.slug || "",
+    });
+    setAddress({
+      ko: (spot.address as { ko: string; en: string })?.ko || "",
+      en: (spot.address as { ko: string; en: string })?.en || "",
+      slug: (spot.address as { ko: string; en: string; slug?: string })?.slug || "",
+    });
+    setRegion({
+      ko: (spot.region as { ko: string; en: string })?.ko || "",
+      en: (spot.region as { ko: string; en: string })?.en || "",
+      slug: (spot.region as { ko: string; en: string; slug?: string })?.slug || "",
+    });
+    setType(Array.isArray(spot.type) ? spot.type as string[] : []);
+    setTags(Array.isArray(spot.tags) ? spot.tags as string[] : []);
+    setBestTime(Array.isArray(spot.bestTime) ? spot.bestTime as string[] : []);
+    setDuration({
+      ko: (spot.duration as { ko: string; en: string })?.ko || "",
+      en: (spot.duration as { ko: string; en: string })?.en || "",
+    });
+    setPrice(spot.price as { KRW: string; PHP: string; USD: string } || { KRW: '', PHP: '', USD: '' });
+    setMapUrl((spot.mapUrl as string) || "");
+    setImageUrl((spot.imageUrl as string) || "");
+    setExtraImages(Array.isArray(spot.extraImages) ? spot.extraImages as string[] : []);
   };
 
   // 유효성 검사 함수
@@ -561,9 +620,6 @@ export default function SpotsPage() {
       region: { ko: !region.ko.trim(), en: !region.en.trim() }
     };
     
-    setValidationErrors(errors);
-    
-    // 모든 필수 필드가 채워져 있는지 확인
     return !Object.values(errors).some(field => field.ko || field.en);
   };
 
@@ -588,92 +644,58 @@ export default function SpotsPage() {
         setRegion(prev => ({ ...prev, [lang]: value }));
         break;
     }
-    
-    // 실시간 유효성 검사 (값이 있을 때만)
-    if (value.trim()) {
-      setValidationErrors(prev => ({
-        ...prev,
-        [field]: { ...prev[field], [lang]: false }
-      }));
-    }
   };
 
   // 등록/수정 핸들러 통합
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // 유효성 검사
-    if (!validateForm()) {
-      setModalMessage("필수 필드를 모두 입력해주세요.");
-      setModalOpen(true);
-      return;
-    }
-    
-    setModalMessage("");
-    setImageUploadError("");
-    setImageUploading(true);
+    if (!validateForm()) return;
+
     try {
-      let imageUrl = "";
-      const extraImages: string[] = [];
-      // 대표 이미지 업로드
-      if (imageUrl === "") {
-        imageUrl = await uploadImageToStorage(new File([], ''), 'spots');
-      }
-      // 추가 이미지 업로드
-      for (const url of extraImages) {
-        extraImages.push(url);
-      }
-      let typeToSave = [...type];
-      if (type.includes("기타") && customType.trim()) {
-        typeToSave = typeToSave.filter(t => t !== "기타");
-        typeToSave.push(customType.trim());
-      }
-      const bestTimeToSave = {
-        ko: bestTime.join(", "),
-        en: bestTime.map(val => SEASON_OPTIONS.find(opt => opt.value === val)?.label.en || val).join(", ")
+      const spotData = {
+        name,
+        description,
+        address,
+        region,
+        type,
+        tags,
+        bestTime,
+        duration,
+        price,
+        mapUrl,
+        imageUrl,
+        extraImages,
+        createdAt: editingSpot ? editingSpot.createdAt : Timestamp.now(),
+        updatedAt: Timestamp.now(),
       };
+
       if (editingSpot) {
-        // 수정
-        await updateDoc(doc(db, 'spots', editingSpot.id as string), {
-          type: typeToSave.length === 1 ? typeToSave[0] : typeToSave,
-          name, description, address, region, imageUrl, tags, extraImages, mapUrl, duration, price, bestTime: bestTimeToSave, country
-        });
+        await updateDoc(doc(db, 'spots', editingSpot.id as string), spotData);
         setModalMessage(TEXT.updated[lang]);
       } else {
-        // 신규 등록
-        await addDoc(collection(db, "spots"), {
-          type: typeToSave.length === 1 ? typeToSave[0] : typeToSave,
-          name, description, address, region, imageUrl, tags, extraImages, mapUrl, duration, price, bestTime: bestTimeToSave, country, createdAt: Timestamp.now()
-        });
+        await addDoc(collection(db, 'spots'), spotData);
         setModalMessage(TEXT.saveSuccess[lang]);
       }
-      setModalOpen(true);
-      // 폼 리셋 및 상태 초기화
-      setName({ ko: '', en: '', slug: '' });
-      setDescription({ ko: '', en: '', slug: '' });
-      setAddress({ ko: '', en: '', slug: '' });
-      setRegion({ ko: '', en: '', slug: '' });
+
+      // 폼 초기화
+      setName({ ko: "", en: "", slug: "" });
+      setDescription({ ko: "", en: "", slug: "" });
+      setAddress({ ko: "", en: "", slug: "" });
+      setRegion({ ko: "", en: "", slug: "" });
+      setType([]);
+      setTags([]);
+      setBestTime([]);
+      setDuration({ ko: "", en: "" });
+      setPrice({ KRW: "", PHP: "", USD: "" });
+      setMapUrl("");
       setImageUrl("");
       setExtraImages([]);
-      setTags([]);
-      setType([]);
-      setCustomType("");
-      setMapUrl("");
-      setDuration({ ko: "", en: "" });
-      setPrice({ ko: "", en: "" });
-      setBestTime([]);
       setEditingSpot(null);
-      // 목록 즉시 새로고침
       fetchSpots();
-      setTimeout(() => {
-        setModalOpen(false);
-        setShowAddForm(false);
-      }, 1200);
-    } catch {
+    } catch (error) {
+      console.error('Error saving spot:', error);
       setModalMessage(TEXT.saveFailed[lang]);
-      setModalOpen(true);
     }
-    setImageUploading(false);
   };
 
   return (
@@ -685,12 +707,12 @@ export default function SpotsPage() {
       
       <h1 className="text-2xl font-bold mb-6">{TEXT.title[lang]}</h1>
       
-      {!showAddForm ? (
+      {!editingSpot ? (
         <>
           <div className="flex justify-end mb-4">
             <button
               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-              onClick={() => { setShowAddForm(true); setEditingSpot(null); }}
+              onClick={() => router.push('/admin/spots/new')}
             >
               {TEXT.addSpot[lang]}
             </button>
@@ -736,11 +758,11 @@ export default function SpotsPage() {
                       </td>
                       <td className="p-2 border">
                         {Array.isArray(spot.tags) && spot.tags.length > 0
-                          ? spot.tags.map((t, i) =>
+                          ? spot.tags.map((t, i) => (
                               <span key={i} className="inline-block bg-gray-200 rounded-full px-2 py-1 text-xs mr-1">
-                                {typeof t === 'string' ? t : '-'}
+                                {normalizeTag(t, lang)}
                               </span>
-                            )
+                            ))
                           : '-'}
                       </td>
                       <td className="p-2 border text-xs">
@@ -767,7 +789,7 @@ export default function SpotsPage() {
             <span className="font-semibold">{TEXT.spotEdit[lang]}</span>
             <button
               className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300"
-              onClick={() => { setShowAddForm(false); setEditingSpot(null); }}
+              onClick={() => { setEditingSpot(null); }}
               type="button"
             >
               {TEXT.backToList[lang]}
@@ -784,11 +806,8 @@ export default function SpotsPage() {
                     value={name.ko}
                     onChange={(e) => handleInputChange('name', 'ko', e.target.value)}
                     placeholder="한국어 이름"
-                    className={`w-full p-2 border rounded ${validationErrors.name.ko ? 'border-red-500' : ''}`}
+                    className="w-full p-2 border rounded"
                   />
-                  {validationErrors.name.ko && (
-                    <p className="text-red-500 text-sm mt-1">한국어 이름을 입력해주세요.</p>
-                  )}
                 </div>
                 <div>
                   <input
@@ -796,11 +815,8 @@ export default function SpotsPage() {
                     value={name.en}
                     onChange={(e) => handleInputChange('name', 'en', e.target.value)}
                     placeholder="English name"
-                    className={`w-full p-2 border rounded ${validationErrors.name.en ? 'border-red-500' : ''}`}
+                    className="w-full p-2 border rounded"
                   />
-                  {validationErrors.name.en && (
-                    <p className="text-red-500 text-sm mt-1">English name is required.</p>
-                  )}
                 </div>
               </div>
             </div>
@@ -815,11 +831,8 @@ export default function SpotsPage() {
                     onChange={(e) => handleInputChange('description', 'ko', e.target.value)}
                     placeholder="한국어 설명"
                     rows={4}
-                    className={`w-full p-2 border rounded ${validationErrors.description.ko ? 'border-red-500' : ''}`}
+                    className="w-full p-2 border rounded"
                   />
-                  {validationErrors.description.ko && (
-                    <p className="text-red-500 text-sm mt-1">한국어 설명을 입력해주세요.</p>
-                  )}
                 </div>
                 <div>
                   <textarea
@@ -827,11 +840,8 @@ export default function SpotsPage() {
                     onChange={(e) => handleInputChange('description', 'en', e.target.value)}
                     placeholder="English description"
                     rows={4}
-                    className={`w-full p-2 border rounded ${validationErrors.description.en ? 'border-red-500' : ''}`}
+                    className="w-full p-2 border rounded"
                   />
-                  {validationErrors.description.en && (
-                    <p className="text-red-500 text-sm mt-1">English description is required.</p>
-                  )}
                 </div>
               </div>
             </div>
@@ -847,11 +857,8 @@ export default function SpotsPage() {
                       value={address.ko}
                       onChange={(e) => handleInputChange('address', 'ko', e.target.value)}
                       placeholder="한국어 주소"
-                      className={`w-full p-2 border rounded ${validationErrors.address.ko ? 'border-red-500' : ''}`}
+                      className="w-full p-2 border rounded"
                     />
-                    {validationErrors.address.ko && (
-                      <p className="text-red-500 text-sm mt-1">한국어 주소를 입력해주세요.</p>
-                    )}
                   </div>
                   <div>
                     <input
@@ -859,11 +866,8 @@ export default function SpotsPage() {
                       value={address.en}
                       onChange={(e) => handleInputChange('address', 'en', e.target.value)}
                       placeholder="English address"
-                      className={`w-full p-2 border rounded ${validationErrors.address.en ? 'border-red-500' : ''}`}
+                      className="w-full p-2 border rounded"
                     />
-                    {validationErrors.address.en && (
-                      <p className="text-red-500 text-sm mt-1">English address is required.</p>
-                    )}
                   </div>
                 </div>
                 <button
@@ -886,11 +890,8 @@ export default function SpotsPage() {
                     value={region.ko}
                     onChange={(e) => handleInputChange('region', 'ko', e.target.value)}
                     placeholder="한국어 지역"
-                    className={`w-full p-2 border rounded ${validationErrors.region.ko ? 'border-red-500' : ''}`}
+                    className="w-full p-2 border rounded"
                   />
-                  {validationErrors.region.ko && (
-                    <p className="text-red-500 text-sm mt-1">한국어 지역을 입력해주세요.</p>
-                  )}
                 </div>
                 <div>
                   <input
@@ -898,11 +899,8 @@ export default function SpotsPage() {
                     value={region.en}
                     onChange={(e) => handleInputChange('region', 'en', e.target.value)}
                     placeholder="English region"
-                    className={`w-full p-2 border rounded ${validationErrors.region.en ? 'border-red-500' : ''}`}
+                    className="w-full p-2 border rounded"
                   />
-                  {validationErrors.region.en && (
-                    <p className="text-red-500 text-sm mt-1">English region is required.</p>
-                  )}
                 </div>
               </div>
             </div>
@@ -956,82 +954,16 @@ export default function SpotsPage() {
                 <label htmlFor="extra-images" className="cursor-pointer">
                   <p className="text-gray-500">{TEXT.dragDropImage[lang]}</p>
                 </label>
-                {extraImages.length > 0 && (
-                  <div className="grid grid-cols-3 gap-4 mt-4">
-                    {extraImages.map((url, index) => (
-                      <div key={index} className="relative">
-                        <Image src={url} alt={`Extra ${index + 1}`} width={200} height={128} className="w-full h-32 object-cover rounded" />
-                        <button type="button" onClick={() => { setExtraImages(prev => prev.filter((_, i) => i !== index)); }}
-                          className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center text-lg font-bold hover:bg-black/80 z-10"
-                          aria-label="Remove extra image"
-                        >×</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
             
-            {/* 태그 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">{TEXT.tags[lang]}</label>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {TAG_OPTIONS.map((tag) => (
-                  <PillButton
-                    key={tag.ko}
-                    selected={tags.includes(tag.ko)}
-                    type="button"
-                    onClick={() => tags.includes(tag.ko) ? removeTag(tag.ko) : addTag(tag.ko)}
-                  >
-                    {tag[lang]}
-                  </PillButton>
-                ))}
-              </div>
-              <div className="flex gap-2 mb-2">
-                <input
-                  type="text"
-                  placeholder="태그 직접입력"
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      addTag(e.currentTarget.value);
-                      e.currentTarget.value = '';
-                    }
-                  }}
-                  className="flex-1 p-2 border rounded"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const input = document.querySelector('input[placeholder=\"태그 직접입력\"]') as HTMLInputElement;
-                    if (input) {
-                      addTag(input.value);
-                      input.value = '';
-                    }
-                  }}
-                  className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-                >
-                  {TEXT.addTag[lang]}
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {tags.filter(tag => !TAG_OPTIONS.some(opt => opt.ko === tag)).map((tag, index) => (
-                  <PillButton key={tag + index} selected={true} type="button" onClick={() => removeTag(tag)}>
-                    {tag}
-                    <span className="ml-1 text-xs">×</span>
-                  </PillButton>
-                ))}
-              </div>
-            </div>
-            
-            {/* 타입 */}
+            {/* 타입 선택 */}
             <div>
               <label className="block text-sm font-medium mb-2">{TEXT.type[lang]}</label>
               <div className="flex flex-wrap gap-2 mb-4">
                 {TYPE_OPTIONS.map((option) => (
                   <PillButton
                     key={option.value}
-                    type="button"
                     selected={type.includes(option.value)}
                     onClick={() => toggleType(option.value)}
                   >
@@ -1039,68 +971,48 @@ export default function SpotsPage() {
                   </PillButton>
                 ))}
               </div>
-              {type.includes("기타") && (
+              <div className="flex gap-2">
                 <input
                   type="text"
+                  placeholder="기타 타입 입력"
                   value={customType}
                   onChange={(e) => setCustomType(e.target.value)}
-                  placeholder={TEXT.customType[lang]}
-                  className="w-full p-2 border rounded"
+                  className="flex-1 p-2 border rounded"
                 />
-              )}
-            </div>
-            
-            {/* 지도 URL */}
-            <div>
-              <label className="block text-sm font-medium mb-2">{TEXT.mapUrl[lang]}</label>
-              <input
-                type="url"
-                value={mapUrl}
-                onChange={(e) => setMapUrl(e.target.value)}
-                placeholder="https://maps.google.com/..."
-                className="w-full p-2 border rounded"
-              />
-            </div>
-            
-            {/* 소요시간 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">{TEXT.duration[lang]}</label>
-              <div className="grid grid-cols-2 gap-4">
-                <input
-                  type="text"
-                  value={duration.ko}
-                  onChange={(e) => setDuration({ ...duration, ko: e.target.value })}
-                  placeholder="한국어 소요시간"
-                  className="w-full p-2 border rounded"
-                />
-                <input
-                  type="text"
-                  value={duration.en}
-                  onChange={(e) => setDuration({ ...duration, en: e.target.value })}
-                  placeholder="English duration"
-                  className="w-full p-2 border rounded"
-                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (customType.trim()) {
+                      toggleType(customType.trim());
+                      setCustomType("");
+                    }
+                  }}
+                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                >
+                  {TEXT.addTag[lang]}
+                </button>
               </div>
             </div>
             
-            {/* 가격 */}
+            {/* 태그 선택 */}
             <div>
-              <label className="block text-sm font-medium mb-2">{TEXT.price[lang]}</label>
-              <div className="grid grid-cols-2 gap-4">
-                <input
-                  type="text"
-                  value={price.ko}
-                  onChange={(e) => setPrice({ ...price, ko: e.target.value })}
-                  placeholder="한국어 가격"
-                  className="w-full p-2 border rounded"
-                />
-                <input
-                  type="text"
-                  value={price.en}
-                  onChange={(e) => setPrice({ ...price, en: e.target.value })}
-                  placeholder="English price"
-                  className="w-full p-2 border rounded"
-                />
+              <label className="block text-sm font-medium mb-2">{TEXT.tags[lang]}</label>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {TAG_OPTIONS.map((tag) => (
+                  <PillButton
+                    key={tag[lang]}
+                    selected={tags.includes(tag[lang])}
+                    onClick={() => {
+                      if (tags.includes(tag[lang])) {
+                        removeTag(tag[lang]);
+                      } else {
+                        addTag(tag[lang]);
+                      }
+                    }}
+                  >
+                    {tag[lang]}
+                  </PillButton>
+                ))}
               </div>
             </div>
             
@@ -1111,7 +1023,6 @@ export default function SpotsPage() {
                 {SEASON_OPTIONS.map((option) => (
                   <PillButton
                     key={option.value}
-                    type="button"
                     selected={bestTime.includes(option.value)}
                     onClick={() => toggleBestTime(option.value)}
                   >
@@ -1121,18 +1032,78 @@ export default function SpotsPage() {
               </div>
             </div>
             
-            {/* 국가 */}
+            {/* 소요시간 */}
             <div>
-              <label className="block text-sm font-medium mb-2">국가</label>
-              <select
-                value={country}
-                onChange={(e) => setCountry(e.target.value)}
+              <label className="block text-sm font-medium mb-2">{TEXT.duration[lang]}</label>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <input
+                    type="text"
+                    value={duration.ko}
+                    onChange={(e) => setDuration(prev => ({ ...prev, ko: e.target.value }))}
+                    placeholder="한국어 소요시간"
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    value={duration.en}
+                    onChange={(e) => setDuration(prev => ({ ...prev, en: e.target.value }))}
+                    placeholder="English duration"
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+              </div>
+            </div>
+            
+            {/* 가격 */}
+            <div>
+              <label className="block text-sm font-medium mb-2">{TEXT.price[lang]}</label>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">KRW</label>
+                  <input
+                    type="text"
+                    value={price.KRW}
+                    onChange={(e) => setPrice(prev => ({ ...prev, KRW: e.target.value }))}
+                    placeholder="₩"
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">PHP</label>
+                  <input
+                    type="text"
+                    value={price.PHP}
+                    onChange={(e) => setPrice(prev => ({ ...prev, PHP: e.target.value }))}
+                    placeholder="₱"
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">USD</label>
+                  <input
+                    type="text"
+                    value={price.USD}
+                    onChange={(e) => setPrice(prev => ({ ...prev, USD: e.target.value }))}
+                    placeholder="$"
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+              </div>
+            </div>
+            
+            {/* 지도 URL */}
+            <div>
+              <label className="block text-sm font-medium mb-2">{TEXT.mapUrl[lang]}</label>
+              <input
+                type="url"
+                value={mapUrl}
+                onChange={(e) => setMapUrl(e.target.value)}
+                placeholder="Google Maps URL"
                 className="w-full p-2 border rounded"
-              >
-                {COUNTRY_OPTIONS.map(c => (
-                  <option key={c.en} value={c.en}>{lang === 'en' ? c.en : c.ko}</option>
-                ))}
-              </select>
+              />
             </div>
             
             {/* 저장 버튼 */}
@@ -1151,67 +1122,59 @@ export default function SpotsPage() {
       {/* 구글맵 모달 */}
       {showMapModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-11/12 h-5/6 max-w-4xl">
+          <div className="bg-white p-6 rounded-lg w-11/12 h-5/6 max-w-4xl">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">지도에서 위치 선택</h3>
               <button
                 onClick={() => setShowMapModal(false)}
                 className="text-gray-500 hover:text-gray-700"
               >
-                ×
+                ✕
               </button>
             </div>
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="장소명 또는 주소 검색"
-              className="w-full p-2 border rounded mb-4"
-              autoFocus
-            />
-            <div id="map" className="w-full h-96 mb-4 rounded"></div>
+            <div id="map" className="w-full h-96 mb-4"></div>
             {tempPlace && (
-              <div className="mb-4 p-3 bg-gray-100 rounded">
-                <p><strong>주소:</strong> {tempPlace.address}</p>
-                <p><strong>지역:</strong> {tempPlace.region}</p>
+              <div className="space-y-2">
+                <p><strong>선택된 위치:</strong></p>
+                <p>주소 (한국어): {tempPlace.address}</p>
+                <p>주소 (영어): {tempPlace.addressEn}</p>
+                <p>지역 (한국어): {tempPlace.region}</p>
+                <p>지역 (영어): {tempPlace.regionEn}</p>
+                <p>좌표: {tempPlace.lat}, {tempPlace.lng}</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={applyMapSelection}
+                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                  >
+                    적용
+                  </button>
+                  <button
+                    onClick={() => setShowMapModal(false)}
+                    className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+                  >
+                    취소
+                  </button>
+                </div>
               </div>
             )}
-            <div className="flex gap-2">
-              <button
-                onClick={applyMapSelection}
-                disabled={!tempPlace}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-300"
-              >
-                선택 완료
-              </button>
-              <button
-                onClick={() => setShowMapModal(false)}
-                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-              >
-                취소
-              </button>
-            </div>
           </div>
         </div>
       )}
       
-      {/* 저장 성공/실패 모달 */}
+      {/* 알림 모달 */}
       {modalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-8 max-w-sm w-full text-center">
-            <div className="mb-4 text-lg">{modalMessage}</div>
+          <div className="bg-white p-6 rounded-lg">
+            <p className="text-lg mb-4">{modalMessage}</p>
             <button
-              className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-              onClick={() => { setModalOpen(false); window.location.reload(); }}
+              onClick={() => setModalOpen(false)}
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
             >
               확인
             </button>
           </div>
         </div>
       )}
-      
-      {/* 업로드 중/에러 UI 안내 (폼 내 적절한 위치에 추가) */}
-      {imageUploading && <div className="text-blue-600 text-sm mt-1">{TEXT.imageUploading?.[lang] || "이미지 업로드 중..."}</div>}
-      {imageUploadError && <div className="text-red-600 text-sm mt-1">{imageUploadError}</div>}
     </div>
   );
 } 

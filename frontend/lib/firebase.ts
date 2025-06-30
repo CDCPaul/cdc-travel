@@ -1,7 +1,7 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
-import { getAuth } from "firebase/auth";
+import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD0E3dFYjzexk74---sWt-3AslSCRFze4s",
@@ -16,4 +16,9 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const db = getFirestore(app);
 export const storage = getStorage(app);
-export const auth = getAuth(app); 
+export const auth = getAuth(app);
+
+// 세션 지속 시간 설정 (브라우저를 닫아도 로그인 상태 유지)
+setPersistence(auth, browserLocalPersistence).catch((error) => {
+  console.error('Auth persistence error:', error);
+}); 

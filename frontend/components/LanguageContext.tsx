@@ -36,12 +36,6 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('lang', lang);
-    }
-  }, [lang]);
-
   return (
     <LanguageContext.Provider value={{ lang, setLang }}>
       {children}

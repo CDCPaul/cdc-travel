@@ -186,7 +186,7 @@ export default function HomePage() {
               >
                 <Link href={`/tours/${product.id}`} className="block bg-white rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300">
                   <div className="relative">
-                    {typeof product.imageUrl === 'string' && product.imageUrl ? (
+                    {product.imageUrl ? (
                       <Image 
                         src={product.imageUrl} 
                         alt={typeof product.title === 'object' ? product.title[lang] : product.title || 'Tour Image'} 
@@ -194,14 +194,22 @@ export default function HomePage() {
                         height={250} 
                         className="w-full h-48 object-cover rounded-t-xl" 
                       />
-                    ) : null}
+                    ) : (
+                      <div className="w-full h-48 bg-gray-200 rounded-t-xl flex items-center justify-center">
+                        <span className="text-gray-500">이미지 없음</span>
+                      </div>
+                    )}
                     <div className="absolute top-4 right-4 bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-semibold">
                       {typeof product.price === 'object' ? product.price[lang] : product.price}
                     </div>
                   </div>
                   <div className="p-6">
-                    <h3 className="text-xl font-semibold mb-2 text-gray-900">{typeof product.title === 'object' ? product.title[lang] : product.title}</h3>
-                    <p className="text-gray-600 mb-4 line-clamp-2">{typeof product.description === 'object' ? product.description[lang] : product.description}</p>
+                    <h3 className="text-xl font-semibold mb-2 text-gray-900">
+                      {typeof product.title === 'object' ? product.title[lang] : product.title}
+                    </h3>
+                    <p className="text-gray-600 mb-4 line-clamp-2">
+                      {typeof product.description === 'object' ? product.description[lang] : product.description}
+                    </p>
                     <div className="flex justify-between items-center">
                       <span className="text-blue-600 font-semibold">자세히 보기 →</span>
                     </div>

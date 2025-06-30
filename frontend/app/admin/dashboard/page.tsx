@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { isAdmin } from '@/lib/auth';
 import { useLanguage } from '../../../components/LanguageContext';
 import Link from 'next/link';
 
@@ -89,8 +88,6 @@ const DASHBOARD_TEXTS = {
 
 export default function AdminDashboard() {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [adminStatus, setAdminStatus] = useState(false);
   const router = useRouter();
   const { lang } = useLanguage();
   const texts = DASHBOARD_TEXTS[lang];
@@ -99,43 +96,22 @@ export default function AdminDashboard() {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setUser({ email: user.email ?? '' });
-        const adminCheck = isAdmin(user);
-        setAdminStatus(adminCheck);
-        
-        if (!adminCheck) {
-          alert(texts.adminRequired);
-          router.push('/admin/login');
-          return;
-        }
-      } else {
-        router.push('/admin/login');
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [router, texts.adminRequired]);
+  }, []);
 
   const handleLogout = async () => {
     try {
       await signOut(auth);
+      setUser(null);
       router.push('/admin/login');
     } catch (error) {
       console.error('Logout error:', error);
+      router.push('/admin/login');
     }
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">{texts.loading}</div>
-      </div>
-    );
-  }
-
-  if (!user || !adminStatus) {
-    return null;
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -145,7 +121,7 @@ export default function AdminDashboard() {
           <div className="flex justify-between items-center py-6">
             <h1 className="text-3xl font-bold text-gray-900">{texts.title}</h1>
             <div className="flex items-center space-x-4">
-              <span className="text-gray-700">{texts.greeting}{user.email}</span>
+              <span className="text-gray-700">{texts.greeting}{user?.email}</span>
               <button
                 onClick={handleLogout}
                 className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium"
