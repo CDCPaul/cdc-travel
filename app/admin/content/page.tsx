@@ -3,134 +3,53 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { auth, db, storage } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
 import { useLanguage } from '../../../components/LanguageContext';
 import Link from 'next/link';
-import Image from "next/image";
-
-interface Content {
-  id: string;
-  title: string;
-  content: string;
-  category: string;
-  author: string;
-  imageUrl: string;
-  tags: string[];
-  isPublished: boolean;
-  createdAt?: Date | string;
-  updatedAt?: Date | string;
-}
 
 const CONTENT_TEXTS = {
   ko: {
-    loading: "로딩 중...",
-    backToDashboard: "← 대시보드로 돌아가기",
     title: "콘텐츠 관리",
-    addNewContent: "새 글 작성",
-    editContent: "글 수정",
-    addNewContentForm: "새 글 작성",
-    formTitle: "제목",
-    formContent: "내용",
-    formCategory: "카테고리",
-    formAuthor: "작성자",
-    formImageUpload: "썸네일 이미지 업로드",
-    formImageUrl: "이미지 URL",
-    formTags: "태그",
-    formIsPublished: "발행",
-    tagsPlaceholder: "태그를 입력하세요 (쉼표로 구분)",
-    delete: "삭제",
-    addTag: "태그 추가",
-    save: "저장",
-    edit: "수정",
-    cancel: "취소",
-    imageUploading: "이미지 업로드 중...",
-    imageUploadError: "이미지 업로드에 실패했습니다.",
-    preview: "미리보기",
-    confirmDelete: "정말로 이 글을 삭제하시겠습니까?",
-    editButton: "수정",
-    deleteButton: "삭제",
-    publishButton: "발행",
-    unpublishButton: "발행 취소",
-    categoryOptions: {
-      news: "뉴스",
-      guide: "가이드",
-      review: "후기",
-      tips: "팁",
-      story: "스토리"
-    },
-    published: "발행됨",
-    draft: "임시저장"
+    subtitle: "개발 진행 중",
+    description: "이 페이지는 현재 개발 중입니다. 곧 완성될 예정입니다.",
+    backToDashboard: "← 대시보드로 돌아가기",
+    comingSoon: "곧 만나요!",
+    features: [
+      "게시판 관리",
+      "콘텐츠 작성 및 편집",
+      "카테고리 관리",
+      "태그 시스템",
+      "이미지 업로드",
+      "발행 상태 관리"
+    ]
   },
   en: {
-    loading: "Loading...",
-    backToDashboard: "← Back to Dashboard",
     title: "Content Management",
-    addNewContent: "Write New Article",
-    editContent: "Edit Article",
-    addNewContentForm: "Write New Article",
-    formTitle: "Title",
-    formContent: "Content",
-    formCategory: "Category",
-    formAuthor: "Author",
-    formImageUpload: "Thumbnail Image Upload",
-    formImageUrl: "Image URL",
-    formTags: "Tags",
-    formIsPublished: "Publish",
-    tagsPlaceholder: "Enter tags (separated by commas)",
-    delete: "Delete",
-    addTag: "Add Tag",
-    save: "Save",
-    edit: "Edit",
-    cancel: "Cancel",
-    imageUploading: "Uploading image...",
-    imageUploadError: "Image upload failed.",
-    preview: "Preview",
-    confirmDelete: "Are you sure you want to delete this article?",
-    editButton: "Edit",
-    deleteButton: "Delete",
-    publishButton: "Publish",
-    unpublishButton: "Unpublish",
-    categoryOptions: {
-      news: "News",
-      guide: "Guide",
-      review: "Review",
-      tips: "Tips",
-      story: "Story"
-    },
-    published: "Published",
-    draft: "Draft"
+    subtitle: "Under Development",
+    description: "This page is currently under development. It will be completed soon.",
+    backToDashboard: "← Back to Dashboard",
+    comingSoon: "Coming Soon!",
+    features: [
+      "Board Management",
+      "Content Creation & Editing",
+      "Category Management",
+      "Tag System",
+      "Image Upload",
+      "Publish Status Management"
+    ]
   }
 };
 
 export default function AdminContent() {
-  const [contents, setContents] = useState<Content[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [editingContent, setEditingContent] = useState<Content | null>(null);
   const router = useRouter();
   const { lang } = useLanguage();
   const texts = CONTENT_TEXTS[lang];
 
-  // Form states
-  const [formData, setFormData] = useState({
-    title: '',
-    content: '',
-    category: '',
-    author: '',
-    imageUrl: '',
-    tags: [''],
-    isPublished: false
-  });
-
-  const [imageUploading, setImageUploading] = useState(false);
-  const [imageUploadError, setImageUploadError] = useState('');
-
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        fetchContents();
+        setLoading(false);
       } else {
         router.push('/admin/login');
       }
@@ -139,396 +58,94 @@ export default function AdminContent() {
     return () => unsubscribe();
   }, [router]);
 
-  const fetchContents = async () => {
-    try {
-      const querySnapshot = await getDocs(collection(db, 'content'));
-      const contentsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Content[];
-      setContents(contentsData.sort((a, b) => {
-        const dateA = new Date(a.createdAt || 0);
-        const dateB = new Date(b.createdAt || 0);
-        return dateB.getTime() - dateA.getTime();
-      }));
-    } catch (error) {
-      console.error('Error fetching contents:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleImageUpload = async (file: File) => {
-    const storageRef = ref(storage, `content/${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    try {
-      const contentData = {
-        ...formData,
-        createdAt: editingContent ? editingContent.createdAt : new Date(),
-        updatedAt: new Date()
-      };
-
-      if (editingContent) {
-        await updateDoc(doc(db, 'content', editingContent.id), contentData);
-      } else {
-        await addDoc(collection(db, 'content'), contentData);
-      }
-
-      setFormData({
-        title: '',
-        content: '',
-        category: '',
-        author: '',
-        imageUrl: '',
-        tags: [''],
-        isPublished: false
-      });
-      setShowAddForm(false);
-      setEditingContent(null);
-      fetchContents();
-    } catch (error) {
-      console.error('Error saving content:', error);
-    }
-  };
-
-  const handleDelete = async (contentId: string) => {
-    if (confirm(texts.confirmDelete)) {
-      try {
-        await deleteDoc(doc(db, 'content', contentId));
-        fetchContents();
-      } catch (error) {
-        console.error('Error deleting content:', error);
-      }
-    }
-  };
-
-  const handleEdit = (content: Content) => {
-    setEditingContent(content);
-    setFormData({
-      title: content.title,
-      content: content.content,
-      category: content.category,
-      author: content.author,
-      imageUrl: content.imageUrl,
-      tags: content.tags,
-      isPublished: content.isPublished
-    });
-    setShowAddForm(true);
-  };
-
-  const togglePublish = async (content: Content) => {
-    try {
-      await updateDoc(doc(db, 'content', content.id), {
-        isPublished: !content.isPublished,
-        updatedAt: new Date()
-      });
-      fetchContents();
-    } catch (error) {
-      console.error('Error toggling publish status:', error);
-    }
-  };
-
-  const addArrayItem = (field: keyof typeof formData, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: [...prev[field] as string[], value]
-    }));
-  };
-
-  const removeArrayItem = (field: keyof typeof formData, index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: (prev[field] as string[]).filter((_, i) => i !== index)
-    }));
-  };
-
-  const updateArrayItem = (field: keyof typeof formData, index: number, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: (prev[field] as string[]).map((item, i) => i === index ? value : item)
-    }));
-  };
-
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">{texts.loading}</div>;
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">로딩 중...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow">
+      <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center space-x-4">
-              <Link href="/admin/dashboard" className="text-gray-500 hover:text-gray-700">
+              <Link 
+                href="/admin/dashboard"
+                className="text-blue-600 hover:text-blue-800 font-medium transition-colors"
+              >
                 {texts.backToDashboard}
               </Link>
-              <h1 className="text-3xl font-bold text-gray-900">{texts.title}</h1>
             </div>
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
-            >
-              {texts.addNewContent}
-            </button>
           </div>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          {/* Add/Edit Form */}
-          {showAddForm && (
-            <div className="bg-white shadow rounded-lg p-6 mb-6">
-              <h2 className="text-xl font-semibold mb-4">
-                {editingContent ? texts.editContent : texts.addNewContentForm}
-              </h2>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">{texts.formTitle}</label>
-                    <input
-                      type="text"
-                      value={formData.title}
-                      onChange={(e) => setFormData({...formData, title: e.target.value})}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">{texts.formCategory}</label>
-                    <select
-                      value={formData.category}
-                      onChange={(e) => setFormData({...formData, category: e.target.value})}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                      required
-                    >
-                      <option value="">{lang === 'ko' ? '카테고리 선택' : 'Select Category'}</option>
-                      {Object.entries(texts.categoryOptions).map(([key, value]) => (
-                        <option key={key} value={key}>{value}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">{texts.formAuthor}</label>
-                    <input
-                      type="text"
-                      value={formData.author}
-                      onChange={(e) => setFormData({...formData, author: e.target.value})}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                      required
-                    />
-                  </div>
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="isPublished"
-                      checked={formData.isPublished}
-                      onChange={(e) => setFormData({...formData, isPublished: e.target.checked})}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                    />
-                    <label htmlFor="isPublished" className="ml-2 block text-sm text-gray-900">
-                      {texts.formIsPublished}
-                    </label>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">{texts.formImageUpload}</label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        setImageUploading(true);
-                        setImageUploadError('');
-                        try {
-                          const url = await handleImageUpload(file);
-                          setFormData((prev) => ({ ...prev, imageUrl: url }));
-                        } catch {
-                          setImageUploadError(texts.imageUploadError);
-                        } finally {
-                          setImageUploading(false);
-                        }
-                      }}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                    />
-                    {imageUploading && <div className="text-blue-600 text-sm mt-1">{texts.imageUploading}</div>}
-                    {imageUploadError && <div className="text-red-600 text-sm mt-1">{imageUploadError}</div>}
-                    {formData.imageUrl && formData.imageUrl !== "" && (
-                      <Image
-                        src={formData.imageUrl}
-                        alt={texts.preview}
-                        width={400}
-                        height={250}
-                        className="mt-2 h-24 rounded-md border"
-                      />
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">{texts.formImageUrl}</label>
-                    <input
-                      type="url"
-                      value={formData.imageUrl}
-                      onChange={(e) => setFormData({...formData, imageUrl: e.target.value})}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                    />
-                  </div>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">{texts.formContent}</label>
-                  <textarea
-                    value={formData.content}
-                    onChange={(e) => setFormData({...formData, content: e.target.value})}
-                    rows={10}
-                    className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2"
-                    required
-                  />
-                </div>
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+            {texts.title}
+          </h1>
+          <h2 className="text-2xl font-semibold text-blue-600 mb-4">
+            {texts.subtitle}
+          </h2>
+          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+            {texts.description}
+          </p>
+        </div>
 
-                {/* Tags */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">{texts.formTags}</label>
-                  {formData.tags.map((tag, index) => (
-                    <div key={index} className="flex gap-2 mt-2">
-                      <input
-                        type="text"
-                        value={tag}
-                        onChange={(e) => updateArrayItem('tags', index, e.target.value)}
-                        className="flex-1 border border-gray-300 rounded-md px-3 py-2"
-                        placeholder={texts.tagsPlaceholder}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeArrayItem('tags', index)}
-                        className="px-3 py-2 bg-red-500 text-white rounded-md"
-                      >
-                        {texts.delete}
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => addArrayItem('tags', '')}
-                    className="mt-2 px-3 py-1 bg-green-500 text-white rounded-md text-sm"
-                  >
-                    {texts.addTag}
-                  </button>
-                </div>
-
-                <div className="flex gap-4">
-                  <button
-                    type="submit"
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
-                  >
-                    {editingContent ? texts.edit : texts.save}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAddForm(false);
-                      setEditingContent(null);
-                      setFormData({
-                        title: '',
-                        content: '',
-                        category: '',
-                        author: '',
-                        imageUrl: '',
-                        tags: [''],
-                        isPublished: false
-                      });
-                    }}
-                    className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md"
-                  >
-                    {texts.cancel}
-                  </button>
-                </div>
-              </form>
+        {/* Development Status */}
+        <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-100 rounded-full mb-4">
+              <svg className="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
             </div>
-          )}
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">
+              {texts.comingSoon}
+            </h3>
+            <p className="text-gray-600">
+              콘텐츠 관리 시스템이 곧 완성됩니다
+            </p>
+          </div>
 
-          {/* Content List */}
-          <div className="bg-white shadow overflow-hidden sm:rounded-md">
-            <ul className="divide-y divide-gray-200">
-              {contents.map((content) => (
-                <li key={content.id} className="px-6 py-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                      {content.imageUrl && (
-                        <Image
-                          src={content.imageUrl}
-                          alt={typeof content.title === 'object' ? ((content.title as Record<string, string>)?.[lang] || (content.title as Record<string, string>)?.ko || '') : (content.title || '')}
-                          width={100}
-                          height={100}
-                          className="w-16 h-16 object-cover rounded-md mr-4"
-                        />
-                      )}
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-medium text-gray-900">{typeof content.title === 'object' ? ((content.title as Record<string, string>)?.[lang] || (content.title as Record<string, string>)?.ko || '') : (content.title || '')}</h3>
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            content.isPublished 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {content.isPublished ? texts.published : texts.draft}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-500">
-                          {texts.categoryOptions[content.category as keyof typeof texts.categoryOptions] || content.category} • {content.author}
-                        </p>
-                        <p className="text-sm text-gray-600 truncate">{typeof content.content === 'object' ? ((content.content as Record<string, string>)?.[lang] || (content.content as Record<string, string>)?.ko || '') : (content.content || '')}</p>
-                        {content.tags && content.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {content.tags.map((tag: string, index: number) => (
-                              <span key={index} className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        <p className="text-xs text-gray-400 mt-1">
-                          {content.createdAt && new Date(content.createdAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => togglePublish(content)}
-                        className={`px-3 py-1 rounded-md text-sm ${
-                          content.isPublished
-                            ? 'bg-yellow-500 hover:bg-yellow-600 text-white'
-                            : 'bg-green-500 hover:bg-green-600 text-white'
-                        }`}
-                      >
-                        {content.isPublished ? texts.unpublishButton : texts.publishButton}
-                      </button>
-                      <button
-                        onClick={() => handleEdit(content)}
-                        className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-md text-sm"
-                      >
-                        {texts.editButton}
-                      </button>
-                      <button
-                        onClick={() => handleDelete(content.id)}
-                        className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-sm"
-                      >
-                        {texts.deleteButton}
-                      </button>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+          {/* Features Grid */}
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {texts.features.map((feature, index) => (
+              <div key={index} className="bg-gray-50 rounded-lg p-6 text-center">
+                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h4 className="font-semibold text-gray-900 mb-2">{feature}</h4>
+              </div>
+            ))}
           </div>
         </div>
-      </main>
+
+        {/* Progress Bar */}
+        <div className="bg-white rounded-lg shadow-lg p-8">
+          <h3 className="text-xl font-semibold text-gray-900 mb-4 text-center">
+            개발 진행률
+          </h3>
+          <div className="w-full bg-gray-200 rounded-full h-4 mb-4">
+            <div className="bg-blue-600 h-4 rounded-full transition-all duration-1000 ease-out" style={{ width: '25%' }}></div>
+          </div>
+          <p className="text-center text-gray-600">
+            25% 완료 - 기획 및 설계 단계
+          </p>
+        </div>
+      </div>
     </div>
   );
 } 

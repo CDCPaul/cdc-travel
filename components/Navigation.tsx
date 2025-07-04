@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useLanguage } from "./LanguageContext";
 import { useEffect, useRef, useState } from "react";
+import { useSiteSettings } from '../lib/settings';
 
 const NAV_LABELS = {
   home: { ko: "홈", en: "Home" },
@@ -15,6 +16,7 @@ export default function Navigation() {
   const { lang, setLang } = useLanguage();
   const navRef = useRef<HTMLDivElement>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { settings } = useSiteSettings();
 
   useEffect(() => {
     if (navRef.current) {
@@ -48,13 +50,15 @@ export default function Navigation() {
           <div className="flex items-center">
             <Image
               src="/images/CDC_LOGO.webp"
-              alt="CDC Travel"
+              alt={typeof settings?.siteName === 'object' ? settings.siteName[lang] : settings?.siteName || 'CDC Travel'}
               width={40}
               height={36}
               style={{ objectFit: "contain" }}
               priority
             />
-            <span className="ml-2 text-base font-bold text-gray-800">CDC TRAVEL</span>
+            <span className="ml-2 text-base font-bold text-gray-800">
+              {typeof settings?.siteName === 'object' ? settings.siteName[lang] : settings?.siteName || 'CDC TRAVEL'}
+            </span>
           </div>
           <div className="hidden md:flex space-x-8">
             <Link href="/" className="text-gray-700 hover:text-blue-600 transition-colors">

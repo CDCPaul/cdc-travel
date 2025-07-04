@@ -9,6 +9,7 @@ import { useLanguage } from "@/components/LanguageContext";
 import { safeLang } from "@/lib/types";
 import MainLayout from "@/components/MainLayout";
 import { getPHPPrice } from "@/lib/types";
+import { logEvent, logPageView } from "@/lib/analytics";
 
 interface Product {
   id: string;
@@ -84,6 +85,9 @@ export default function ToursPage() {
   const { lang } = useLanguage();
 
   useEffect(() => {
+    // 페이지 로드 이벤트 추적
+    logPageView('Tours', '/tours', { language: lang });
+
     const fetchProducts = async () => {
       try {
         setLoading(true);
@@ -103,7 +107,17 @@ export default function ToursPage() {
     };
 
     fetchProducts();
-  }, []);
+  }, [lang]);
+
+  // 투어 클릭 이벤트 핸들러
+  const handleTourClick = (tourId: string, tourTitle: string) => {
+    logEvent('tour_click', {
+      tour_id: tourId,
+      tour_title: tourTitle,
+      location: 'tours_list_page',
+      language: lang
+    });
+  };
 
   if (loading) {
     return (
@@ -163,7 +177,11 @@ export default function ToursPage() {
                     variants={cardVariants}
                     transition={{ delay: i * 0.15 }}
                   >
-                    <Link href={`/tours/${product.id}`} className="flex bg-white rounded-xl shadow p-6 flex-col hover:shadow-lg transition">
+                    <Link 
+                      href={`/tours/${product.id}`} 
+                      className="flex bg-white rounded-xl shadow p-6 flex-col hover:shadow-lg transition"
+                      onClick={() => handleTourClick(product.id, safeLang(product.title, lang))}
+                    >
                       {product.imageUrls && product.imageUrls.length > 0 ? (
                         <Image 
                           src={product.imageUrls[0]} 

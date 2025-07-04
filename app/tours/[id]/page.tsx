@@ -10,6 +10,7 @@ import Navigation from "@/components/Navigation";
 import { useLanguage } from "@/components/LanguageContext";
 import { safeLang } from "@/lib/types";
 import { getPHPPrice } from "@/lib/types";
+import { logPageView, logSpotClick, logScheduleTabClick, logScrollToBottom, logTimeOnPage } from "@/lib/analytics";
 
 interface Spot {
   id: string;
@@ -152,7 +153,21 @@ export default function TourDetailPage() {
         const productSnap = await getDoc(productRef);
         
         if (productSnap.exists()) {
-          setProduct({ id: productSnap.id, ...productSnap.data() } as Product);
+          const productData = { id: productSnap.id, ...productSnap.data() } as Product;
+          setProduct(productData);
+          
+          // 투어 상세 페이지 뷰 추적
+          logPageView(
+            productData.title[lang], 
+            `/tours/${params.id}`,
+            {
+              tour_id: params.id as string,
+              tour_title: productData.title[lang],
+              tour_category: productData.category[lang],
+              tour_region: productData.region[lang],
+              language: lang
+            }
+          );
         }
         
         // Fetch spots
@@ -172,7 +187,55 @@ export default function TourDetailPage() {
     if (params.id) {
       fetchData();
     }
-  }, [params.id]);
+
+    // 스크롤 이벤트 추적
+    const handleScroll = () => {
+      const scrollTop = window.scrollY;
+      const documentHeight = document.documentElement.scrollHeight;
+      const windowHeight = window.innerHeight;
+      
+      // 페이지 하단에 도달했을 때 (90% 이상 스크롤)
+      if (scrollTop + windowHeight >= documentHeight * 0.9) {
+        logScrollToBottom(`/tours/${params.id}`, product?.title[lang] || 'Tour Detail');
+      }
+    };
+
+    // 시간 체류 이벤트 추적 (30초 후)
+    const timeOnPageTimer = setTimeout(() => {
+      logTimeOnPage(`/tours/${params.id}`, product?.title[lang] || 'Tour Detail', 30);
+    }, 30000);
+
+    // 스크롤 이벤트 리스너 추가
+    window.addEventListener('scroll', handleScroll);
+
+    // 클린업 함수
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      clearTimeout(timeOnPageTimer);
+    };
+  }, [params.id, lang, product?.title]);
+
+  // 스팟 클릭 이벤트 핸들러
+  const handleSpotClick = (spot: Spot) => {
+    logSpotClick(
+      spot.id,
+      spot.name[lang],
+      spot.type,
+      params.id as string,
+      product?.title[lang] || ''
+    );
+    setSelectedSpot(spot);
+  };
+
+  // 스케줄 탭 클릭 이벤트 핸들러
+  const handleScheduleTabClick = (day: number) => {
+    logScheduleTabClick(
+      params.id as string,
+      product?.title[lang] || '',
+      day
+    );
+    setActiveDay(day);
+  };
 
   if (loading) {
     return (
@@ -282,7 +345,7 @@ export default function TourDetailPage() {
                     onClick={() => {
                       const allSpots = product.schedule?.flatMap(day => day.spots) || [];
                       const spot = allSpots.find(s => s.spotId === highlight.spotId);
-                      if (spot) setSelectedSpot({
+                      if (spot) handleSpotClick({
                         id: spot.spotId,
                         name: spot.spotName,
                         imageUrl: spot.spotImage || '',
@@ -316,7 +379,7 @@ export default function TourDetailPage() {
               {product.schedule?.filter(Boolean).map((day) => (
                 <button
                   key={day.day}
-                  onClick={() => setActiveDay(day.day)}
+                  onClick={() => handleScheduleTabClick(day.day)}
                   className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
                     activeDay === day.day
                       ? 'bg-blue-600 text-white'
@@ -337,7 +400,7 @@ export default function TourDetailPage() {
                   <div
                     key={index}
                     className="flex items-center gap-2 cursor-pointer hover:underline"
-                    onClick={() => setSelectedSpot({
+                    onClick={() => handleSpotClick({
                       id: spot.spotId,
                       name: spot.spotName,
                       imageUrl: spot.spotImage || '',

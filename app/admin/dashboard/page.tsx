@@ -1,380 +1,437 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { signOut, onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { isAdmin } from '@/lib/auth';
 import { useLanguage } from '../../../components/LanguageContext';
-import Link from 'next/link';
+import { logPageView } from '@/lib/analytics';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, AreaChart, Area
+} from 'recharts';
 
-interface User { email: string; }
+// 통계 데이터 타입 정의
+interface AnalyticsData {
+  totalUsers: number;
+  totalPageViews: number;
+  totalSessions: number;
+  averageSessionDuration: number;
+  conversionRate: number;
+  topPages: Array<{ page: string; views: number }>;
+  topTours: Array<{ tourId: string; tourTitle: string; views: number }>;
+  topSpots: Array<{ spotId: string; spotName: string; views: number }>;
+  recentEvents: Array<{ event: string; count: number; timestamp: string }>;
+  timeTrends: Array<{ date: string; users: number; sessions: number }>;
+  hourlyTraffic: Array<{ hour: number; users: number }>;
+  trafficSources: Array<{ source: string; users: number; percentage: number }>;
+  deviceStats: Array<{ device: string; users: number; percentage: number }>;
+  locationStats: Array<{ country: string; users: number; percentage: number }>;
+}
 
 const DASHBOARD_TEXTS = {
   ko: {
-    title: "CDC Travel 관리자",
-    greeting: "안녕하세요, ",
-    logout: "로그아웃",
-    loading: "로딩 중...",
-    adminRequired: "관리자 권한이 필요합니다.",
-    productManagement: {
-      title: "상품 관리",
-      description: "투어 상품 추가/수정",
-      action: "상품 관리하기 →"
-    },
-    travelInfoManagement: {
-      title: "여행 정보 관리",
-      description: "여행 정보 추가/수정",
-      action: "여행 정보 관리하기 →"
-    },
-    mainPageManagement: {
-      title: "메인 페이지 관리",
-      description: "배너 영상/이미지 교체",
-      action: "메인 페이지 관리하기 →"
-    },
-    contentManagement: {
-      title: "콘텐츠 관리",
-      description: "글 작성/수정",
-      action: "콘텐츠 관리하기 →"
-    },
-    fileManagement: {
-      title: "파일 관리",
-      description: "이미지/영상 업로드",
-      action: "파일 관리하기 →"
-    },
-    siteSettings: {
-      title: "사이트 설정",
-      description: "기본 설정 관리",
-      action: "설정 관리하기 →"
-    }
+    title: "통계 대시보드",
+    subtitle: "CDC Travel 웹사이트 분석",
+    totalUsers: "총 사용자",
+    totalPageViews: "총 페이지 조회",
+    totalSessions: "총 세션",
+    averageSessionDuration: "평균 세션 시간",
+    conversionRate: "전환율",
+    topPages: "인기 페이지",
+    topTours: "인기 상품",
+    topSpots: "인기 스팟",
+    recentEvents: "인기 이벤트",
+    timeTrends: "시간별 트렌드",
+    hourlyTraffic: "시간대별 접속자",
+    trafficSources: "유입 경로",
+    deviceStats: "디바이스별 통계",
+    locationStats: "지역별 통계",
+    loading: "데이터를 불러오는 중...",
+    noData: "데이터가 없습니다",
+    refresh: "새로고침",
+    lastUpdated: "마지막 업데이트",
+    minutes: "분",
+    percentage: "%",
+    today: "오늘",
+    yesterday: "어제",
+    thisWeek: "이번 주",
+    thisMonth: "이번 달",
+    lastMonth: "지난 달",
+    custom: "커스텀",
+    error: "데이터를 불러오는데 실패했습니다",
+    retry: "다시 시도"
   },
   en: {
-    title: "CDC Travel Admin",
-    greeting: "Hello, ",
-    logout: "Logout",
-    loading: "Loading...",
-    adminRequired: "Administrator privileges required.",
-    productManagement: {
-      title: "Product Management",
-      description: "Add/Edit Tour Products",
-      action: "Manage Products →"
-    },
-    travelInfoManagement: {
-      title: "Travel Info Management",
-      description: "Add/Edit Travel Information",
-      action: "Manage Travel Info →"
-    },
-    mainPageManagement: {
-      title: "Main Page Management",
-      description: "Banner Video/Image Replacement",
-      action: "Manage Main Page →"
-    },
-    contentManagement: {
-      title: "Content Management",
-      description: "Write/Edit Articles",
-      action: "Manage Content →"
-    },
-    fileManagement: {
-      title: "File Management",
-      description: "Image/Video Upload",
-      action: "Manage Files →"
-    },
-    siteSettings: {
-      title: "Site Settings",
-      description: "Basic Settings Management",
-      action: "Manage Settings →"
-    }
+    title: "Analytics Dashboard",
+    subtitle: "CDC Travel Website Analytics",
+    totalUsers: "Total Users",
+    totalPageViews: "Total Page Views",
+    totalSessions: "Total Sessions",
+    averageSessionDuration: "Avg Session Duration",
+    conversionRate: "Conversion Rate",
+    topPages: "Top Pages",
+    topTours: "Top Tours",
+    topSpots: "Top Spots",
+    recentEvents: "Recent Events",
+    timeTrends: "Time Trends",
+    hourlyTraffic: "Hourly Traffic",
+    trafficSources: "Traffic Sources",
+    deviceStats: "Device Statistics",
+    locationStats: "Location Statistics",
+    loading: "Loading data...",
+    noData: "No data available",
+    refresh: "Refresh",
+    lastUpdated: "Last Updated",
+    minutes: "min",
+    percentage: "%",
+    today: "Today",
+    yesterday: "Yesterday",
+    thisWeek: "This Week",
+    thisMonth: "This Month",
+    lastMonth: "Last Month",
+    custom: "Custom",
+    error: "Failed to load data",
+    retry: "Retry"
   }
 };
 
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
+
 export default function AdminDashboard() {
-  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [adminStatus, setAdminStatus] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [timeRange, setTimeRange] = useState('30d');
   const router = useRouter();
   const { lang } = useLanguage();
   const texts = DASHBOARD_TEXTS[lang];
-  const [profileOpen, setProfileOpen] = useState(false);
-  const profileRef = useRef<HTMLDivElement>(null);
+
+  // Analytics API에서 데이터 가져오기
+  const fetchAnalyticsData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch(`/api/analytics?timeRange=${timeRange}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setAnalyticsData(result.data);
+      } else {
+        setError(result.error || texts.error);
+      }
+    } catch (err) {
+      console.error('Failed to fetch analytics data:', err);
+      setError(texts.error);
+    } finally {
+      setLoading(false);
+    }
+  }, [timeRange, texts.error]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        setUser({ email: user.email ?? '' });
-        const adminCheck = isAdmin(user);
-        setAdminStatus(adminCheck);
-        
-        if (!adminCheck) {
-          alert(texts.adminRequired);
-          router.push('/admin/login');
-          return;
-        }
+        logPageView('Admin Dashboard', '/admin/dashboard', { language: lang });
+        fetchAnalyticsData();
       } else {
         router.push('/admin/login');
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [router, texts.adminRequired]);
+  }, [router, timeRange, lang, fetchAnalyticsData]);
 
-  // 바깥 클릭 시 드롭다운 닫기
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
-        setProfileOpen(false);
-      }
-    }
-    if (profileOpen) {
-      document.addEventListener('mousedown', handleClick);
-    } else {
-      document.removeEventListener('mousedown', handleClick);
-    }
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [profileOpen]);
+  const StatCard = ({ title, value, subtitle, icon }: { title: string; value: string | number; subtitle?: string; icon: string }) => (
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-600">{title}</p>
+          <p className="text-3xl font-bold text-gray-900">{value}</p>
+          {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
+        </div>
+        <div className="text-3xl text-blue-600">{icon}</div>
+      </div>
+    </div>
+  );
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      router.push('/admin/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
+  const TopList = ({ title, data, type }: { title: string; data: Array<{ [key: string]: string | number }>; type: 'pages' | 'tours' | 'spots' | 'events' }) => (
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">{title}</h3>
+      <div className="space-y-3">
+        {data.length > 0 ? (
+          data.map((item, index) => (
+            <div key={index} className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <span className="text-sm font-medium text-gray-500">#{index + 1}</span>
+                <span className="text-sm text-gray-900">
+                  {type === 'pages' ? item.page as string : 
+                   type === 'tours' ? item.tourTitle as string :
+                   type === 'spots' ? item.spotName as string :
+                   item.event as string}
+                </span>
+              </div>
+              <span className="text-sm font-semibold text-blue-600">
+                {type === 'events' ? item.count as number : item.views as number}
+              </span>
+            </div>
+          ))
+        ) : (
+          <p className="text-gray-500 text-sm">{texts.noData}</p>
+        )}
+      </div>
+    </div>
+  );
+
+  const TimeRangeSelector = () => (
+    <div className="flex items-center space-x-4">
+      <select
+        value={timeRange}
+        onChange={(e) => setTimeRange(e.target.value)}
+        className="border border-gray-300 rounded-md px-3 py-2 text-sm bg-white"
+      >
+        <option value="today">{texts.today}</option>
+        <option value="yesterday">{texts.yesterday}</option>
+        <option value="7d">{texts.thisWeek}</option>
+        <option value="30d">{texts.thisMonth}</option>
+        <option value="90d">{texts.lastMonth}</option>
+        <option value="custom">{texts.custom}</option>
+      </select>
+      <button
+        onClick={fetchAnalyticsData}
+        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm transition-colors"
+      >
+        {texts.refresh}
+      </button>
+    </div>
+  );
+
+  const HourlyTrafficChart = ({ data }: { data: Array<{ hour: number; users: number }> }) => (
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">{texts.hourlyTraffic}</h3>
+      <div className="h-64">
+        {data.length > 0 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="hour" 
+                tickFormatter={(value) => `${value}:00`}
+              />
+              <YAxis />
+              <Tooltip 
+                formatter={(value: number) => [value, '사용자']}
+                labelFormatter={(label) => `${label}:00`}
+              />
+              <Area type="monotone" dataKey="users" stroke="#8884d8" fill="#8884d8" fillOpacity={0.3} />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-full flex items-center justify-center text-gray-500">
+            {texts.noData}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const TrafficSourcesChart = ({ data }: { data: Array<{ source: string; users: number; percentage: number }> }) => (
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">{texts.trafficSources}</h3>
+      <div className="h-64">
+        {data.length > 0 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                labelLine={false}
+                label={({ source, percentage }) => `${source} ${percentage}%`}
+                outerRadius={80}
+                fill="#8884d8"
+                dataKey="users"
+              >
+                {data.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-full flex items-center justify-center text-gray-500">
+            {texts.noData}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const DeviceStatsChart = ({ data }: { data: Array<{ device: string; users: number; percentage: number }> }) => (
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">{texts.deviceStats}</h3>
+      <div className="h-64">
+        {data.length > 0 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="device" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="users" fill="#8884d8" />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-full flex items-center justify-center text-gray-500">
+            {texts.noData}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const LocationStatsChart = ({ data }: { data: Array<{ country: string; users: number; percentage: number }> }) => (
+    <div className="bg-white rounded-lg shadow-md p-6">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4">{texts.locationStats}</h3>
+      <div className="h-64">
+        {data.length > 0 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="country" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="users" fill="#82ca9d" />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="h-full flex items-center justify-center text-gray-500">
+            {texts.noData}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-xl">{texts.loading}</div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">{texts.loading}</p>
+        </div>
       </div>
     );
   }
 
-  if (!user || !adminStatus) {
-    return null;
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">{error}</p>
+          <button 
+            onClick={fetchAnalyticsData}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+          >
+            {texts.retry}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* 모바일 카드형 헤더 + 프로필 드롭다운 */}
-      <header className="bg-white shadow px-4 py-4 md:pl-64">
-        <div className="block md:hidden">
-          <div className="rounded-2xl shadow-md bg-white px-4 py-3 flex items-center justify-between relative">
-            {/* 햄버거 버튼은 layout.tsx에서 렌더링되므로 여백만 확보 */}
-            <div className="flex items-center gap-2">
-              <div style={{ width: 40, minWidth: 40 }} />
-              <span className="text-lg font-bold text-[#1A3A3A] whitespace-nowrap">CDC Travel Admin</span>
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">{texts.title}</h1>
+              <p className="text-gray-600">{texts.subtitle}</p>
             </div>
-            {/* 프로필 아이콘 (드롭다운 토글) */}
-            <div ref={profileRef} className="relative">
-              <button
-                className="flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 border border-gray-200"
-                onClick={() => setProfileOpen((v) => !v)}
-                aria-label="Open profile menu"
-              >
-                <svg className="w-6 h-6 text-[#2C6E6F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              </button>
-              {/* 드롭다운 */}
-              {profileOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg py-2 z-50 border border-gray-100 animate-fade-in">
-                  <div className="px-4 py-2 text-sm text-gray-700 flex items-center gap-2">
-                    <svg className="w-4 h-4 text-[#2C6E6F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    {user?.email}
-                  </div>
-                  <button
-                    onClick={handleLogout}
-                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-semibold"
-                  >
-                    Logout
-                  </button>
-                </div>
-              )}
-            </div>
+            <TimeRangeSelector />
           </div>
         </div>
-        {/* 데스크탑: 기존 레이아웃 */}
-        <div className="hidden md:flex flex-row items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="md:hidden" style={{ width: 40, minWidth: 40 }} />
-            <span className="text-2xl font-bold text-[#1A3A3A] whitespace-nowrap">CDC Travel Admin</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-gray-100 rounded-full px-3 py-1">
-              <svg className="w-5 h-5 text-[#2C6E6F]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 15c2.5 0 4.847.655 6.879 1.804M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <span className="text-sm text-gray-700 font-medium">{user?.email}</span>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="bg-red-500 hover:bg-red-600 text-white rounded-full px-4 py-1 text-sm font-semibold shadow transition-colors"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
-      <style jsx global>{`
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(-10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-fade-in {
-          animation: fade-in 0.15s ease;
-        }
-      `}</style>
+      </div>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* 상품 관리 */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                      </svg>
-                    </div>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">{texts.productManagement.title}</dt>
-                      <dd className="text-lg font-medium text-gray-900">{texts.productManagement.description}</dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-5 py-3">
-                <div className="text-sm">
-                  <Link href="/admin/products" className="font-medium text-blue-700 hover:text-blue-900">
-                    {texts.productManagement.action}
-                  </Link>
-                </div>
-              </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {analyticsData ? (
+          <>
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+              <StatCard
+                title={texts.totalUsers}
+                value={analyticsData.totalUsers.toLocaleString()}
+                icon="👥"
+              />
+              <StatCard
+                title={texts.totalPageViews}
+                value={analyticsData.totalPageViews.toLocaleString()}
+                icon="👁️"
+              />
+              <StatCard
+                title={texts.totalSessions}
+                value={analyticsData.totalSessions.toLocaleString()}
+                icon="🔄"
+              />
+              <StatCard
+                title={texts.averageSessionDuration}
+                value={`${Math.round(analyticsData.averageSessionDuration / 60)} ${texts.minutes}`}
+                icon="⏱️"
+              />
+              <StatCard
+                title={texts.conversionRate}
+                value={`${analyticsData.conversionRate}${texts.percentage}`}
+                icon="💰"
+              />
             </div>
 
-            {/* 메인 페이지 관리 */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-purple-500 rounded-md flex items-center justify-center">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                      </svg>
-                    </div>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">{texts.mainPageManagement.title}</dt>
-                      <dd className="text-lg font-medium text-gray-900">{texts.mainPageManagement.description}</dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-5 py-3">
-                <div className="text-sm">
-                  <Link href="/admin/main-page" className="font-medium text-purple-700 hover:text-purple-900">
-                    {texts.mainPageManagement.action}
-                  </Link>
-                </div>
-              </div>
+            {/* Top Lists */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+              <TopList
+                title={texts.topPages}
+                data={analyticsData.topPages}
+                type="pages"
+              />
+              <TopList
+                title={texts.topTours}
+                data={analyticsData.topTours}
+                type="tours"
+              />
+              <TopList
+                title={texts.topSpots}
+                data={analyticsData.topSpots}
+                type="spots"
+              />
+              <TopList
+                title={texts.recentEvents}
+                data={analyticsData.recentEvents}
+                type="events"
+              />
             </div>
 
-            {/* 콘텐츠 관리 */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-yellow-500 rounded-md flex items-center justify-center">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </div>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">{texts.contentManagement.title}</dt>
-                      <dd className="text-lg font-medium text-gray-900">{texts.contentManagement.description}</dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-5 py-3">
-                <div className="text-sm">
-                  <Link href="/admin/content" className="font-medium text-yellow-700 hover:text-yellow-900">
-                    {texts.contentManagement.action}
-                  </Link>
-                </div>
-              </div>
+            {/* Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+              <HourlyTrafficChart data={analyticsData.hourlyTraffic} />
+              <TrafficSourcesChart data={analyticsData.trafficSources} />
+              <DeviceStatsChart data={analyticsData.deviceStats} />
+              <LocationStatsChart data={analyticsData.locationStats} />
             </div>
-
-            {/* 파일 관리 */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-red-500 rounded-md flex items-center justify-center">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                      </svg>
-                    </div>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">{texts.fileManagement.title}</dt>
-                      <dd className="text-lg font-medium text-gray-900">{texts.fileManagement.description}</dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-5 py-3">
-                <div className="text-sm">
-                  <Link href="/admin/files" className="font-medium text-red-700 hover:text-red-900">
-                    {texts.fileManagement.action}
-                  </Link>
-                </div>
-              </div>
-            </div>
-
-            {/* 사이트 설정 */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-gray-500 rounded-md flex items-center justify-center">
-                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                    </div>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">{texts.siteSettings.title}</dt>
-                      <dd className="text-lg font-medium text-gray-900">{texts.siteSettings.description}</dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-5 py-3">
-                <div className="text-sm">
-                  <Link href="/admin/settings" className="font-medium text-gray-700 hover:text-gray-900">
-                    {texts.siteSettings.action}
-                  </Link>
-                </div>
-              </div>
-            </div>
+          </>
+        ) : (
+          <div className="text-center py-12">
+            <p className="text-gray-500">{texts.noData}</p>
           </div>
+        )}
+
+        {/* Last Updated */}
+        <div className="mt-8 text-center text-sm text-gray-500">
+          {texts.lastUpdated}: {new Date().toLocaleString()}
         </div>
-      </main>
+      </div>
     </div>
   );
 } 
