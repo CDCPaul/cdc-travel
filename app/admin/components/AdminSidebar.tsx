@@ -3,9 +3,12 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLanguage } from "../../../components/LanguageContext";
 import { motion } from "framer-motion";
+import { auth } from "../../../lib/firebase";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { useRouter } from "next/navigation";
 
 const MAIN_MENU = {
   ko: [
@@ -55,6 +58,20 @@ export default function AdminSidebar() {
   const [dbOpen, setDbOpen] = useState(pathname.startsWith("/admin/spots") || pathname.startsWith("/admin/include-items") || pathname.startsWith("/admin/not-include-items") || pathname.startsWith("/admin/files") || pathname.startsWith("/admin/db"));
   const [aboutUsOpen, setAboutUsOpen] = useState(pathname.startsWith("/admin/about-us"));
   const { lang, setLang } = useLanguage();
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUserEmail(user?.email || null);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    router.push("/admin/login");
+  };
 
   const currentMainMenu = MAIN_MENU[lang];
   const currentDbMenu = DB_MENU[lang];
@@ -261,6 +278,19 @@ export default function AdminSidebar() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* 하단: 로그인 정보 및 로그아웃 */}
+      <div className="mt-auto p-4 border-t border-[#3A8A8B]/30 text-sm text-white/80">
+        {userEmail && (
+          <div className="mb-2 truncate">로그인: {userEmail}</div>
+        )}
+        <button
+          onClick={handleLogout}
+          className="w-full bg-[#7FC4C5] text-[#1A3A3A] font-bold py-2 rounded hover:bg-[#5A7A7A] transition-colors mt-2"
+        >
+          로그아웃
+        </button>
       </div>
     </aside>
   );
