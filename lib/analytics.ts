@@ -57,7 +57,6 @@ async function saveEventToFirestore(event: AnalyticsEvent): Promise<void> {
     });
   } catch (error) {
     // Firestore 저장 실패 시 콘솔 경고
-    // eslint-disable-next-line no-console
     console.warn('Failed to save analytics event to Firestore:', error);
   }
 }
