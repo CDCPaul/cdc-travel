@@ -1,0 +1,99 @@
+/**
+ * 날짜 포맷팅 유틸리티 함수
+ */
+
+/**
+ * 날짜를 지정된 형식으로 포맷팅합니다.
+ * @param date - 포맷팅할 날짜 (Date 객체 또는 날짜 문자열)
+ * @param format - 포맷 문자열 ('YYYY-MM-DD', 'YYYY-MM-DD HH:mm:ss', 'MM/DD/YYYY' 등)
+ * @returns 포맷팅된 날짜 문자열
+ */
+export function formatDate(
+  date: Date | string | number,
+  format: string = 'YYYY-MM-DD'
+): string {
+  const dateObj = typeof date === 'string' || typeof date === 'number' 
+    ? new Date(date) 
+    : date;
+
+  if (isNaN(dateObj.getTime())) {
+    throw new Error('Invalid date provided to formatDate');
+  }
+
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  const hours = String(dateObj.getHours()).padStart(2, '0');
+  const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+  const seconds = String(dateObj.getSeconds()).padStart(2, '0');
+
+  let result = format;
+  
+  result = result.replace('YYYY', String(year));
+  result = result.replace('MM', month);
+  result = result.replace('DD', day);
+  result = result.replace('HH', hours);
+  result = result.replace('mm', minutes);
+  result = result.replace('ss', seconds);
+
+  return result;
+}
+
+/**
+ * 현재 날짜를 포맷팅합니다.
+ * @param format - 포맷 문자열
+ * @returns 포맷팅된 현재 날짜 문자열
+ */
+export function formatCurrentDate(
+  format: string = 'YYYY-MM-DD'
+): string {
+  return formatDate(new Date(), format);
+}
+
+/**
+ * 타임스탬프를 날짜로 변환하여 포맷팅합니다.
+ * @param timestamp - Firestore 타임스탬프 또는 Unix 타임스탬프
+ * @param format - 포맷 문자열
+ * @returns 포맷팅된 날짜 문자열
+ */
+export function formatTimestamp(
+  timestamp: number | { seconds: number; nanoseconds: number },
+  format: string = 'YYYY-MM-DD'
+): string {
+  let date: Date;
+  
+  if (typeof timestamp === 'number') {
+    // Unix 타임스탬프 (밀리초)
+    date = new Date(timestamp);
+  } else {
+    // Firestore 타임스탬프
+    date = new Date(timestamp.seconds * 1000);
+  }
+  
+  return formatDate(date, format);
+}
+
+/**
+ * 상대적 시간을 표시합니다 (예: "3일 전", "2시간 전")
+ * @param date - 기준 날짜
+ * @returns 상대적 시간 문자열
+ */
+export function formatRelativeTime(
+  date: Date | string | number
+): string {
+  const dateObj = typeof date === 'string' || typeof date === 'number' 
+    ? new Date(date) 
+    : date;
+  
+  const now = new Date();
+  const diffInMs = now.getTime() - dateObj.getTime();
+  const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+  const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+  const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+
+  if (diffInMinutes < 1) return '방금 전';
+  if (diffInMinutes < 60) return `${diffInMinutes}분 전`;
+  if (diffInHours < 24) return `${diffInHours}시간 전`;
+  if (diffInDays < 7) return `${diffInDays}일 전`;
+  return formatDate(dateObj, 'YYYY-MM-DD');
+} 

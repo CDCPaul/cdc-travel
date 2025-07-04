@@ -1,0 +1,284 @@
+{
+  "project": {
+    "name": "CDC Travel",
+    "description": "필리핀 세부 지역 여행사 웹사이트",
+    "techStack": {
+      "frontend": "Next.js 15, TypeScript, Tailwind CSS",
+      "backend": "Firebase (Firestore, Auth, Storage)",
+      "deployment": "Vercel"
+    }
+  },
+  "firestore": {
+    "collections": {
+      "users": {
+        "fields": {
+          "name": "string",
+          "email": "string", 
+          "createdAt": "timestamp"
+        },
+        "subcollections": {
+          "profiles": {
+            "fields": {
+              "age": "number",
+              "country": "string"
+            }
+          }
+        }
+      },
+      "products": {
+        "fields": {
+          "title": "{ ko: string, en: string }",
+          "subtitle": "{ ko: string, en: string }",
+          "description": "{ ko: string, en: string }",
+          "price": "{ KRW: string, PHP: string, USD: string }",
+          "originalPrice": "{ KRW: string, PHP: string, USD: string }",
+          "duration": "{ ko: string, en: string }",
+          "imageUrls": "string[]",
+          "category": "{ ko: string, en: string }",
+          "region": "{ ko: string, en: string }",
+          "discount": "number",
+          "highlights": "Array<{ ko: string, en: string }>",
+          "isActive": "boolean",
+          "isFeatured": "boolean",
+          "createdAt": "timestamp",
+          "schedule": "Array<{ day: number, spots: Array<Spot> }>"
+        }
+      },
+      "settings": {
+        "banners": {
+          "items": {
+            "fields": {
+              "id": "string",
+              "type": "'image' | 'video'",
+              "url": "string",
+              "link": "string",
+              "title_ko": "string",
+              "title_en": "string",
+              "order": "number",
+              "active": "boolean",
+              "createdAt": "number"
+            }
+          }
+        },
+        "mainPage": {
+          "fields": {
+            "bannerVideo": "string",
+            "bannerImage": "string",
+            "mainTitle": "string",
+            "mainSubtitle": "string"
+          }
+        }
+      },
+      "spots": {
+        "fields": {
+          "id": "string",
+          "type": "string",
+          "name": "string",
+          "name_kr": "string",
+          "imageUrl": "string",
+          "description": "string",
+          "address": "string",
+          "tags": "string[]"
+        }
+      },
+      "includeItems": {
+        "fields": {
+          "id": "string",
+          "name": "string",
+          "iconUrl": "string"
+        }
+      },
+      "notIncludeItems": {
+        "fields": {
+          "id": "string",
+          "name": "string",
+          "iconUrl": "string"
+        }
+      },
+      "ebooks": {
+        "fields": {
+          "id": "string",
+          "title": "{ ko: string, en: string }",
+          "description": "{ ko: string, en: string }",
+          "fileUrl": "string",
+          "thumbUrl": "string",
+          "isPublic": "boolean",
+          "createdAt": "number",
+          "updatedAt": "number"
+        }
+      },
+      "travelInfo": {
+        "fields": {
+          "id": "string",
+          "title": "{ ko: string, en: string }",
+          "content": "{ ko: string, en: string }",
+          "category": "string",
+          "imageUrls": "string[]",
+          "tags": "string[]",
+          "isActive": "boolean",
+          "createdAt": "timestamp",
+          "updatedAt": "timestamp"
+        }
+      }
+    }
+  },
+  "utilities": {
+    "lib/firebase.ts": {
+      "description": "Firestore DB 인스턴스",
+      "exports": {
+        "db": "Firestore 인스턴스",
+        "storage": "Firebase Storage 인스턴스", 
+        "auth": "Firebase Auth 인스턴스"
+      },
+      "usage": "모든 Firestore 작업에서 반드시 이 db 인스턴스를 사용해야 함"
+    },
+    "lib/utils.ts": {
+      "description": "날짜 포맷팅 유틸리티",
+      "exports": {
+        "formatDate": "날짜를 지정된 형식으로 포맷팅",
+        "formatCurrentDate": "현재 날짜 포맷팅",
+        "formatTimestamp": "타임스탬프 포맷팅",
+        "formatRelativeTime": "상대적 시간 표시"
+      },
+      "usage": "날짜 포맷팅 시 반드시 이 함수들을 사용해야 함"
+    },
+    "lib/auth.ts": {
+      "description": "인증 관련 유틸리티",
+      "exports": {
+        "checkAuth": "인증 상태 확인 (Promise<User | null>)",
+        "checkAdminAuth": "관리자 권한 확인",
+        "isAdmin": "관리자 이메일 확인",
+        "requireAuth": "인증 상태 리스너",
+        "requireAdmin": "관리자 권한 리스너"
+      },
+      "usage": "보안 API에서 반드시 checkAuth()를 사용해야 함"
+    },
+    "lib/types.ts": {
+      "description": "TypeScript 타입 정의",
+      "exports": {
+        "safeLang": "다국어 텍스트 안전 추출",
+        "isCurrencyPrice": "통화 가격 타입 가드",
+        "isLanguagePrice": "언어별 가격 타입 가드",
+        "getPHPPrice": "PHP 가격 추출",
+        "normalizeMultilingualText": "다국어 텍스트 정규화"
+      }
+    }
+  },
+  "internationalization": {
+    "component": "components/LanguageContext.tsx",
+    "description": "언어 상태 관리",
+    "features": {
+      "supportedLanguages": ["ko", "en"],
+      "defaultLanguage": "en",
+      "persistence": "sessionStorage",
+      "context": "React Context API"
+    },
+    "usage": "모든 컴포넌트에서 useLanguage() 훅으로 언어 상태 접근"
+  },
+  "adminAuthentication": {
+    "system": "Firebase Auth",
+    "method": "이메일 화이트리스트 기반",
+    "protectedRoutes": ["/admin/*"],
+    "adminEmails": [
+      "dev@cebudirectclub.com",
+      "diana@cebudirectclub.com", 
+      "airtel@cebudirectclub.com",
+      "cebu@cebudirectclub.com",
+      "ahn@cebudirectclub.com",
+      "nadia@cebudirectclub.com",
+      "bohol@cebudirectclub.com",
+      "bohol2@cebudirectclub.com",
+      "visa@cebudirectclub.com",
+      "zeus@cebudirectclub.com",
+      "jessiebel@cebudirectclub.com",
+      "outbound@cebudirectclub.com",
+      "tour@cebudirectclub.com",
+      "visa2@cebudirectclub.com",
+      "ticket@cebudirectclub.com",
+      "air@cebudirectclub.com",
+      "ojt@cebudirectclub.com"
+    ],
+    "layout": "app/admin/layout.tsx",
+    "dashboard": "app/admin/dashboard/page.tsx"
+  },
+  "apiStructure": {
+    "framework": "Next.js App Router",
+    "pattern": "app/api/[route]/route.ts",
+    "authentication": "인증이 필요한 API는 반드시 checkAuth() 사용",
+    "responseFormat": {
+      "success": "boolean",
+      "message": "string (optional)",
+      "data": "any (optional)"
+    },
+    "examples": [
+      "app/api/contact/route.ts",
+      "app/api/products/route.ts", 
+      "app/api/admin/banners/route.ts"
+    ],
+    "database": "대부분의 API는 Firestore에 직접 읽기/쓰기 수행"
+  },
+  "components": {
+    "layout": {
+      "MainLayout": "components/MainLayout.tsx",
+      "AdminLayout": "app/admin/layout.tsx",
+      "AdminSidebar": "app/admin/components/AdminSidebar.tsx"
+    },
+    "navigation": {
+      "Navigation": "components/Navigation.tsx",
+      "LanguageContext": "components/LanguageContext.tsx"
+    }
+  },
+  "pages": {
+    "public": {
+      "home": "app/page.tsx",
+      "tours": "app/tours/page.tsx",
+      "tourDetail": "app/tours/[id]/page.tsx",
+      "aboutUs": "app/about-us/page.tsx",
+      "contact": "app/contact/page.tsx",
+      "travelInfo": "app/travel-info/page.tsx"
+    },
+    "admin": {
+      "dashboard": "app/admin/dashboard/page.tsx",
+      "products": "app/admin/products/page.tsx",
+      "banners": "app/admin/banners/page.tsx",
+      "content": "app/admin/content/page.tsx",
+      "settings": "app/admin/settings/page.tsx",
+      "files": "app/admin/files/page.tsx"
+    }
+  },
+  "developmentRules": {
+    "typescript": {
+      "strict": true,
+      "noImplicitAny": true,
+      "noUnusedLocals": true,
+      "strictNullChecks": true
+    },
+    "forbiddenTypes": ["any"],
+    "firestore": "반드시 lib/firebase.ts의 db 인스턴스 사용",
+    "dateFormat": "반드시 lib/utils.ts의 formatDate() 사용",
+    "authentication": "보안 API에서 반드시 lib/auth.ts의 checkAuth() 사용",
+    "codeReuse": "새 함수 생성 전 lib/, components/, api/ 디렉토리에서 기존 로직 확인"
+  },
+  "multilingualContent": {
+    "pattern": "모든 문서에서 ko, en 필드로 분리",
+    "examples": {
+      "title": "{ ko: '한글 제목', en: 'English Title' }",
+      "description": "{ ko: '한글 설명', en: 'English Description' }",
+      "price": "{ KRW: '₩100,000', PHP: '₱50,000', USD: '$100' }"
+    },
+    "utility": "lib/types.ts의 safeLang() 함수로 안전한 추출"
+  },
+  "fileStructure": {
+    "frontend": {
+      "app": "Next.js App Router 페이지",
+      "components": "재사용 가능한 컴포넌트",
+      "lib": "유틸리티 및 설정",
+      "types": "TypeScript 타입 정의",
+      "public": "정적 파일"
+    },
+    "migrations": {
+      "migrate-banners.ts": "배너 데이터 마이그레이션",
+      "migrate-spots.js": "스팟 데이터 마이그레이션"
+    }
+  }
+} 
