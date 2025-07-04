@@ -3,17 +3,65 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { fetchProducts, Product } from "@/lib/firebase-sample";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, getDocs, query, orderBy, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useLanguage } from "@/components/LanguageContext";
 import MainLayout from '../components/MainLayout';
-import { collection, getDocs, query, orderBy, where } from "firebase/firestore";
 import { Banner } from "@/types/banner";
 import { Swiper, SwiperSlide } from "swiper/react";
 import "swiper/css";
 import { Autoplay, Pagination } from "swiper/modules";
 import "swiper/css/pagination";
+import { logEvent, logScrollToBottom, logTimeOnPage, logViewAllToursClick } from "@/lib/analytics";
+import { useSiteSettings } from "@/lib/settings";
+import { safeLang } from "@/lib/types";
+
+// Product 타입 정의
+interface Product {
+  id?: string;
+  title?: string | { ko: string; en: string };
+  subtitle?: string | { ko: string; en: string };
+  description?: string | { ko: string; en: string };
+  price?: string | { ko: string; en: string };
+  originalPrice?: string | { ko: string; en: string };
+  duration?: string | { ko: string; en: string };
+  imageUrl?: string;
+  imageUrls?: string[];
+  category?: string | { ko: string; en: string };
+  region?: string | { ko: string; en: string };
+  discount?: number;
+  highlights?: Array<string | { ko: string; en: string }>;
+  schedule?: Array<{
+    day: number;
+    spots: Array<{
+      spotId: string;
+      spotName: { ko: string; en: string };
+      spotImage?: string;
+    }>;
+  }>;
+  includedItems?: string[];
+  notIncludedItems?: string[];
+  isActive?: boolean;
+  isFeatured?: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// 상품 리스트 불러오기 함수
+async function fetchProducts(): Promise<Product[]> {
+  const querySnapshot = await getDocs(collection(db, "products"));
+  return querySnapshot.docs.map(doc => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      ...data,
+      // 이미지 URL 처리: imageUrls 배열이 있으면 첫 번째 이미지 사용, 없으면 imageUrl 사용
+      imageUrl: data.imageUrls && data.imageUrls.length > 0 
+        ? data.imageUrls[0] 
+        : data.imageUrl || null
+    };
+  });
+}
 
 const cardVariants = {
   hidden: { opacity: 0, y: 40 },
@@ -58,8 +106,36 @@ export default function HomePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const { lang } = useLanguage();
   const [banners, setBanners] = useState<Banner[]>([]);
+  const { settings } = useSiteSettings();
 
   useEffect(() => {
+    // 페이지 로드 이벤트 추적
+    logEvent('page_view', {
+      page_title: 'Home',
+      page_location: '/',
+      language: lang
+    });
+
+    // 스크롤 이벤트 추적
+    const handleScroll = () => {
+      const scrollTop = window.scrollY;
+      const documentHeight = document.documentElement.scrollHeight;
+      const windowHeight = window.innerHeight;
+      
+      // 페이지 하단에 도달했을 때 (90% 이상 스크롤)
+      if (scrollTop + windowHeight >= documentHeight * 0.9) {
+        logScrollToBottom('/', 'Home');
+      }
+    };
+
+    // 시간 체류 이벤트 추적 (30초 후)
+    const timeOnPageTimer = setTimeout(() => {
+      logTimeOnPage('/', 'Home', 30);
+    }, 30000);
+
+    // 스크롤 이벤트 리스너 추가
+    window.addEventListener('scroll', handleScroll);
+
     fetchProducts().then(setProducts);
     // Firestore에서 settings/mainPage 문서 읽기
     const fetchMainPage = async () => {
@@ -82,7 +158,42 @@ export default function HomePage() {
       setBanners(data);
     }
     fetchBanners();
-  }, []);
+
+    // 클린업 함수
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      clearTimeout(timeOnPageTimer);
+    };
+  }, [lang]);
+
+  // 투어 클릭 이벤트 핸들러
+  const handleTourClick = (tourId: string, tourTitle: string) => {
+    logEvent('tour_click', {
+      tour_id: tourId,
+      tour_title: tourTitle,
+      location: 'homepage_featured',
+      language: lang
+    });
+  };
+
+  // 연락처 클릭 이벤트 핸들러
+  const handleContactClick = (contactType: string) => {
+    logEvent('contact_click', {
+      contact_type: contactType,
+      location: 'homepage',
+      language: lang
+    });
+  };
+
+  // 배너 클릭 이벤트 핸들러
+  const handleBannerClick = (bannerId: string, bannerTitle: string) => {
+    logEvent('banner_click', {
+      banner_id: bannerId,
+      banner_title: bannerTitle,
+      location: 'homepage_hero',
+      language: lang
+    });
+  };
 
   return (
     <MainLayout>
@@ -102,7 +213,11 @@ export default function HomePage() {
           >
             {banners.map((banner) => (
               <SwiperSlide key={banner.id}>
-                <Link href={banner.link} className="block group w-full h-full">
+                <Link 
+                  href={banner.link} 
+                  className="block group w-full h-full"
+                  onClick={() => handleBannerClick(banner.id, banner[`title_${lang}`] || 'banner')}
+                >
                   <div className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden">
                     {banner.type === "image" ? (
                       <Image
@@ -164,13 +279,17 @@ export default function HomePage() {
                 viewport={{ once: true }}
                 variants={cardVariants}
               >
-                <Link href={`/tours/${product.id}`} className="block h-full">
+                <Link 
+                  href={`/tours/${product.id}`} 
+                  className="block h-full"
+                  onClick={() => handleTourClick(product.id || '', safeLang(product.title || '', lang))}
+                >
                   <div className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 h-full overflow-hidden group">
                     <div className="relative h-56 overflow-hidden">
                       {product.imageUrl ? (
                         <Image 
                           src={product.imageUrl} 
-                          alt={typeof product.title === 'object' ? product.title[lang] : product.title || 'Tour Image'} 
+                          alt={safeLang(product.title || '', lang) || 'Tour Image'} 
                           fill
                           className="object-cover transition-transform duration-500 group-hover:scale-110" 
                           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
@@ -183,21 +302,21 @@ export default function HomePage() {
                       <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                       {product.region && (
                         <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm text-[#2C6E6F] px-4 py-2 rounded-full text-sm font-bold shadow-lg">
-                          {typeof product.region === 'object' ? product.region[lang] : product.region}
+                          {safeLang(product.region, lang)}
                         </div>
                       )}
                       {product.price && (
                         <div className="absolute bottom-4 right-4 bg-[#2C6E6F]/90 backdrop-blur-sm text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg">
-                          {typeof product.price === 'object' ? product.price[lang] : product.price}
+                          {safeLang(product.price, lang)}
                         </div>
                       )}
                     </div>
                     <div className="p-6">
                       <h3 className="text-xl font-bold mb-3 text-[#1A3A3A] line-clamp-1 group-hover:text-[#2C6E6F] transition-colors">
-                        {typeof product.title === 'object' ? product.title[lang] : product.title}
+                        {safeLang(product.title || '', lang)}
                       </h3>
                       <p className="text-[#5A7A7A] mb-4 line-clamp-2">
-                        {typeof product.description === 'object' ? product.description[lang] : product.description}
+                        {safeLang(product.description || '', lang)}
                       </p>
                       <div className="flex items-center text-[#2C6E6F] font-semibold group-hover:text-[#3A8A8B] transition-colors">
                         <span>{TEXT.viewDetails[lang]}</span>
@@ -221,6 +340,7 @@ export default function HomePage() {
             <Link
               href="/tours"
               className="inline-block bg-gradient-to-r from-[#2C6E6F] to-[#3A8A8B] text-white px-10 py-4 rounded-full font-bold text-lg shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300"
+              onClick={() => logViewAllToursClick('homepage')}
             >
               {TEXT.seeAllTours[lang]}
             </Link>
@@ -253,8 +373,9 @@ export default function HomePage() {
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-4xl mx-auto"
           >
             <a
-              href="mailto:info@cdc-travel.com"
+              href={`mailto:${settings?.contactEmail || 'info@cdc-travel.com'}`}
               className="flex flex-col items-center bg-gradient-to-br from-[#F0F7F7] to-white border-2 border-[#7FC4C5] text-[#2C6E6F] px-6 py-8 rounded-2xl font-medium hover:shadow-xl hover:scale-105 transition-all duration-300 group"
+              onClick={() => handleContactClick('email')}
             >
               <svg className="w-12 h-12 mb-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -262,41 +383,50 @@ export default function HomePage() {
               {TEXT.email[lang]}
             </a>
             
-            <a
-              href="https://www.facebook.com/cdctravel"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex flex-col items-center bg-gradient-to-br from-gray-100 to-gray-200 text-gray-700 px-6 py-8 rounded-2xl font-medium hover:shadow-xl hover:scale-105 transition-all duration-300 group"
-            >
-              <div className="w-12 h-12 mb-4 group-hover:scale-110 transition-transform">
-                <Image src="/images/messenger_facebook.png" alt="Facebook" width={48} height={48} />
-              </div>
-              {TEXT.facebook[lang]}
-            </a>
+            {settings?.socialMedia?.facebook && (
+              <a
+                href={settings.socialMedia.facebook}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-col items-center bg-gradient-to-br from-gray-100 to-gray-200 text-gray-700 px-6 py-8 rounded-2xl font-medium hover:shadow-xl hover:scale-105 transition-all duration-300 group"
+                onClick={() => handleContactClick('facebook')}
+              >
+                <div className="w-12 h-12 mb-4 group-hover:scale-110 transition-transform">
+                  <Image src="/images/messenger_facebook.png" alt="Facebook" width={48} height={48} />
+                </div>
+                {TEXT.facebook[lang]}
+              </a>
+            )}
             
-            <a
-              href="https://open.kakao.com/your-kakao-id"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex flex-col items-center bg-[#FEE500] text-black px-6 py-8 rounded-2xl font-medium hover:shadow-xl hover:scale-105 transition-all duration-300 group"
-            >
-              <div className="w-12 h-12 mb-4 group-hover:scale-110 transition-transform">
-                <Image src="/images/messenger_kakao.png" alt="KakaoTalk" width={48} height={48} />
-              </div>
-              {TEXT.kakao[lang]}
-            </a>
+            {settings?.socialMedia?.kakao && (
+              <a
+                href={settings.socialMedia.kakao}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-col items-center bg-[#FEE500] text-black px-6 py-8 rounded-2xl font-medium hover:shadow-xl hover:scale-105 transition-all duration-300 group"
+                onClick={() => handleContactClick('kakao')}
+              >
+                <div className="w-12 h-12 mb-4 group-hover:scale-110 transition-transform">
+                  <Image src="/images/messenger_kakao.png" alt="KakaoTalk" width={48} height={48} />
+                </div>
+                {TEXT.kakao[lang]}
+              </a>
+            )}
             
-            <a
-              href="https://www.viber.com/your-viber-id"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex flex-col items-center bg-gradient-to-br from-[#7360F2] to-[#665ED3] text-white px-6 py-8 rounded-2xl font-medium hover:shadow-xl hover:scale-105 transition-all duration-300 group"
-            >
-              <div className="w-12 h-12 mb-4 group-hover:scale-110 transition-transform">
-                <Image src="/images/messenger_viber.png" alt="Viber" width={48} height={48} />
-              </div>
-              {TEXT.viber[lang]}
-            </a>
+            {settings?.socialMedia?.viber && (
+              <a
+                href={settings.socialMedia.viber}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-col items-center bg-gradient-to-br from-[#7360F2] to-[#665ED3] text-white px-6 py-8 rounded-2xl font-medium hover:shadow-xl hover:scale-105 transition-all duration-300 group"
+                onClick={() => handleContactClick('viber')}
+              >
+                <div className="w-12 h-12 mb-4 group-hover:scale-110 transition-transform">
+                  <Image src="/images/messenger_viber.png" alt="Viber" width={48} height={48} />
+                </div>
+                {TEXT.viber[lang]}
+              </a>
+            )}
           </motion.div>
         </div>
       </section>
@@ -317,7 +447,9 @@ export default function HomePage() {
                 />
               </div>
               <p className="text-gray-300 leading-relaxed">
-                {TEXT.footerSlogan[lang]}
+                {typeof settings?.siteDescription === 'object' 
+                  ? settings.siteDescription[lang] 
+                  : settings?.siteDescription || TEXT.footerSlogan[lang]}
               </p>
             </div>
             <div>
@@ -332,14 +464,14 @@ export default function HomePage() {
               <h3 className="text-xl font-bold mb-6 text-[#7FC4C5]">{TEXT.support[lang]}</h3>
               <ul className="space-y-3 text-gray-300">
                 <li><Link href="/contact" className="hover:text-white hover:translate-x-1 inline-block transition-all">{TEXT.inquiry[lang]}</Link></li>
-                <li><a href="mailto:info@cdc-travel.com" className="hover:text-white hover:translate-x-1 inline-block transition-all">{TEXT.email2[lang]}</a></li>
+                <li><a href={`mailto:${settings?.contactEmail || 'info@cdc-travel.com'}`} className="hover:text-white hover:translate-x-1 inline-block transition-all">{TEXT.email2[lang]}</a></li>
               </ul>
             </div>
             <div>
               <h3 className="text-xl font-bold mb-6 text-[#7FC4C5]">{TEXT.contact[lang]}</h3>
               <p className="text-gray-300 leading-relaxed">
-                {TEXT.email2[lang]}: info@cdc-travel.com<br />
-                {TEXT.phone[lang]}: +82-XXX-XXXX-XXXX
+                {TEXT.email2[lang]}: {settings?.contactEmail || 'info@cdc-travel.com'}<br />
+                {TEXT.phone[lang]}: {settings?.contactPhone || '+82-XXX-XXXX-XXXX'}
               </p>
             </div>
           </div>
