@@ -197,7 +197,7 @@ const deleteImageFromStorage = async (url: string): Promise<void> => {
     try {
       const imageRef = ref(storage, path);
       await deleteObject(imageRef);
-      console.log("Image deleted from storage:", path);
+              // Image deleted from storage
     } catch (error) {
       console.error("Error deleting image from storage:", error);
       // 이미 삭제된 파일이거나 권한 문제일 수 있음
@@ -295,8 +295,7 @@ export default function EditSpotPage() {
         if (spotDoc.exists()) {
           const data = spotDoc.data();
           
-          console.log("Raw data from Firebase:", data);
-          console.log("Raw tags data:", data.tags);
+                  // Raw data from Firebase loaded
           
           // tags가 객체인 경우 배열로 변환
           let tagsArray: string[] = [];
@@ -325,7 +324,7 @@ export default function EditSpotPage() {
             });
           }
           
-          console.log("Processed tags array:", tagsArray);
+                      // Tags processed successfully
           
           // 데이터 형식 맞추기
           const spotFormData: SpotFormData = {
@@ -375,7 +374,7 @@ export default function EditSpotPage() {
       
       // Storage에서 삭제할 이미지들 처리
       if (imagesToDelete.length > 0) {
-        console.log("Deleting images from storage:", imagesToDelete);
+        // Deleting images from storage
         const deletePromises = imagesToDelete.map(url => deleteImageFromStorage(url));
         await Promise.all(deletePromises);
       }

@@ -121,7 +121,7 @@ const deleteImageFromStorage = async (url: string): Promise<void> => {
     try {
       const imageRef = ref(storage, path);
       await deleteObject(imageRef);
-      console.log("Image deleted from storage:", path);
+              // Image deleted from storage
     } catch (error) {
       console.error("Error deleting image from storage:", error);
       // 이미 삭제된 파일이거나 권한 문제일 수 있음

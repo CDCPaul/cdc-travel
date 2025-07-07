@@ -82,7 +82,7 @@ export default function AdminBannerListPage() {
           
           const storageRef = ref(storage, decodedPath);
           await deleteObject(storageRef);
-          console.log('Storage 파일 삭제 완료:', decodedPath);
+          // Storage file deleted successfully
         } catch (storageError) {
           console.warn('Storage 파일 삭제 실패 (무시됨):', storageError);
           // Storage 파일 삭제 실패는 무시하고 계속 진행

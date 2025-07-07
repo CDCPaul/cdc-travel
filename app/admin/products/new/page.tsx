@@ -360,7 +360,7 @@ export default function NewProductPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('[Product Submit] formData:', formData);
+            // Product form data prepared
     try {
       const productData = {
         title: formData.title,
@@ -376,7 +376,7 @@ export default function NewProductPage() {
         notIncludedItems: formData.notIncluded.filter(item => item.trim() !== ''),
         createdAt: new Date()
       };
-      console.log('[Product Submit] productData to save:', productData);
+              // Product data ready for save
       await addDoc(collection(db, 'products'), productData);
       alert(texts.saveSuccess);
       router.push('/admin/products');

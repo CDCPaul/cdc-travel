@@ -13,6 +13,7 @@ const requiredEnvVars = [
   'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID',
   'NEXT_PUBLIC_FIREBASE_APP_ID',
   'NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID',
+  'NEXT_PUBLIC_FIREBASE_BUCKET',
 ];
 
 const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
@@ -43,6 +44,7 @@ if (typeof window !== 'undefined') {
 }
 
 export const db = getFirestore(app);
-export const storage = getStorage(app);
+// 명시적으로 새 버킷을 지정하여 Storage 초기화
+export const storage = getStorage(app, process.env.NEXT_PUBLIC_FIREBASE_BUCKET);
 export const auth = getAuth(app);
 export { app, analytics }; 

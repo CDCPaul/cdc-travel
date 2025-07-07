@@ -1,31 +1,29 @@
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from './firebase';
-
-// 관리자 이메일 목록 (실제 운영 시에는 환경변수나 데이터베이스에서 관리)
-const ADMIN_EMAILS = [
-  'dev@cebudirectclub.com',
-  'diana@cebudirectclub.com',
-  'airtel@cebudirectclub.com',
-  'cebu@cebudirectclub.com',
-  'ahn@cebudirectclub.com',
-  'nadia@cebudirectclub.com',
-  'bohol@cebudirectclub.com',
-  'bohol2@cebudirectclub.com',
-  'visa@cebudirectclub.com',
-  'zeus@cebudirectclub.com',
-  'jessiebel@cebudirectclub.com',
-  'outbound@cebudirectclub.com',
-  'tour@cebudirectclub.com',
-  'visa2@cebudirectclub.com',
-  'ticket@cebudirectclub.com',
-  'air@cebudirectclub.com',
-  'ojt@cebudirectclub.com',
-  // 여기에 추가 관리자 이메일을 입력하세요
-];
+import { isAdmin as checkIsAdmin } from './admin-config';
 
 export const isAdmin = (user: User | null): boolean => {
   if (!user || !user.email) return false;
-  return ADMIN_EMAILS.includes(user.email);
+  return checkIsAdmin(user.email);
+};
+
+/**
+ * ID 토큰을 쿠키에 저장하는 함수
+ * @param idToken - Firebase ID 토큰
+ */
+export const setAuthCookie = (idToken: string) => {
+  // 7일간 유효한 쿠키 설정
+  const expires = new Date();
+  expires.setDate(expires.getDate() + 7);
+  
+  document.cookie = `idToken=${idToken}; expires=${expires.toUTCString()}; path=/; secure; samesite=strict`;
+};
+
+/**
+ * 쿠키에서 ID 토큰을 제거하는 함수
+ */
+export const removeAuthCookie = () => {
+  document.cookie = 'idToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
 };
 
 /**
