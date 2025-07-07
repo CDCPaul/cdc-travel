@@ -106,7 +106,52 @@ export default function HomePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const { lang } = useLanguage();
   const [banners, setBanners] = useState<Banner[]>([]);
+  const [bannerCache, setBannerCache] = useState<Banner[]>([]);
+  const [hasInitialBanner, setHasInitialBanner] = useState(false);
   const { settings } = useSiteSettings();
+
+  // 배너 데이터를 미리 로드하는 함수
+  const preloadBanners = async () => {
+    try {
+      const q = query(
+        collection(db, "settings/banners/items"),
+        where("active", "==", true),
+        orderBy("order"),
+      );
+      const snap = await getDocs(q);
+      const data: Banner[] = snap.docs.slice(0, 10).map(doc => ({ id: doc.id, ...doc.data() } as Banner));
+      setBannerCache(data);
+      
+      // 첫 번째 배너를 즉시 표시
+      if (data.length > 0) {
+        setBanners([data[0]]);
+        setHasInitialBanner(true);
+        
+        // 첫 번째 배너 이미지 미리 로드
+        if (data[0].type === "image") {
+          const img = new window.Image();
+          img.src = data[0].url;
+        }
+        
+        // 나머지 배너들을 백그라운드에서 로드
+        if (data.length > 1) {
+          setTimeout(() => {
+            setBanners(data);
+            
+            // 나머지 배너 이미지들도 미리 로드
+            data.slice(1).forEach(banner => {
+              if (banner.type === "image") {
+                const img = new window.Image();
+                img.src = banner.url;
+              }
+            });
+          }, 20); // 20ms로 더 단축
+        }
+      }
+    } catch (error) {
+      console.error('배너 프리로드 실패:', error);
+    }
+  };
 
   useEffect(() => {
     // 페이지 로드 이벤트 추적
@@ -147,24 +192,33 @@ export default function HomePage() {
     };
     fetchMainPage();
 
-    async function fetchBanners() {
-      const q = query(
-        collection(db, "settings/banners/items"),
-        where("active", "==", true),
-        orderBy("order"),
-      );
-      const snap = await getDocs(q);
-      const data: Banner[] = snap.docs.slice(0, 10).map(doc => ({ id: doc.id, ...doc.data() } as Banner));
-      setBanners(data);
-    }
-    fetchBanners();
+    // 배너 초기화 - 캐시된 데이터가 있으면 즉시 사용
+    const initializeBanners = () => {
+      if (bannerCache.length > 0) {
+        setBanners([bannerCache[0]]);
+        setHasInitialBanner(true);
+        
+        // 나머지 배너들을 백그라운드에서 로드
+        if (bannerCache.length > 1) {
+          setTimeout(() => {
+            setBanners(bannerCache);
+          }, 20);
+        }
+        return;
+      }
+      
+      // 캐시가 없으면 즉시 로드
+      preloadBanners();
+    };
+
+    initializeBanners();
 
     // 클린업 함수
     return () => {
       window.removeEventListener('scroll', handleScroll);
       clearTimeout(timeOnPageTimer);
     };
-  }, [lang]);
+  }, [lang, bannerCache]);
 
   // 투어 클릭 이벤트 핸들러
   const handleTourClick = (tourId: string, tourTitle: string) => {
@@ -197,11 +251,20 @@ export default function HomePage() {
 
   return (
     <MainLayout>
-      {/* Hero Section - Swiper 배너 슬라이더로 대체 */}
+      {/* Hero Section - 초고속 로딩 최적화 */}
       <section
         className="relative w-full h-[40vw] min-h-[200px] max-h-[320px] md:h-[70vh] md:min-h-[400px] md:max-h-[700px] flex items-center justify-center overflow-hidden"
       >
-        {banners.length > 0 ? (
+        {!hasInitialBanner && banners.length === 0 ? (
+          // 즉시 표시되는 스켈레톤 (첫 번째 배너가 없을 때만)
+          <div className="w-full h-full bg-gradient-to-br from-[#2C6E6F] via-[#3A8A8B] to-[#4A9D9E] flex items-center justify-center relative">
+            <div className="absolute inset-0 bg-[url('/pattern.svg')] bg-repeat opacity-10" />
+            <div className="text-center text-white">
+              <div className="w-12 h-12 border-3 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <div className="text-sm opacity-80">로딩 중...</div>
+            </div>
+          </div>
+        ) : banners.length > 0 ? (
           <Swiper
             modules={[Autoplay, Pagination]}
             spaceBetween={30}
@@ -211,7 +274,7 @@ export default function HomePage() {
             pagination={{ clickable: true }}
             className="w-full h-full rounded-none"
           >
-            {banners.map((banner) => (
+            {banners.map((banner, index) => (
               <SwiperSlide key={banner.id}>
                 <Link 
                   href={banner.link} 
@@ -225,16 +288,22 @@ export default function HomePage() {
                         alt={banner[`title_${lang}`] || "banner"}
                         fill
                         className="object-cover w-full h-full mx-auto my-auto group-hover:opacity-90 transition"
-                        priority
+                        priority={index === 0}
+                        loading={index === 0 ? "eager" : "lazy"}
+                        sizes="100vw"
+                        quality={85}
+                        placeholder="blur"
+                        blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
                       />
                     ) : (
                       <video
                         src={banner.url}
                         controls={false}
-                        autoPlay
+                        autoPlay={index === 0}
                         muted
                         loop
                         playsInline
+                        preload={index === 0 ? "auto" : "metadata"}
                         className="object-cover w-full h-full mx-auto my-auto group-hover:opacity-90 transition"
                       />
                     )}
