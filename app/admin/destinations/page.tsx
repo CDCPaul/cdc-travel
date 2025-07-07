@@ -282,7 +282,7 @@ export default function DestinationsPage() {
     <div className="p-6 max-w-4xl mx-auto">
       <Script
         src={`https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`}
-        onLoad={() => console.log('Google Maps loaded')}
+                    onLoad={() => {/* Google Maps loaded */}}
       />
       
       <h1 className="text-2xl font-bold mb-6">{TEXT.title[lang]}</h1>

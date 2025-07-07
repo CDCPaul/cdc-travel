@@ -8,6 +8,7 @@ import { useLanguage } from "../../../components/LanguageContext";
 import { motion } from "framer-motion";
 import { auth } from "../../../lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { removeAuthCookie } from "../../../lib/auth";
 import { useRouter } from "next/navigation";
 
 const MAIN_MENU = {
@@ -70,6 +71,7 @@ export default function AdminSidebar() {
 
   const handleLogout = async () => {
     await signOut(auth);
+    removeAuthCookie();
     router.push("/admin/login");
   };
 

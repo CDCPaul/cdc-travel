@@ -270,7 +270,7 @@ export default function NewSpotPage() {
     // Google Maps API가 이미 로드되어 있는지 확인
     const checkGoogleMapsLoaded = () => {
       if (typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.places) {
-        console.log('Google Maps API already loaded');
+        // Google Maps API already loaded
         setIsGoogleMapsLoaded(true);
         return true;
       }
@@ -521,8 +521,7 @@ export default function NewSpotPage() {
 
   // 지도 선택 적용 (address.ko → address.en 자동 번역)
   const applyMapSelection = async () => {
-    console.log('Apply 버튼 클릭됨');
-    console.log('tempPlace:', tempPlace);
+            // Apply button clicked
     
     if (tempPlace) {
       setFormData(prev => ({
@@ -734,12 +733,9 @@ export default function NewSpotPage() {
         <Script
           src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`}
           onLoad={() => {
-            console.log('Google Maps script loaded');
             if (typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.places) {
-              console.log('Google Maps API available');
               setIsGoogleMapsLoaded(true);
             } else {
-              console.error('Google Maps API not available after script load');
               // 재시도
               setTimeout(() => {
                 if (typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.places) {

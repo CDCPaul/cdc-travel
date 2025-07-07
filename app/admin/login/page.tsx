@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { signInWithEmailAndPassword, onAuthStateChanged, setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { setAuthCookie } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 
 export default function AdminLogin() {
@@ -61,7 +62,11 @@ export default function AdminLogin() {
         await setPersistence(auth, browserSessionPersistence);
       }
 
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      
+      // ID 토큰을 쿠키에 저장
+      const idToken = await userCredential.user.getIdToken();
+      setAuthCookie(idToken);
       
       router.push('/admin/dashboard');
     } catch (error: unknown) {

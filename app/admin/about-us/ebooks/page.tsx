@@ -25,7 +25,7 @@ export default function AdminEbookManagementPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // TODO: Firestore에서 eBook 목록 불러오기 구현 예정
+      // Firestore에서 eBook 목록 불러오기
   useEffect(() => {
     // Firestore에서 eBook 목록 불러오기
     async function fetchEbooks() {

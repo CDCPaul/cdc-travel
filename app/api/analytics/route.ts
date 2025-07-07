@@ -5,52 +5,33 @@ import { getFirestore } from 'firebase-admin/firestore';
 // Firebase Admin 초기화
 if (!getApps().length) {
   try {
-    // 환경변수 디버깅 (민감한 정보는 마스킹)
-    console.log('Firebase Admin SDK 초기화 중...');
-    console.log('FIREBASE_PROJECT_ID:', process.env.FIREBASE_PROJECT_ID ? '설정됨' : '설정되지 않음');
-    console.log('FIREBASE_CLIENT_EMAIL:', process.env.FIREBASE_CLIENT_EMAIL ? '설정됨' : '설정되지 않음');
-    console.log('FIREBASE_PRIVATE_KEY:', process.env.FIREBASE_PRIVATE_KEY ? '설정됨' : '설정되지 않음');
-    
-    // private key 길이 확인 (디버깅용)
-    if (process.env.FIREBASE_PRIVATE_KEY) {
-      console.log('Private key 길이:', process.env.FIREBASE_PRIVATE_KEY.length);
-      console.log('Private key 시작:', process.env.FIREBASE_PRIVATE_KEY.substring(0, 50));
-      console.log('Private key 끝:', process.env.FIREBASE_PRIVATE_KEY.substring(process.env.FIREBASE_PRIVATE_KEY.length - 50));
-    }
-    
     if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
       throw new Error('Firebase Admin SDK 환경변수가 누락되었습니다.');
     }
     
-    // private key 형식 정리 - 더 안전한 처리
+    // private key 형식 정리
     let privateKey = process.env.FIREBASE_PRIVATE_KEY;
     
     if (!privateKey) {
       throw new Error('FIREBASE_PRIVATE_KEY 환경변수가 설정되지 않았습니다.');
     }
     
-    console.log('원본 private key 길이:', privateKey.length);
-    
     // private key가 JSON 문자열로 저장된 경우 파싱
     if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
       try {
         privateKey = JSON.parse(privateKey);
-        console.log('JSON 파싱 후 private key 길이:', privateKey.length);
       } catch (e) {
         console.error('Private key JSON 파싱 실패:', e);
         // JSON 파싱 실패 시 원본 사용
       }
     }
     
-    // 개행 문자 처리 - 이중 이스케이프 처리
+    // 개행 문자 처리
     privateKey = privateKey.replace(/\\\\n/g, '\n').replace(/\\n/g, '\n');
-    console.log('개행 처리 후 private key 길이:', privateKey.length);
     
     // PEM 형식 확인
     if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
       console.error('Private key가 올바른 PEM 형식이 아닙니다.');
-      console.log('Private key 시작 부분:', privateKey.substring(0, 100));
-      console.log('Private key 끝 부분:', privateKey.substring(privateKey.length - 100));
       
       // HTML이나 다른 형식이 섞여있는지 확인
       if (privateKey.includes('<!DOCTYPE') || privateKey.includes('<html')) {
@@ -65,8 +46,6 @@ if (!getApps().length) {
         privateKey: privateKey,
       }),
     });
-    
-    console.log('Firebase Admin SDK 초기화 성공');
   } catch (error) {
     console.error('Firebase Admin SDK 초기화 실패:', error);
     throw error;
@@ -171,15 +150,12 @@ function getCountryFromTimezone(timezone: string): string {
 // Firebase Analytics 이벤트 데이터 조회
 async function fetchFirebaseAnalyticsData(timeRange: string): Promise<AnalyticsData> {
   try {
-    console.log('Firestore 연결 테스트 중...');
-    
-    // Firestore 연결 테스트 (임시로 비활성화)
+    // Firestore 연결 테스트
     try {
       const testRef = db.collection('test');
       await testRef.limit(1).get();
-      console.log('Firestore 연결 성공');
     } catch (firestoreError) {
-      console.log('Firestore 연결 실패, 빈 데이터 반환:', firestoreError instanceof Error ? firestoreError.message : 'Unknown error');
+      console.error('Firestore 연결 실패:', firestoreError instanceof Error ? firestoreError.message : 'Unknown error');
       return generateEmptyAnalyticsData();
     }
     
@@ -215,7 +191,7 @@ async function fetchFirebaseAnalyticsData(timeRange: string): Promise<AnalyticsD
       .get();
 
     const events = snapshot.docs.map(doc => doc.data());
-    console.log(`Firestore에서 ${events.length}개의 이벤트를 조회했습니다.`);
+    // Firestore에서 이벤트 데이터 조회 완료
     
     // 기본 통계 계산
     const totalUsers = new Set(events.map(e => e.user_id)).size;
@@ -471,7 +447,7 @@ async function fetchFirebaseAnalyticsData(timeRange: string): Promise<AnalyticsD
     };
   } catch (error) {
     console.error('Failed to fetch Firebase Analytics data:', error);
-    console.log('빈 데이터를 반환합니다.');
+    // 빈 데이터 반환
     // 실패 시 빈 데이터 반환
     return generateEmptyAnalyticsData();
   }

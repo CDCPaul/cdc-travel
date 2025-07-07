@@ -407,7 +407,7 @@ export default function EditProductPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('[Product Update] formData:', formData);
+            // Product form data prepared
     try {
       const productData = {
         title: formData.title,
@@ -423,7 +423,7 @@ export default function EditProductPage() {
         notIncludedItems: formData.notIncluded.filter(item => item.trim() !== ''),
         updatedAt: new Date()
       };
-      console.log('[Product Update] productData to save:', productData);
+              // Product data ready for update
       await updateDoc(doc(db, 'products', params.id as string), productData);
       alert(texts.saveSuccess);
       router.push('/admin/products');
