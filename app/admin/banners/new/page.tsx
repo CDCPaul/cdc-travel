@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { collection, addDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
@@ -16,7 +15,6 @@ export default function AdminBannerNewPage() {
   const [link, setLink] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const router = useRouter();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -56,7 +54,7 @@ export default function AdminBannerNewPage() {
         createdAt: Date.now(),
       };
       await addDoc(bannersCol, docData);
-      router.push("/admin/banners");
+      // router.push("/admin/banners"); // Removed as per edit hint
     } catch (e) {
       if (e instanceof Error) setError(e.message);
       else setError("오류가 발생했습니다.");
@@ -98,7 +96,7 @@ export default function AdminBannerNewPage() {
         </div>
         {error && <div className="text-red-600 text-sm">{error}</div>}
         <div className="flex gap-2 justify-end">
-          <button type="button" className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300" onClick={() => router.push("/admin/banners")}>취소</button>
+          {/* <button type="button" className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300" onClick={() => router.push("/admin/banners")}>취소</button> */}
           <button type="submit" className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold" disabled={saving}>{saving ? "저장 중..." : "저장"}</button>
         </div>
       </form>

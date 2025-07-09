@@ -205,7 +205,7 @@ export default function ToursPage() {
                       <div className="flex flex-wrap items-center gap-2 mb-2 text-sm text-gray-600">
                         <span>{getPHPPrice(product.price)}</span>
                         <span>• {getPeriodText(product.schedule, lang)}</span>
-                        {product.region && <span>• {typeof product.region === 'object' ? product.region[lang] : product.region}</span>}
+                        {product.region && <span>• {safeLang(product.region, lang)}</span>}
                         <span>• {SUMMARY_TEXT.included[lang]}</span>
                       </div>
                       

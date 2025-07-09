@@ -1,10 +1,20 @@
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from './firebase';
-import { isAdmin as checkIsAdmin } from './admin-config';
+import { isAdmin as checkIsAdmin, checkAdminRole } from './admin-config';
 
 export const isAdmin = (user: User | null): boolean => {
   if (!user || !user.email) return false;
   return checkIsAdmin(user.email);
+};
+
+/**
+ * UID 기반 관리자 권한 확인 함수
+ * @param user - Firebase User 객체
+ * @returns Promise<boolean> - 관리자 여부
+ */
+export const isAdminByUid = async (user: User | null): Promise<boolean> => {
+  if (!user || !user.uid) return false;
+  return await checkAdminRole(user.uid);
 };
 
 /**
@@ -40,14 +50,15 @@ export const checkAuth = async (): Promise<User | null> => {
 };
 
 /**
- * 관리자 권한을 확인하는 함수
+ * 관리자 권한을 확인하는 함수 (UID 기반)
  * @returns Promise<{user: User | null, isAdmin: boolean}> - 사용자와 관리자 상태
  */
 export const checkAdminAuth = async (): Promise<{user: User | null, isAdmin: boolean}> => {
   const user = await checkAuth();
+  const isAdmin = user ? await isAdminByUid(user) : false;
   return {
     user,
-    isAdmin: isAdmin(user)
+    isAdmin
   };
 };
 
@@ -58,8 +69,8 @@ export const requireAuth = (callback: (user: User | null) => void) => {
 };
 
 export const requireAdmin = (callback: (user: User | null, isAdmin: boolean) => void) => {
-  return onAuthStateChanged(auth, (user) => {
-    const adminStatus = isAdmin(user);
+  return onAuthStateChanged(auth, async (user) => {
+    const adminStatus = user ? await isAdminByUid(user) : false;
     callback(user, adminStatus);
   });
 }; 

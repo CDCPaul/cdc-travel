@@ -1,10 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { useLanguage } from '../../../components/LanguageContext';
 import Link from 'next/link';
 import Image from "next/image";
@@ -73,42 +71,47 @@ const PRODUCTS_TEXTS = {
 export default function AdminProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
   const { lang } = useLanguage();
   const texts = PRODUCTS_TEXTS[lang];
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        fetchProducts();
-      } else {
-        router.push('/admin/login');
+    const fetchProducts = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, 'products'));
+        const productsData = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Product[];
+        setProducts(productsData);
+      } catch (error) {
+        console.error('Error fetching products:', error);
+      } finally {
+        setLoading(false);
       }
-    });
+    };
 
-    return () => unsubscribe();
-  }, [router]);
-
-  const fetchProducts = async () => {
-    try {
-      const querySnapshot = await getDocs(collection(db, 'products'));
-      const productsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Product[];
-      setProducts(productsData);
-    } catch (error) {
-      console.error('Error fetching products:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    fetchProducts();
+  }, []);
 
   const handleDelete = async (productId: string) => {
     if (window.confirm(texts.confirmDelete)) {
       try {
         await deleteDoc(doc(db, 'products', productId));
         alert(texts.deleted);
+        const fetchProducts = async () => {
+          try {
+            const querySnapshot = await getDocs(collection(db, 'products'));
+            const productsData = querySnapshot.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data()
+            })) as Product[];
+            setProducts(productsData);
+          } catch (error) {
+            console.error('Error fetching products:', error);
+          } finally {
+            setLoading(false);
+          }
+        };
         fetchProducts();
       } catch (error) {
         console.error('Error deleting product:', error);

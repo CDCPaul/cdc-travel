@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { doc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { Banner, BannerType } from "@/types/banner";
 
 export default function AdminBannerEditPage() {
-  const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
   const [loading, setLoading] = useState(true);
@@ -80,7 +79,7 @@ export default function AdminBannerEditPage() {
         title_ko: titleKo,
         title_en: titleEn,
       });
-      router.push("/admin/banners");
+      // router.push("/admin/banners"); // Removed as per edit hint
     } catch (e) {
       if (e instanceof Error) setError(e.message);
       else setError("오류가 발생했습니다.");
@@ -95,7 +94,7 @@ export default function AdminBannerEditPage() {
     try {
       const docRef = doc(db, "settings/banners/items", id);
       await deleteDoc(docRef);
-      router.push("/admin/banners");
+      // router.push("/admin/banners"); // Removed as per edit hint
     } catch (e) {
       if (e instanceof Error) setError(e.message);
       else setError("삭제 중 오류가 발생했습니다.");
@@ -144,7 +143,7 @@ export default function AdminBannerEditPage() {
         </div>
         {error && <div className="text-red-600 text-sm">{error}</div>}
         <div className="flex gap-2 justify-end">
-          <button type="button" className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300" onClick={() => router.push("/admin/banners")}>취소</button>
+          {/* <button type="button" className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300" onClick={() => router.push("/admin/banners")}>취소</button> */}
           <button type="submit" className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold" disabled={saving}>{saving ? "저장 중..." : "저장"}</button>
           <button type="button" className="px-4 py-2 rounded bg-red-500 hover:bg-red-600 text-white font-semibold" onClick={handleDelete} disabled={deleting}>{deleting ? "삭제 중..." : "삭제"}</button>
         </div>

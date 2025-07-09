@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, getDocs, query, orderBy, doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -146,7 +146,6 @@ const REGION_OPTIONS = {
 export default function EditProductPage() {
   const [loading, setLoading] = useState(true);
   const [productLoading, setProductLoading] = useState(true);
-  const router = useRouter();
   const params = useParams();
   const { lang } = useLanguage();
   const texts = PRODUCTS_TEXTS[lang];
@@ -207,7 +206,7 @@ export default function EditProductPage() {
         });
       } else {
         alert(texts.notFound);
-        router.push('/admin/products');
+        // router.push('/admin/products'); // Removed useRouter
       }
     } catch (error) {
       console.error('Error fetching product:', error);
@@ -215,7 +214,7 @@ export default function EditProductPage() {
     } finally {
       setProductLoading(false);
     }
-  }, [params.id, router, texts.notFound, texts.saveFailed]);
+  }, [params.id, texts.notFound, texts.saveFailed]);
 
   const fetchSpots = useCallback(async () => {
     try {
@@ -253,12 +252,12 @@ export default function EditProductPage() {
         }
         setLoading(false);
       } else {
-        router.push('/admin/login');
+        // router.push('/admin-login'); // Removed useRouter
       }
     });
 
     return () => unsubscribe();
-  }, [router, params.id, fetchProduct, fetchSpots]);
+  }, [params.id, fetchProduct, fetchSpots]);
 
   // 선택된 국가의 지역 옵션 가져오기
   const getRegionOptions = () => {
@@ -426,7 +425,7 @@ export default function EditProductPage() {
               // Product data ready for update
       await updateDoc(doc(db, 'products', params.id as string), productData);
       alert(texts.saveSuccess);
-      router.push('/admin/products');
+      // router.push('/admin/products'); // Removed useRouter
     } catch (error) {
       console.error('[Product Update] Error updating product:', error);
       alert(texts.saveFailed);

@@ -7,6 +7,7 @@ import { db, storage } from "@/lib/firebase";
 import { Banner } from "@/types/banner";
 import Link from "next/link";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
+import { getAuth } from "firebase/auth";
 
 export default function AdminBannerListPage() {
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -14,6 +15,16 @@ export default function AdminBannerListPage() {
   const [orderChanged, setOrderChanged] = useState(false);
   const [savingOrder, setSavingOrder] = useState(false);
   const [deletingBanner, setDeletingBanner] = useState<string | null>(null);
+
+  useEffect(() => {
+    const user = getAuth().currentUser;
+    if (user) {
+      console.log("현재 로그인한 UID:", user.uid);
+      console.log("현재 로그인한 이메일:", user.email);
+    } else {
+      console.log("로그인된 사용자가 없습니다.");
+    }
+  }, []);
 
   useEffect(() => {
     async function fetchBanners() {

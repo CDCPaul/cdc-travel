@@ -7,7 +7,7 @@ import { useLanguage } from "../../../../../components/LanguageContext";
 import { doc, getDoc, updateDoc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Image from 'next/image';
-import { useRouter, useParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { storage } from "@/lib/firebase";
 
@@ -207,7 +207,6 @@ const deleteImageFromStorage = async (url: string): Promise<void> => {
 
 export default function EditSpotPage() {
   const { lang } = useLanguage();
-  const router = useRouter();
   const params = useParams();
   const spotId = params.id as string;
   
@@ -380,7 +379,7 @@ export default function EditSpotPage() {
       }
       
       alert(TEXT.updateSuccess[lang]);
-      router.push("/admin/spots");
+      // router.push("/admin/spots"); // Removed as per edit hint
     } catch (error) {
       console.error("Error updating spot:", error);
       alert(TEXT.updateFailed[lang]);
@@ -419,7 +418,9 @@ export default function EditSpotPage() {
         <div className="text-center py-10">
           <p className="mb-4">{TEXT.notFound[lang]}</p>
           <button
-            onClick={() => router.push("/admin/spots")}
+            onClick={() => {
+              // router.push("/admin/spots"); // Removed as per edit hint
+            }}
             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
           >
             {TEXT.backToList[lang]}
@@ -439,11 +440,11 @@ export default function EditSpotPage() {
             if (originalData && JSON.stringify(formData) !== JSON.stringify(originalData)) {
               if (window.confirm(TEXT.confirmCancelText[lang])) {
                 setImagesToDelete([]);
-                router.push("/admin/spots");
+                // router.push("/admin/spots"); // Removed as per edit hint
               }
             } else {
               setImagesToDelete([]);
-              router.push("/admin/spots");
+              // router.push("/admin/spots"); // Removed as per edit hint
             }
           }}
           className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
@@ -873,11 +874,11 @@ export default function EditSpotPage() {
               if (originalData && JSON.stringify(formData) !== JSON.stringify(originalData)) {
                 if (window.confirm(TEXT.confirmCancelText[lang])) {
                   setImagesToDelete([]);
-                  router.push("/admin/spots");
+                  // router.push("/admin/spots"); // Removed as per edit hint
                 }
               } else {
                 setImagesToDelete([]);
-                router.push("/admin/spots");
+                // router.push("/admin/spots"); // Removed as per edit hint
               }
             }}
             className="px-6 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
