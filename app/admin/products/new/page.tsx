@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, getDocs, query, orderBy, addDoc } from 'firebase/firestore';
@@ -141,7 +140,6 @@ const REGION_OPTIONS = {
 
 export default function NewProductPage() {
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
   const { lang } = useLanguage();
   const texts = PRODUCTS_TEXTS[lang];
 
@@ -184,12 +182,12 @@ export default function NewProductPage() {
         fetchNotIncludeItems();
         setLoading(false);
       } else {
-        router.push('/admin/login');
+        // router.push('/admin-login'); // Removed as per edit hint
       }
     });
 
     return () => unsubscribe();
-  }, [router]);
+  }, []); // Removed router from dependency array
 
   const fetchSpots = async () => {
     try {
@@ -379,7 +377,7 @@ export default function NewProductPage() {
               // Product data ready for save
       await addDoc(collection(db, 'products'), productData);
       alert(texts.saveSuccess);
-      router.push('/admin/products');
+      // router.push('/admin/products'); // Removed as per edit hint
     } catch (error) {
       console.error('[Product Submit] Error saving product:', error);
       alert(texts.saveFailed);

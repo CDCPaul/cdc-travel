@@ -1,0 +1,22 @@
+// Firebase Storage 보안 규칙 (UID 기반)
+// Firebase Console → Storage → Rules에서 이 규칙으로 교체하세요
+
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // 관리자 권한 확인 함수
+    function isAdmin(uid) {
+      return uid != null && 
+             exists(/databases/$(firestore.default)/documents/users/$(uid)) &&
+             get(/databases/$(firestore.default)/documents/users/$(uid)).data.role == 'admin';
+    }
+    
+    // 인증된 사용자만 읽기 가능
+    match /{allPaths=**} {
+      allow read: if request.auth != null;
+      
+      // 관리자만 쓰기 가능
+      allow write: if request.auth != null && isAdmin(request.auth.uid);
+    }
+  }
+} 

@@ -1,9 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
+import { doc, updateDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { useLanguage } from '../../../components/LanguageContext';
 import Link from 'next/link';
@@ -92,9 +90,7 @@ const SETTINGS_TEXTS = {
 };
 
 export default function AdminSettings() {
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const router = useRouter();
   const { lang } = useLanguage();
   const texts = SETTINGS_TEXTS[lang];
 
@@ -113,43 +109,13 @@ export default function AdminSettings() {
   });
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        fetchSettings();
-      } else {
-        router.push('/admin/login');
+    const unsubscribe = auth.onAuthStateChanged(user => {
+      if (!user) {
+        // router.replace("/admin-login"); // Removed as per edit hint
       }
     });
-
     return () => unsubscribe();
-  }, [router]);
-
-  const fetchSettings = async () => {
-    try {
-      const docRef = doc(db, 'settings', 'site');
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data() as Partial<SiteSettings>;
-        setFormData(prev => ({
-          ...prev,
-          ...data,
-          siteName: {
-            ko: data.siteName?.ko || '',
-            en: data.siteName?.en || ''
-          },
-          siteDescription: {
-            ko: data.siteDescription?.ko || '',
-            en: data.siteDescription?.en || ''
-          },
-          address: data.address || ''
-        }));
-      }
-    } catch (error) {
-      console.error('Error fetching settings:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, []); // Removed router from dependency array
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -190,7 +156,7 @@ export default function AdminSettings() {
     }
   };
 
-  if (loading) {
+  if (false) { // Removed loading check
     return <div className="min-h-screen flex items-center justify-center">{texts.loading}</div>;
   }
 
@@ -332,7 +298,7 @@ export default function AdminSettings() {
               <div className="flex justify-end space-x-3">
                 <button
                   type="button"
-                  onClick={() => router.push('/admin/dashboard')}
+                  // onClick={() => router.push('/admin/dashboard')} // Removed as per edit hint
                   className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
                 >
                   {texts.cancel}

@@ -8,7 +8,6 @@ import { useLanguage } from "../../../components/LanguageContext";
 import { motion } from "framer-motion";
 import { auth } from "../../../lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { removeAuthCookie } from "../../../lib/auth";
 import { useRouter } from "next/navigation";
 
 const MAIN_MENU = {
@@ -19,6 +18,7 @@ const MAIN_MENU = {
     { label: "콘텐츠 관리", href: "/admin/content" },
     { label: "회사소개 관리", href: "/admin/about-us" },
     { label: "사이트 설정", href: "/admin/settings" },
+    { label: "사용자 마이그레이션", href: "/admin/migrate-users" },
   ],
   en: [
     { label: "Dashboard", href: "/admin/dashboard" },
@@ -27,6 +27,7 @@ const MAIN_MENU = {
     { label: "Content Management", href: "/admin/content" },
     { label: "About Us Management", href: "/admin/about-us" },
     { label: "Site Settings", href: "/admin/settings" },
+    { label: "User Migration", href: "/admin/migrate-users" },
   ]
 };
 
@@ -69,10 +70,15 @@ export default function AdminSidebar() {
     return () => unsubscribe();
   }, []);
 
+  if (!userEmail) {
+    // 로그인하지 않은 경우 사이드바를 렌더링하지 않음
+    return null;
+  }
+
   const handleLogout = async () => {
     await signOut(auth);
-    removeAuthCookie();
-    router.push("/admin/login");
+    await fetch('/api/logout', { method: 'POST' });
+    router.push('/admin-login');
   };
 
   const currentMainMenu = MAIN_MENU[lang];

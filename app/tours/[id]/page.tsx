@@ -158,13 +158,13 @@ export default function TourDetailPage() {
           
           // 투어 상세 페이지 뷰 추적
           logPageView(
-            productData.title[lang], 
+            safeLang(productData.title, lang), 
             `/tours/${params.id}`,
             {
               tour_id: params.id as string,
-              tour_title: productData.title[lang],
-              tour_category: productData.category[lang],
-              tour_region: productData.region[lang],
+              tour_title: safeLang(productData.title, lang),
+              tour_category: safeLang(productData.category, lang),
+              tour_region: safeLang(productData.region, lang),
               language: lang
             }
           );
@@ -196,13 +196,13 @@ export default function TourDetailPage() {
       
       // 페이지 하단에 도달했을 때 (90% 이상 스크롤)
       if (scrollTop + windowHeight >= documentHeight * 0.9) {
-        logScrollToBottom(`/tours/${params.id}`, product?.title[lang] || 'Tour Detail');
+        logScrollToBottom(`/tours/${params.id}`, product ? safeLang(product.title, lang) : 'Tour Detail');
       }
     };
 
     // 시간 체류 이벤트 추적 (30초 후)
     const timeOnPageTimer = setTimeout(() => {
-      logTimeOnPage(`/tours/${params.id}`, product?.title[lang] || 'Tour Detail', 30);
+      logTimeOnPage(`/tours/${params.id}`, product ? safeLang(product.title, lang) : 'Tour Detail', 30);
     }, 30000);
 
     // 스크롤 이벤트 리스너 추가
@@ -213,16 +213,16 @@ export default function TourDetailPage() {
       window.removeEventListener('scroll', handleScroll);
       clearTimeout(timeOnPageTimer);
     };
-  }, [params.id, lang, product?.title]);
+  }, [params.id, lang, product]);
 
   // 스팟 클릭 이벤트 핸들러
   const handleSpotClick = (spot: Spot) => {
     logSpotClick(
       spot.id,
-      spot.name[lang],
+      safeLang(spot.name, lang),
       spot.type,
       params.id as string,
-      product?.title[lang] || ''
+      product ? safeLang(product.title, lang) : ''
     );
     setSelectedSpot(spot);
   };
@@ -231,7 +231,7 @@ export default function TourDetailPage() {
   const handleScheduleTabClick = (day: number) => {
     logScheduleTabClick(
       params.id as string,
-      product?.title[lang] || '',
+      product ? safeLang(product.title, lang) : '',
       day
     );
     setActiveDay(day);
@@ -319,7 +319,7 @@ export default function TourDetailPage() {
             </div>
             <div className="bg-gray-50 p-4 rounded-lg">
               <h3 className="font-semibold text-gray-700">{SUMMARY_TEXT.region[lang]}</h3>
-              <p>{product.region?.[lang] || '-'}</p>
+              <p>{safeLang(product.region, lang) || '-'}</p>
             </div>
             <div className="bg-gray-50 p-4 rounded-lg">
               <h3 className="font-semibold text-gray-700">{SUMMARY_TEXT.included[lang]}</h3>
@@ -527,7 +527,7 @@ function SpotDetailModal({ spot, onClose, lang, texts }: SpotDetailModalProps) {
         <div className="p-6 border-b">
           <div className="flex justify-between items-start">
             <div>
-              <h2 className="text-2xl font-bold mb-2">{spot.name[lang]}</h2>
+              <h2 className="text-2xl font-bold mb-2">{safeLang(spot.name, lang)}</h2>
               <p className="text-gray-600">{spot.type}</p>
             </div>
             <button
@@ -545,7 +545,7 @@ function SpotDetailModal({ spot, onClose, lang, texts }: SpotDetailModalProps) {
             <div className="relative h-64">
               <Image
                 src={allImages[currentImageIndex]}
-                alt={spot.name[lang]}
+                alt={safeLang(spot.name, lang)}
                 fill
                 className="object-cover"
               />
@@ -571,28 +571,28 @@ function SpotDetailModal({ spot, onClose, lang, texts }: SpotDetailModalProps) {
           {/* Description */}
           <div>
             <h3 className="font-semibold mb-2">설명</h3>
-            <p className="text-gray-700">{spot.description[lang]}</p>
+            <p className="text-gray-700">{safeLang(spot.description, lang)}</p>
           </div>
 
           {/* Info Grid */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <h4 className="font-semibold text-gray-600">{texts.address}</h4>
-              <p className="text-sm">{spot.address[lang]}</p>
+              <p className="text-sm">{safeLang(spot.address, lang)}</p>
             </div>
-            {spot.duration && spot.duration[lang] && (
+            {spot.duration && safeLang(spot.duration, lang) && (
               <div>
                 <h4 className="font-semibold text-gray-600">{texts.durationLabel}</h4>
-                <p className="text-sm">{spot.duration[lang]}</p>
+                <p className="text-sm">{safeLang(spot.duration, lang)}</p>
               </div>
             )}
             <div>
               <h4 className="font-semibold text-gray-600">{texts.priceLabel}</h4>
-              <p className="text-sm">{spot.price[lang]}</p>
+              <p className="text-sm">{safeLang(spot.price, lang)}</p>
             </div>
             <div>
               <h4 className="font-semibold text-gray-600">{texts.bestTime}</h4>
-              <p className="text-sm">{spot.bestTime[lang]}</p>
+              <p className="text-sm">{safeLang(spot.bestTime, lang)}</p>
             </div>
           </div>
 

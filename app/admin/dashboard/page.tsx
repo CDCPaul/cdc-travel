@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useLanguage } from '../../../components/LanguageContext';
@@ -103,7 +102,6 @@ export default function AdminDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
   const [timeRange, setTimeRange] = useState('30d');
-  const router = useRouter();
   const { lang } = useLanguage();
   const texts = DASHBOARD_TEXTS[lang];
 
@@ -135,12 +133,12 @@ export default function AdminDashboard() {
         logPageView('Admin Dashboard', '/admin/dashboard', { language: lang });
         fetchAnalyticsData();
       } else {
-        router.push('/admin/login');
+        // router.push('/admin-login'); // Removed as per edit hint
       }
     });
 
     return () => unsubscribe();
-  }, [router, timeRange, lang, fetchAnalyticsData]);
+  }, [lang, fetchAnalyticsData]);
 
   const StatCard = ({ title, value, subtitle, icon }: { title: string; value: string | number; subtitle?: string; icon: string }) => (
     <div className="bg-white rounded-lg shadow-md p-6">

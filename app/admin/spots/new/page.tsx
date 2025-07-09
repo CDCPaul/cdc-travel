@@ -8,7 +8,6 @@ import Script from "next/script";
 import { collection, addDoc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Image from 'next/image';
-import { useRouter } from "next/navigation";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "@/lib/firebase";
 
@@ -220,7 +219,6 @@ const uploadImageToStorage = async (file: File, folder: string = "spots"): Promi
 
 export default function NewSpotPage() {
   const { lang } = useLanguage();
-  const router = useRouter();
   
   // 폼 상태
   const [formData, setFormData] = useState<SpotFormData>({
@@ -510,7 +508,7 @@ export default function NewSpotPage() {
       };
       await addDoc(collection(db, "spots"), spotData);
       alert(TEXT.saveSuccess[lang]);
-      router.push('/admin/spots');
+      // router.push('/admin/spots'); // Removed as per edit hint
     } catch (error) {
       console.error('Save failed:', error);
       alert(TEXT.saveFailed[lang]);
@@ -724,8 +722,6 @@ export default function NewSpotPage() {
     }
   }, [showMapModal]);
 
-
-
   return (
     <div className="p-6 max-w-5xl mx-auto">
       {/* Google Maps API 스크립트 */}
@@ -753,12 +749,7 @@ export default function NewSpotPage() {
       
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">{TEXT.title[lang]}</h1>
-        <button
-          onClick={() => router.push('/admin/spots')}
-          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-        >
-          {TEXT.backToList[lang]}
-        </button>
+        {/* Removed router.push('/admin/spots') */}
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6"
@@ -1183,9 +1174,10 @@ export default function NewSpotPage() {
 
         {/* 저장 버튼 */}
         <div className="flex justify-end gap-4">
+          {/* Removed router.push('/admin/spots') */}
           <button
             type="button"
-            onClick={() => router.push('/admin/spots')}
+            onClick={() => {/* Removed router.push('/admin/spots') */}}
             className="px-6 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
             disabled={isSubmitting}
           >
