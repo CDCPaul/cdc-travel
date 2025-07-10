@@ -28,7 +28,10 @@ export default function AdminLogin() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        router.replace('/admin/dashboard');
+        // 약간의 지연을 두어 인증 상태가 완전히 설정된 후 이동
+        setTimeout(() => {
+          router.replace('/admin/dashboard');
+        }, 100);
       }
     });
     return () => unsubscribe();
