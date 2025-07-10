@@ -8,7 +8,7 @@ import Image from 'next/image';
 import { uploadFileToServer } from '@/lib/utils';
 import { collection, addDoc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import Script from "next/script";
+// import Script from "next/script"; // 완전히 제거
 
 // Google Places API 타입 정의
 type GooglePlaceResult = {
@@ -267,29 +267,46 @@ export default function NewSpotPage() {
 
   // Google Maps API 관련 상태
   const [isGoogleMapsLoaded, setIsGoogleMapsLoaded] = useState(false);
-  
-  // 컴포넌트 마운트 시 Google Maps API 상태 확인
+
+  // Google Maps API 동적 로드 (중복 load 이벤트 등록 방지)
   useEffect(() => {
-    // Google Maps API가 이미 로드되어 있는지 확인
-    const checkGoogleMapsLoaded = () => {
-      if (typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.places) {
-        // Google Maps API already loaded
+    if (typeof window === 'undefined') return;
+
+    function handleReady() {
+      if (window.google && window.google.maps && window.google.maps.places) {
         setIsGoogleMapsLoaded(true);
-        return true;
       }
-      return false;
-    };
-    
-    // 즉시 체크
-    if (!checkGoogleMapsLoaded()) {
-      // 100ms 후 다시 체크 (스크립트 로딩 시간 고려)
-      const timer = setTimeout(() => {
-        checkGoogleMapsLoaded();
-      }, 100);
-      
-      return () => clearTimeout(timer);
     }
-  }, []);
+
+    // 이미 완전히 로드된 경우
+    if (window.google && window.google.maps && window.google.maps.places) {
+      setIsGoogleMapsLoaded(true);
+      return;
+    }
+
+    // 이미 스크립트가 추가된 경우
+    const existingScript = document.getElementById('google-maps-script');
+    if (existingScript) {
+      // load 이벤트 중복 등록 방지
+      existingScript.removeEventListener('load', handleReady);
+      existingScript.addEventListener('load', handleReady);
+      // 이미 로드된 상태라면 바로 실행
+      if (window.google && window.google.maps && window.google.maps.places) {
+        setIsGoogleMapsLoaded(true);
+      }
+      return;
+    }
+
+    // 스크립트가 없으면 추가
+    const script = document.createElement('script');
+    script.id = 'google-maps-script';
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.setAttribute('loading', 'async');
+    script.onload = handleReady;
+    document.body.appendChild(script);
+  }, [GOOGLE_MAPS_API_KEY]);
   const [addressSearchResults, setAddressSearchResults] = useState<GooglePlaceResult[]>([]);
   const [showAddressModal, setShowAddressModal] = useState(false);
 
@@ -729,10 +746,7 @@ export default function NewSpotPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-        <Script
-        src={`https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&loading=async`}
-        onLoad={() => {/* Google Maps loaded */}}
-      />
+        {/* Removed Script */}
       
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">{TEXT.title[lang]}</h1>
