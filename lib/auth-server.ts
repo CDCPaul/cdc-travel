@@ -4,7 +4,7 @@
  */
 
 import { getFirestore } from 'firebase-admin/firestore';
-import { app } from './firebase-admin';
+import { initializeFirebaseAdmin } from './firebase-admin';
 
 export interface DecodedToken {
   email: string | null;
@@ -64,7 +64,7 @@ export async function verifyIdTokenFromCookies(cookies: { get: (name: string) =>
  */
 export async function isAdminByEmail(email: string): Promise<boolean> {
   if (!email) return false;
-  const db = getFirestore(app);
+  const db = getFirestore(initializeFirebaseAdmin());
   const userDoc = await db.collection('users').doc(email).get();
   if (!userDoc.exists) return false;
   const data = userDoc.data();

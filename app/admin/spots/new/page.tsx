@@ -8,6 +8,7 @@ import Image from 'next/image';
 import { uploadFileToServer } from '@/lib/utils';
 import { collection, addDoc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import Script from "next/script";
 
 // Google Places API 타입 정의
 type GooglePlaceResult = {
@@ -220,6 +221,9 @@ const uploadImageToStorage = async (file: File, folder: string = "spots"): Promi
 
 export default function NewSpotPage() {
   const { lang } = useLanguage();
+  
+  // Google Maps API 키
+  const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
   
   // 폼 상태
   const [formData, setFormData] = useState<SpotFormData>({
@@ -725,6 +729,10 @@ export default function NewSpotPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
+      <Script
+        src={`https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&loading=async`}
+        onLoad={() => {/* Google Maps loaded */}}
+      />
       
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">{TEXT.title[lang]}</h1>
