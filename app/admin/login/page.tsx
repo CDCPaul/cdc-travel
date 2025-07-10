@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { signInWithEmailAndPassword, onAuthStateChanged, setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
-import { auth } from '../../lib/firebase';
-import { useRouter } from 'next/navigation';
+import { signInWithEmailAndPassword, setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
+import { auth } from '../../../lib/firebase';
 
 export default function AdminLogin() {
   const [email, setEmail] = useState('');
@@ -12,7 +11,7 @@ export default function AdminLogin() {
   const [loading, setLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [saveEmail, setSaveEmail] = useState(false);
-  const router = useRouter();
+  // const router = useRouter(); // 이 줄을 삭제
 
   useEffect(() => {
     const savedEmail = localStorage.getItem('admin_saved_email');
@@ -25,17 +24,7 @@ export default function AdminLogin() {
     setRememberMe(savedRememberMe);
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        // 약간의 지연을 두어 인증 상태가 완전히 설정된 후 이동
-        setTimeout(() => {
-          router.replace('/admin/dashboard');
-        }, 100);
-      }
-    });
-    return () => unsubscribe();
-  }, [router]);
+  // admin 폴더 안에 있으므로 레이아웃에서 인증 확인을 하므로 별도 리다이렉트 불필요
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,7 +51,7 @@ export default function AdminLogin() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken }),
       });
-      router.push('/admin/dashboard');
+      // admin 폴더 안에 있으므로 레이아웃에서 자동으로 대시보드로 이동
     } catch (error: unknown) {
       setError('로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.');
       console.error('Login error:', error);
