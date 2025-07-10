@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { signInWithEmailAndPassword, setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
 import { auth } from '../../../lib/firebase';
+import { useRouter } from 'next/navigation';
 
 export default function AdminLogin() {
   const [email, setEmail] = useState('');
@@ -11,7 +12,7 @@ export default function AdminLogin() {
   const [loading, setLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [saveEmail, setSaveEmail] = useState(false);
-  // const router = useRouter(); // 이 줄을 삭제
+  const router = useRouter();
 
   useEffect(() => {
     const savedEmail = localStorage.getItem('admin_saved_email');
@@ -51,7 +52,7 @@ export default function AdminLogin() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken }),
       });
-      // admin 폴더 안에 있으므로 레이아웃에서 자동으로 대시보드로 이동
+      router.push('/admin/dashboard'); // 로그인 성공 후 대시보드로 이동
     } catch (error: unknown) {
       setError('로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.');
       console.error('Login error:', error);

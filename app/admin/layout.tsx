@@ -1,15 +1,21 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { checkAuth } from "@/lib/auth";
 import { LanguageProvider } from "../../components/LanguageContext";
 import AdminSidebar from "./components/AdminSidebar";
 
 export default function AdminUILayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // 로그인 페이지는 인증 확인 제외
+    if (pathname === "/admin/login") {
+      setIsLoading(false);
+      return;
+    }
     checkAuth().then(user => {
       if (!user) {
         router.replace("/admin/login");
@@ -17,7 +23,7 @@ export default function AdminUILayout({ children }: { children: React.ReactNode 
         setIsLoading(false);
       }
     });
-  }, [router]);
+  }, [router, pathname]);
 
   if (isLoading) {
     return (
@@ -34,10 +40,12 @@ export default function AdminUILayout({ children }: { children: React.ReactNode 
 
   return (
     <LanguageProvider>
-      <div className="hidden md:block">
-        <AdminSidebar />
-      </div>
-      <div className="md:ml-64">
+      {pathname !== "/admin/login" && (
+        <div className="hidden md:block">
+          <AdminSidebar />
+        </div>
+      )}
+      <div className={pathname !== "/admin/login" ? "md:ml-64" : ""}>
         {children}
       </div>
     </LanguageProvider>
