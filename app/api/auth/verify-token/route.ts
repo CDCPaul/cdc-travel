@@ -1,17 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth } from 'firebase-admin/auth';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-
-// Firebase Admin SDK 초기화
-if (!getApps().length) {
-  initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    }),
-  });
-}
+import { app } from '@/lib/firebase-admin';
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Firebase Admin SDK를 사용하여 토큰 검증
-    const auth = getAuth();
+    const auth = getAuth(app);
     const decodedToken = await auth.verifyIdToken(idToken);
 
     return NextResponse.json({

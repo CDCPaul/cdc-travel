@@ -97,3 +97,41 @@ export function formatRelativeTime(
   if (diffInDays < 7) return `${diffInDays}일 전`;
   return formatDate(dateObj, 'YYYY-MM-DD');
 } 
+
+/**
+ * 서버 사이드를 통한 Firebase Storage 업로드
+ * CORS 문제를 우회하기 위해 서버 API를 통해 업로드
+ */
+export async function uploadFileToServer(
+  file: File,
+  folder: string = 'uploads'
+): Promise<{ success: boolean; url?: string; fileName?: string; error?: string }> {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('folder', folder);
+
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Upload failed');
+    }
+
+    return {
+      success: true,
+      url: result.url,
+      fileName: result.fileName,
+    };
+  } catch (error) {
+    console.error('Upload error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Upload failed',
+    };
+  }
+} 

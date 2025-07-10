@@ -281,7 +281,7 @@ export default function DestinationsPage() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <Script
-        src={`https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`}
+        src={`https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&loading=async`}
                     onLoad={() => {/* Google Maps loaded */}}
       />
       

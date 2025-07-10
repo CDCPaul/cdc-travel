@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
+/** @type {import('next').NextConfig} */
 const nextConfig: NextConfig = {
   images: {
+    domains: [
+      'storage.googleapis.com',
+    ],
     remotePatterns: [
       {
         protocol: 'https',

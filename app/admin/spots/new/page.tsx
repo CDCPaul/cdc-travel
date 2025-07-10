@@ -4,12 +4,10 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useLanguage } from "../../../../components/LanguageContext";
-import Script from "next/script";
+import Image from 'next/image';
+import { uploadFileToServer } from '@/lib/utils';
 import { collection, addDoc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import Image from 'next/image';
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { storage } from "@/lib/firebase";
 
 // Google Places API 타입 정의
 type GooglePlaceResult = {
@@ -212,9 +210,12 @@ const REGION_OPTIONS = [
 
 // Firebase Storage 업로드 함수 복구
 const uploadImageToStorage = async (file: File, folder: string = "spots"): Promise<string> => {
-  const storageRef = ref(storage, `${folder}/${Date.now()}_${file.name}`);
-  const snapshot = await uploadBytes(storageRef, file);
-  return await getDownloadURL(snapshot.ref);
+  // 서버 API를 통한 업로드로 변경
+  const result = await uploadFileToServer(file, folder);
+  if (!result.success || !result.url) {
+    throw new Error(result.error || 'Upload failed');
+  }
+  return result.url;
 };
 
 export default function NewSpotPage() {
@@ -724,28 +725,6 @@ export default function NewSpotPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      {/* Google Maps API 스크립트 */}
-      {!isGoogleMapsLoaded && (
-        <Script
-          src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`}
-          onLoad={() => {
-            if (typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.places) {
-              setIsGoogleMapsLoaded(true);
-            } else {
-              // 재시도
-              setTimeout(() => {
-                if (typeof window !== 'undefined' && window.google && window.google.maps && window.google.maps.places) {
-                  setIsGoogleMapsLoaded(true);
-                }
-              }, 500);
-            }
-          }}
-          onError={(e) => {
-            console.error('Failed to load Google Maps script:', e);
-          }}
-          strategy="lazyOnload"
-        />
-      )}
       
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">{TEXT.title[lang]}</h1>
@@ -915,6 +894,8 @@ export default function NewSpotPage() {
                     width={400}
                     height={300}
                     className="max-w-full h-48 object-cover rounded"
+                    style={{ width: '100%', height: 'auto' }}
+                    priority
                   />
                   <button
                     type="button"

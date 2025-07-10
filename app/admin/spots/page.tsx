@@ -391,12 +391,14 @@ export default function SpotsPage() {
             <span className="font-semibold text-sm">Tags:</span>
             <div style={{ minWidth: 200, maxWidth: 300 }}>
               <Select
+                key={`tags-select-${lang}-${selectedTags.length}`}
                 isMulti
                 placeholder={TEXT.searchPlaceholder[lang]}
                 options={availableTags}
                 value={selectedTags.map(tag => ({ value: tag, label: tag }))}
                 onChange={(selected) => setSelectedTags(selected ? selected.map(s => s.value) : [])}
                 styles={filterSelectStyles}
+                instanceId={`tags-select-${lang}`}
               />
             </div>
           </div>
@@ -453,7 +455,11 @@ export default function SpotsPage() {
                       src={spot.imageUrl} 
                       alt={typeof spot.name === 'object' ? spot.name[lang] : spot.name || ''} 
                       fill
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
                       className="object-cover"
+                      priority={false}
+                      loading="lazy"
+                      unoptimized
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-gray-400">
