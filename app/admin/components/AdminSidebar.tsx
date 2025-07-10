@@ -78,7 +78,7 @@ export default function AdminSidebar() {
   const handleLogout = async () => {
     await signOut(auth);
     await fetch('/api/logout', { method: 'POST' });
-    router.push('/admin-login');
+    router.push('/admin/login');
   };
 
   const currentMainMenu = MAIN_MENU[lang];

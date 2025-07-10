@@ -12,7 +12,7 @@ export default function AdminUILayout({ children }: { children: React.ReactNode 
   useEffect(() => {
     checkAuth().then(user => {
       if (!user) {
-        router.replace("/admin-login");
+        router.replace("/admin/login");
       } else {
         setIsLoading(false);
       }

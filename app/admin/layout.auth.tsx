@@ -7,12 +7,12 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
   const decodedToken = await verifyIdTokenFromCookies(cookieStore);
 
   if (!decodedToken?.email) {
-    redirect('/admin-login');
+    redirect('/admin/login');
   }
 
   const isAdmin = await isAdminByEmail(decodedToken.email);
   if (!isAdmin) {
-    redirect('/admin-login');
+    redirect('/admin/login');
   }
 
   return children;
