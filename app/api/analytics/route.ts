@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebase-admin';
+import { getAdminDb } from '@/lib/firebase-admin';
 
 // Analytics 데이터 타입 정의
 interface AnalyticsData {
@@ -99,7 +99,7 @@ async function fetchFirebaseAnalyticsData(timeRange: string): Promise<AnalyticsD
   try {
     // Firestore 연결 테스트
     try {
-      const testRef = adminDb.collection('test');
+      const testRef = getAdminDb().collection('test');
       await testRef.limit(1).get();
     } catch (firestoreError) {
       console.error('Firestore 연결 실패:', firestoreError instanceof Error ? firestoreError.message : 'Unknown error');
@@ -131,7 +131,7 @@ async function fetchFirebaseAnalyticsData(timeRange: string): Promise<AnalyticsD
     }
 
     // Firestore에서 이벤트 데이터 조회
-    const eventsRef = adminDb.collection('analytics_events');
+    const eventsRef = getAdminDb().collection('analytics_events');
     const snapshot = await eventsRef
       .where('timestamp', '>=', startDate)
       .where('timestamp', '<=', now)

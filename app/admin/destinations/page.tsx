@@ -89,8 +89,8 @@ export default function DestinationsPage() {
   // 저장 성공/실패 알림 상태
   const [saveMessage, setSaveMessage] = useState("");
   
-  // 구글맵 API 키 (실제 배포시엔 .env 등 환경변수로 분리 권장)
-  const GOOGLE_MAPS_API_KEY = "YOUR_GOOGLE_MAPS_API_KEY"; // 실제 API 키로 교체 필요
+  // 구글맵 API 키
+  const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
   
   // 태그 추가
   const addTag = (tag: string) => {

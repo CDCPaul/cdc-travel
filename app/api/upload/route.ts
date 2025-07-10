@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminStorage } from '@/lib/firebase-admin';
+import { getAdminStorage } from '@/lib/firebase-admin';
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     const fileName = `${folder}/${timestamp}_${originalName}`;
 
     // Firebase Storage에 업로드
-    const bucket = adminStorage.bucket();
+    const bucket = getAdminStorage().bucket();
     const fileUpload = bucket.file(fileName);
 
     await fileUpload.save(buffer, {
