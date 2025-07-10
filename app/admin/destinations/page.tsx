@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useLanguage } from "../../../components/LanguageContext";
-import Script from "next/script";
+// import Script from "next/script"; // 완전히 제거
 import { collection, addDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Image from 'next/image';
@@ -278,12 +278,48 @@ export default function DestinationsPage() {
     }
   };
 
+  // Google Maps API 동적 로드 (중복 load 이벤트 등록 방지)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    function handleReady() {
+      if (window.google && window.google.maps && window.google.maps.places) {
+        // setIsGoogleMapsLoaded(true); // 이 부분은 삭제되었으므로 제거
+      }
+    }
+
+    // 이미 완전히 로드된 경우
+    if (window.google && window.google.maps && window.google.maps.places) {
+      // setIsGoogleMapsLoaded(true); // 이 부분은 삭제되었으므로 제거
+      return;
+    }
+
+    // 이미 스크립트가 추가된 경우
+    const existingScript = document.getElementById('google-maps-script');
+    if (existingScript) {
+      // load 이벤트 중복 등록 방지
+      existingScript.removeEventListener('load', handleReady);
+      existingScript.addEventListener('load', handleReady);
+      // 이미 로드된 상태라면 바로 실행
+      if (window.google && window.google.maps && window.google.maps.places) {
+        // setIsGoogleMapsLoaded(true); // 이 부분은 삭제되었으므로 제거
+      }
+      return;
+    }
+
+    // 스크립트가 없으면 추가
+    const script = document.createElement('script');
+    script.id = 'google-maps-script';
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = handleReady;
+    document.body.appendChild(script);
+  }, [GOOGLE_MAPS_API_KEY]);
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
-      <Script
-        src={`https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&loading=async`}
-                    onLoad={() => {/* Google Maps loaded */}}
-      />
+      {/* Script 컴포넌트 제거 */}
       
       <h1 className="text-2xl font-bold mb-6">{TEXT.title[lang]}</h1>
       
