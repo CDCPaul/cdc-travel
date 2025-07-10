@@ -2,7 +2,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { doc, getDoc, collection, getDocs, query, orderBy, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useLanguage } from "@/components/LanguageContext";
@@ -108,10 +108,47 @@ export default function HomePage() {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [bannerCache, setBannerCache] = useState<Banner[]>([]);
   const [hasInitialBanner, setHasInitialBanner] = useState(false);
+  const [bannerLoadingStates, setBannerLoadingStates] = useState<{ [key: string]: boolean }>({});
+  const [bannerLoadProgress, setBannerLoadProgress] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
   const { settings } = useSiteSettings();
 
+  // 배너 이미지 순차적 프리로딩 함수
+  const preloadBannerImages = async (bannerList: Banner[]) => {
+    const imageBanners = bannerList.filter(banner => banner.type === "image");
+    
+    for (let i = 0; i < imageBanners.length; i++) {
+      const banner = imageBanners[i];
+      setBannerLoadingStates(prev => ({ ...prev, [banner.id]: true }));
+      
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const img = new window.Image();
+          img.onload = () => {
+            setBannerLoadingStates(prev => ({ ...prev, [banner.id]: false }));
+            setBannerLoadProgress(prev => prev + (100 / imageBanners.length));
+            resolve();
+          };
+          img.onerror = () => {
+            setBannerLoadingStates(prev => ({ ...prev, [banner.id]: false }));
+            reject(new Error(`Failed to load banner image: ${banner.url}`));
+          };
+          img.src = banner.url;
+        });
+        
+        // 순차적 로딩을 위한 짧은 지연
+        if (i < imageBanners.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      } catch (error) {
+        console.error(`배너 이미지 로딩 실패 (${banner.id}):`, error);
+      }
+    }
+  };
+
   // 배너 데이터를 미리 로드하는 함수
-  const preloadBanners = async () => {
+  const preloadBanners = useCallback(async () => {
     try {
       const q = query(
         collection(db, "settings/banners/items"),
@@ -122,38 +159,29 @@ export default function HomePage() {
       const data: Banner[] = snap.docs.slice(0, 10).map(doc => ({ id: doc.id, ...doc.data() } as Banner));
       setBannerCache(data);
       
-      // 첫 번째 배너를 즉시 표시
+      // 모든 배너를 한번에 표시 (비디오 재생 제어를 위해)
       if (data.length > 0) {
-        setBanners([data[0]]);
+        setBanners(data);
         setHasInitialBanner(true);
         
-        // 첫 번째 배너 이미지 미리 로드
-        if (data[0].type === "image") {
-          const img = new window.Image();
-          img.src = data[0].url;
-        }
-        
-        // 나머지 배너들을 백그라운드에서 로드
-        if (data.length > 1) {
-          setTimeout(() => {
-            setBanners(data);
-            
-            // 나머지 배너 이미지들도 미리 로드
-            data.slice(1).forEach(banner => {
-              if (banner.type === "image") {
-                const img = new window.Image();
-                img.src = banner.url;
-              }
-            });
-          }, 20); // 20ms로 더 단축
+        // 이미지 배너들만 순차적으로 프리로드
+        const imageBanners = data.filter(b => b.type === "image");
+        if (imageBanners.length > 0) {
+          await preloadBannerImages(imageBanners);
         }
       }
     } catch (error) {
       console.error('배너 프리로드 실패:', error);
     }
-  };
+  }, []);
+
+
 
   useEffect(() => {
+    // 배너 로딩 상태 초기화
+    setBannerLoadingStates({});
+    setBannerLoadProgress(0);
+    
     // 페이지 로드 이벤트 추적
     logEvent('page_view', {
       page_title: 'Home',
@@ -195,14 +223,13 @@ export default function HomePage() {
     // 배너 초기화 - 캐시된 데이터가 있으면 즉시 사용
     const initializeBanners = () => {
       if (bannerCache.length > 0) {
-        setBanners([bannerCache[0]]);
+        setBanners(bannerCache);
         setHasInitialBanner(true);
         
-        // 나머지 배너들을 백그라운드에서 로드
-        if (bannerCache.length > 1) {
-          setTimeout(() => {
-            setBanners(bannerCache);
-          }, 20);
+        // 이미지 배너들만 순차적으로 프리로드
+        const imageBanners = bannerCache.filter(b => b.type === "image");
+        if (imageBanners.length > 0) {
+          preloadBannerImages(imageBanners);
         }
         return;
       }
@@ -218,7 +245,21 @@ export default function HomePage() {
       window.removeEventListener('scroll', handleScroll);
       clearTimeout(timeOnPageTimer);
     };
-  }, [lang, bannerCache]);
+  }, [lang, bannerCache, preloadBanners]);
+
+  // 비디오 재생 제어를 위한 useEffect
+  useEffect(() => {
+    videoRefs.current.forEach((video, index) => {
+      if (video) {
+        if (index === activeIndex) {
+          video.play().catch(() => {}); // 브라우저 autoplay 정책 방지
+        } else {
+          video.pause();
+          video.currentTime = 0;
+        }
+      }
+    });
+  }, [activeIndex]);
 
   // 투어 클릭 이벤트 핸들러
   const handleTourClick = (tourId: string, tourTitle: string) => {
@@ -261,7 +302,18 @@ export default function HomePage() {
             <div className="absolute inset-0 bg-[url('/pattern.svg')] bg-repeat opacity-10" />
             <div className="text-center text-white">
               <div className="w-12 h-12 border-3 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <div className="text-sm opacity-80">로딩 중...</div>
+              <div className="text-sm opacity-80">배너 로딩 중...</div>
+              {bannerLoadProgress > 0 && (
+                <div className="mt-2">
+                  <div className="w-32 h-2 bg-white/20 rounded-full overflow-hidden mx-auto">
+                    <div 
+                      className="h-full bg-white transition-all duration-300 ease-out"
+                      style={{ width: `${bannerLoadProgress}%` }}
+                    />
+                  </div>
+                  <div className="text-xs mt-1 opacity-60">{Math.round(bannerLoadProgress)}%</div>
+                </div>
+              )}
             </div>
           </div>
         ) : banners.length > 0 ? (
@@ -271,8 +323,11 @@ export default function HomePage() {
             slidesPerView={1}
             loop={banners.length > 1}
             autoplay={{ delay: 10000, disableOnInteraction: false }}
-            pagination={{ clickable: true }}
+            pagination={{ 
+              clickable: true
+            }}
             className="w-full h-full rounded-none"
+            onSlideChange={(swiper) => setActiveIndex(swiper.realIndex)}
           >
             {banners.map((banner, index) => (
               <SwiperSlide key={banner.id}>
@@ -283,6 +338,15 @@ export default function HomePage() {
                 >
                   <div className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden">
                     {banner.type === "image" ? (
+                      <>
+                        {bannerLoadingStates[banner.id] && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+                            <div className="text-center text-white">
+                              <div className="w-8 h-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                              <div className="text-xs opacity-80">이미지 로딩 중...</div>
+                            </div>
+                          </div>
+                        )}
                       <Image
                         src={banner.url}
                         alt={banner[`title_${lang}`] || "banner"}
@@ -295,15 +359,19 @@ export default function HomePage() {
                         placeholder="blur"
                         blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
                       />
+                      </>
                     ) : (
                       <video
+                        ref={(el) => {
+                          videoRefs.current[index] = el;
+                        }}
                         src={banner.url}
                         controls={false}
-                        autoPlay={index === 0}
+                        autoPlay={false}
                         muted
                         loop
                         playsInline
-                        preload={index === 0 ? "auto" : "metadata"}
+                        preload="metadata"
                         className="object-cover w-full h-full mx-auto my-auto group-hover:opacity-90 transition"
                       />
                     )}

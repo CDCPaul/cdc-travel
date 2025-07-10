@@ -729,7 +729,7 @@ export default function NewSpotPage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <Script
+        <Script
         src={`https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&loading=async`}
         onLoad={() => {/* Google Maps loaded */}}
       />

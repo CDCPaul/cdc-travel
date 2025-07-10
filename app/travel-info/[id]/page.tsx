@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -9,6 +9,10 @@ import { useLanguage } from "@/components/LanguageContext";
 import { db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { safeLang } from "@/lib/types";
+import { Swiper, SwiperSlide } from "swiper/react";
+import "swiper/css";
+import { Pagination } from "swiper/modules";
+import "swiper/css/pagination";
 
 interface TravelInfo {
   id: string;
@@ -37,6 +41,44 @@ export default function TravelInfoDetailPage() {
   const [info, setInfo] = useState<TravelInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [imageLoadingStates, setImageLoadingStates] = useState<{ [key: string]: boolean }>({});
+  const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
+
+  // 순차적 이미지 프리로드
+  const preloadImagesSequentially = useCallback(async (images: string[]) => {
+    const newLoadingStates: { [key: string]: boolean } = {};
+    images.forEach(src => {
+      newLoadingStates[src] = true;
+    });
+    setImageLoadingStates(newLoadingStates);
+    setLoadedImages(new Set());
+
+    for (let i = 0; i < images.length; i++) {
+      const src = images[i];
+      try {
+        await new Promise((resolve, reject) => {
+          const img = new window.Image();
+          img.onload = () => {
+            setLoadedImages(prev => new Set([...prev, src]));
+            setImageLoadingStates(prev => ({ ...prev, [src]: false }));
+            resolve(src);
+          };
+          img.onerror = () => {
+            setImageLoadingStates(prev => ({ ...prev, [src]: false }));
+            reject(new Error(`Failed to load image: ${src}`));
+          };
+          img.src = src;
+        });
+        
+        // 첫 번째 이미지는 즉시 로드, 나머지는 약간의 지연
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      } catch (error) {
+        console.warn(`Failed to preload image: ${src}`, error);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const fetchTravelInfo = async () => {
@@ -48,7 +90,13 @@ export default function TravelInfoDetailPage() {
         const docSnap = await getDoc(docRef);
         
         if (docSnap.exists()) {
-          setInfo({ id: docSnap.id, ...docSnap.data() } as TravelInfo);
+          const travelInfo = { id: docSnap.id, ...docSnap.data() } as TravelInfo;
+          setInfo(travelInfo);
+          
+          // 이미지 프리로드
+          if (travelInfo.imageUrls && travelInfo.imageUrls.length > 0) {
+            preloadImagesSequentially(travelInfo.imageUrls);
+          }
         } else {
           setError('여행정보를 찾을 수 없습니다.');
         }
@@ -61,7 +109,9 @@ export default function TravelInfoDetailPage() {
     };
 
     fetchTravelInfo();
-  }, [params.id]);
+  }, [params.id, preloadImagesSequentially]);
+
+
 
   if (loading) {
     return (
@@ -166,26 +216,48 @@ export default function TravelInfoDetailPage() {
             </div>
           )}
 
-          {/* Image Gallery */}
+          {/* Image Gallery (Swiper 캐러셀) */}
           {info.imageUrls && info.imageUrls.length > 1 && (
             <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-4">{TEXT.images[lang]} ({info.imageUrls.length}개)</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {info.imageUrls.slice(1).map((url: string, idx: number) => (
-                  <div key={idx} className="relative group">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">{TEXT.images[lang]} ({info.imageUrls.length}개)</h3>
+                {Object.values(imageLoadingStates).some(loading => loading) && (
+                  <div className="text-sm text-gray-500">
+                    로딩: {loadedImages.size} / {info.imageUrls.length}
+                  </div>
+                )}
+              </div>
+              <Swiper
+                modules={[Pagination]}
+                pagination={{ clickable: true }}
+                spaceBetween={16}
+                slidesPerView={1}
+                className="w-full h-64 md:h-96 rounded-lg overflow-hidden"
+              >
+                {info.imageUrls.map((url: string, idx: number) => (
+                  <SwiperSlide key={url}>
+                    <div className="relative w-full h-64 md:h-96">
+                      {imageLoadingStates[url] ? (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+                          <div className="flex flex-col items-center">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-400 mb-2"></div>
+                            <span className="text-xs text-white">로딩 중...</span>
+                          </div>
+                        </div>
+                      ) : null}
                     <Image 
                       src={url} 
-                      alt={`${safeLang(info.title, lang)} - ${idx + 2}`} 
-                      width={300} 
-                      height={200} 
-                      className="w-full h-48 object-cover rounded-lg shadow-md transition-transform group-hover:scale-105" 
+                        alt={`${safeLang(info.title, lang)} - ${idx + 1}`}
+                        fill
+                        className="object-cover w-full h-full rounded-lg shadow-md"
                     />
                     <div className="absolute top-2 right-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-xs">
-                      {idx + 2}
+                        {idx + 1}
+                      </div>
                     </div>
-                  </div>
+                  </SwiperSlide>
                 ))}
-              </div>
+              </Swiper>
             </div>
           )}
 
