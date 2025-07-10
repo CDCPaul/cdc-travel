@@ -209,6 +209,46 @@ export default function TravelInfoPage() {
     return images;
   }, []);
 
+  // 이미지 로딩 상태 관리
+  const [imageLoadingStates, setImageLoadingStates] = useState<{ [key: string]: boolean }>({});
+  const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
+
+  // 순차적 이미지 프리로드
+  const preloadImagesSequentially = useCallback(async (images: string[]) => {
+    const newLoadingStates: { [key: string]: boolean } = {};
+    images.forEach(src => {
+      newLoadingStates[src] = true;
+    });
+    setImageLoadingStates(newLoadingStates);
+    setLoadedImages(new Set());
+
+    for (let i = 0; i < images.length; i++) {
+      const src = images[i];
+      try {
+        await new Promise((resolve, reject) => {
+          const img = new window.Image();
+          img.onload = () => {
+            setLoadedImages(prev => new Set([...prev, src]));
+            setImageLoadingStates(prev => ({ ...prev, [src]: false }));
+            resolve(src);
+          };
+          img.onerror = () => {
+            setImageLoadingStates(prev => ({ ...prev, [src]: false }));
+            reject(new Error(`Failed to load image: ${src}`));
+          };
+          img.src = src;
+        });
+        
+        // 첫 번째 이미지는 즉시 로드, 나머지는 약간의 지연
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      } catch (error) {
+        console.warn(`Failed to preload image: ${src}`, error);
+      }
+    }
+  }, []);
+
   const nextImage = useCallback(() => {
     if (!selectedSpot) return;
     const images = getAllImages(selectedSpot);
@@ -225,21 +265,17 @@ export default function TravelInfoPage() {
     setCurrentImageIndex(index);
   }, []);
 
-  // 모달 열 때 이미지 인덱스 초기화 및 이미지 프리로드
-  const preloadImages = (images: string[]) => {
-    images.forEach(src => {
-      const img = new window.Image();
-      img.src = src;
-    });
-  };
-
-  const openSpotModal = useCallback((spot: TravelInfo) => {
+  // 모달 열 때 이미지 인덱스 초기화 및 순차적 이미지 프리로드
+  const openSpotModal = useCallback(async (spot: TravelInfo) => {
     setSelectedSpot(spot);
     setCurrentImageIndex(0);
-    // 모든 이미지 프리로드
+    
+    // 모든 이미지 순차적 프리로드
     const images = getAllImages(spot);
-    preloadImages(images);
-  }, [getAllImages]);
+    if (images.length > 0) {
+      await preloadImagesSequentially(images);
+    }
+  }, [getAllImages, preloadImagesSequentially]);
   
   // 스와이프 핸들러
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -570,6 +606,14 @@ export default function TravelInfoPage() {
                     <>
                       {/* 메인 이미지 */}
                       <div className="relative w-full h-full">
+                        {imageLoadingStates[images[currentImageIndex]] ? (
+                          <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                            <div className="flex flex-col items-center">
+                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+                              <span className="text-sm text-gray-600">이미지 로딩 중...</span>
+                            </div>
+                          </div>
+                        ) : (
                         <Image 
                           src={images[currentImageIndex]} 
                           alt={`Image ${currentImageIndex + 1}`} 
@@ -578,6 +622,7 @@ export default function TravelInfoPage() {
                           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 60vw"
                           priority
                         />
+                        )}
                       </div>
                       
                       {/* 좌우 화살표 (이미지가 2개 이상일 때만) */}
@@ -607,25 +652,35 @@ export default function TravelInfoPage() {
                       {/* 이미지 인디케이터 (하단) */}
                       {images.length > 1 && (
                         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2">
-                          {images.map((_, index) => (
+                          {images.map((imageSrc, index) => (
                             <button
                               key={index}
                               onClick={() => goToImage(index)}
                               className={`w-3 h-3 rounded-full transition-all duration-200 ${
                                 index === currentImageIndex 
                                   ? 'bg-white shadow-lg' 
-                                  : 'bg-white/50 hover:bg-white/75'
+                                  : imageLoadingStates[imageSrc]
+                                  ? 'bg-yellow-400 animate-pulse'
+                                  : loadedImages.has(imageSrc)
+                                  ? 'bg-white/50 hover:bg-white/75'
+                                  : 'bg-gray-400'
                               }`}
                               aria-label={`Go to image ${index + 1}`}
+                              title={imageLoadingStates[imageSrc] ? '로딩 중...' : loadedImages.has(imageSrc) ? '로드됨' : '미로드'}
                             />
                           ))}
                         </div>
                       )}
                       
-                      {/* 이미지 카운터 */}
+                      {/* 이미지 카운터 및 로딩 진행률 */}
                       {images.length > 1 && (
                         <div className="absolute bottom-4 right-4 bg-black/50 text-white px-2 py-1 rounded text-sm">
                           {currentImageIndex + 1} / {images.length}
+                          {Object.values(imageLoadingStates).some(loading => loading) && (
+                            <div className="mt-1 text-xs">
+                              로딩: {loadedImages.size} / {images.length}
+                            </div>
+                          )}
                         </div>
                       )}
                     </>

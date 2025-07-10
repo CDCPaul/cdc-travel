@@ -3,7 +3,7 @@ import { useParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Navigation from "@/components/Navigation";
@@ -505,8 +505,53 @@ interface SpotDetailModalProps {
 
 function SpotDetailModal({ spot, onClose, lang, texts }: SpotDetailModalProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [imageLoadingStates, setImageLoadingStates] = useState<{ [key: string]: boolean }>({});
+  const [loadedImages, setLoadedImages] = useState<Set<string>>(new Set());
   
   const allImages = [spot.imageUrl, ...spot.extraImages].filter(Boolean);
+
+  // 순차적 이미지 프리로드
+  const preloadImagesSequentially = useCallback(async (images: string[]) => {
+    const newLoadingStates: { [key: string]: boolean } = {};
+    images.forEach(src => {
+      newLoadingStates[src] = true;
+    });
+    setImageLoadingStates(newLoadingStates);
+    setLoadedImages(new Set());
+
+    for (let i = 0; i < images.length; i++) {
+      const src = images[i];
+      try {
+        await new Promise((resolve, reject) => {
+          const img = new window.Image();
+          img.onload = () => {
+            setLoadedImages(prev => new Set([...prev, src]));
+            setImageLoadingStates(prev => ({ ...prev, [src]: false }));
+            resolve(src);
+          };
+          img.onerror = () => {
+            setImageLoadingStates(prev => ({ ...prev, [src]: false }));
+            reject(new Error(`Failed to load image: ${src}`));
+          };
+          img.src = src;
+        });
+        
+        // 첫 번째 이미지는 즉시 로드, 나머지는 약간의 지연
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      } catch (error) {
+        console.warn(`Failed to preload image: ${src}`, error);
+      }
+    }
+  }, []);
+
+  // 모달이 열릴 때 이미지 프리로드
+  useEffect(() => {
+    if (allImages.length > 0) {
+      preloadImagesSequentially(allImages);
+    }
+  }, [allImages, preloadImagesSequentially]);
 
   return (
     <motion.div
@@ -543,24 +588,46 @@ function SpotDetailModal({ spot, onClose, lang, texts }: SpotDetailModalProps) {
         {allImages.length > 0 && (
           <div className="relative">
             <div className="relative h-64">
+              {imageLoadingStates[allImages[currentImageIndex]] ? (
+                <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                  <div className="flex flex-col items-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+                    <span className="text-sm text-gray-600">이미지 로딩 중...</span>
+                  </div>
+                </div>
+              ) : (
               <Image
                 src={allImages[currentImageIndex]}
                 alt={safeLang(spot.name, lang)}
                 fill
                 className="object-cover"
               />
+              )}
             </div>
             {allImages.length > 1 && (
               <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2">
-                {allImages.map((_, index) => (
+                {allImages.map((imageSrc, index) => (
                   <button
                     key={index}
                     onClick={() => setCurrentImageIndex(index)}
-                    className={`w-3 h-3 rounded-full ${
-                      index === currentImageIndex ? 'bg-white' : 'bg-white/50'
+                    className={`w-3 h-3 rounded-full transition-all duration-200 ${
+                      index === currentImageIndex 
+                        ? 'bg-white shadow-lg' 
+                        : imageLoadingStates[imageSrc]
+                        ? 'bg-yellow-400 animate-pulse'
+                        : loadedImages.has(imageSrc)
+                        ? 'bg-white/50 hover:bg-white/75'
+                        : 'bg-gray-400'
                     }`}
+                    title={imageLoadingStates[imageSrc] ? '로딩 중...' : loadedImages.has(imageSrc) ? '로드됨' : '미로드'}
                   />
                 ))}
+              </div>
+            )}
+            {/* 로딩 진행률 */}
+            {Object.values(imageLoadingStates).some(loading => loading) && (
+              <div className="absolute top-4 right-4 bg-black/50 text-white px-2 py-1 rounded text-xs">
+                로딩: {loadedImages.size} / {allImages.length}
               </div>
             )}
           </div>
