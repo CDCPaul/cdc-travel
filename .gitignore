@@ -102,3 +102,5 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo
+
+lib/cdc-home-fb4d1-firebase-adminsdk.json
