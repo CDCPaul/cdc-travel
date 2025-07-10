@@ -1,18 +1,18 @@
 import { getApps, initializeApp, cert, App } from 'firebase-admin/app';
 import { getStorage } from 'firebase-admin/storage';
 import { getFirestore } from 'firebase-admin/firestore';
-import path from 'path';
 
 let app: App;
 
 if (!getApps().length) {
-  let serviceAccount;
-  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-  } else {
-    // 로컬 개발용 파일 로드
-    serviceAccount = require('./cdc-home-fb4d1-firebase-adminsdk.json');
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  
+  if (!serviceAccountJson) {
+    throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON environment variable is required');
   }
+  
+  const serviceAccount = JSON.parse(serviceAccountJson);
+  
   app = initializeApp({
     credential: cert(serviceAccount),
     storageBucket: 'cdc-home-fb4d1',
