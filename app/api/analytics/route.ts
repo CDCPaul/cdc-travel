@@ -1,58 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeApp, getApps, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-
-// Firebase Admin 초기화
-if (!getApps().length) {
-  try {
-    if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
-      throw new Error('Firebase Admin SDK 환경변수가 누락되었습니다.');
-    }
-    
-    // private key 형식 정리
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-    
-    if (!privateKey) {
-      throw new Error('FIREBASE_PRIVATE_KEY 환경변수가 설정되지 않았습니다.');
-    }
-    
-    // private key가 JSON 문자열로 저장된 경우 파싱
-    if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-      try {
-        privateKey = JSON.parse(privateKey);
-      } catch (e) {
-        console.error('Private key JSON 파싱 실패:', e);
-        // JSON 파싱 실패 시 원본 사용
-      }
-    }
-    
-    // 개행 문자 처리
-    privateKey = privateKey.replace(/\\\\n/g, '\n').replace(/\\n/g, '\n');
-    
-    // PEM 형식 확인
-    if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
-      console.error('Private key가 올바른 PEM 형식이 아닙니다.');
-      
-      // HTML이나 다른 형식이 섞여있는지 확인
-      if (privateKey.includes('<!DOCTYPE') || privateKey.includes('<html')) {
-        throw new Error('Private key에 HTML이 포함되어 있습니다. 올바른 Firebase 서비스 계정 키를 확인해주세요.');
-      }
-    }
-    
-    initializeApp({
-      credential: cert({
-        projectId: process.env.FIREBASE_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-        privateKey: privateKey,
-      }),
-    });
-  } catch (error) {
-    console.error('Firebase Admin SDK 초기화 실패:', error);
-    throw error;
-  }
-}
-
-const db = getFirestore();
+import { adminDb } from '@/lib/firebase-admin';
 
 // Analytics 데이터 타입 정의
 interface AnalyticsData {
@@ -152,7 +99,7 @@ async function fetchFirebaseAnalyticsData(timeRange: string): Promise<AnalyticsD
   try {
     // Firestore 연결 테스트
     try {
-      const testRef = db.collection('test');
+      const testRef = adminDb.collection('test');
       await testRef.limit(1).get();
     } catch (firestoreError) {
       console.error('Firestore 연결 실패:', firestoreError instanceof Error ? firestoreError.message : 'Unknown error');
@@ -184,7 +131,7 @@ async function fetchFirebaseAnalyticsData(timeRange: string): Promise<AnalyticsD
     }
 
     // Firestore에서 이벤트 데이터 조회
-    const eventsRef = db.collection('analytics_events');
+    const eventsRef = adminDb.collection('analytics_events');
     const snapshot = await eventsRef
       .where('timestamp', '>=', startDate)
       .where('timestamp', '<=', now)
@@ -495,20 +442,6 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const timeRange = searchParams.get('timeRange') || '30d';
-    
-    // 환경변수 확인
-    if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
-      console.warn('Firebase Admin SDK 환경변수가 설정되지 않았습니다. 빈 데이터를 반환합니다.');
-      const emptyData = generateEmptyAnalyticsData();
-      return NextResponse.json({
-        success: true,
-        data: emptyData,
-        timestamp: new Date().toISOString(),
-        dataSource: 'empty_data',
-        timeRange,
-        message: 'Firebase Admin SDK 환경변수가 설정되지 않아 빈 데이터를 반환합니다.',
-      });
-    }
     
     // Firebase Analytics 데이터 조회
     const analyticsData = await fetchFirebaseAnalyticsData(timeRange);
