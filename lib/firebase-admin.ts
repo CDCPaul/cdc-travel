@@ -3,22 +3,24 @@ import { getStorage } from 'firebase-admin/storage';
 import { getFirestore } from 'firebase-admin/firestore';
 import path from 'path';
 
-// 키 파일 경로
-const serviceAccountPath = path.join(process.cwd(), 'lib', 'cdc-home-fb4d1-firebase-adminsdk.json');
-
 let app: App;
 
 if (!getApps().length) {
+  let serviceAccount;
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+  } else {
+    // 로컬 개발용 파일 로드
+    serviceAccount = require('./cdc-home-fb4d1-firebase-adminsdk.json');
+  }
   app = initializeApp({
-    credential: cert(serviceAccountPath),
+    credential: cert(serviceAccount),
     storageBucket: 'cdc-home-fb4d1',
   });
 } else {
   app = getApps()[0];
 }
 
-// Firebase Admin Storage 초기화
 export const adminStorage = getStorage(app);
 export const adminDb = getFirestore(app);
-
 export { app }; 
