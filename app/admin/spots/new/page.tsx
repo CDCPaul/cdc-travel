@@ -4,10 +4,12 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useLanguage } from "../../../../components/LanguageContext";
-import Image from 'next/image';
 import { uploadFileToServer } from '@/lib/utils';
 import { collection, addDoc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { PillButton } from "@/components/ui/PillButton";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
 // import Script from "next/script"; // 완전히 제거
 
 // Google Places API 타입 정의
@@ -46,6 +48,7 @@ interface SpotFormData {
   mapUrl: string;
   imageUrl: string;
   extraImages: string[];
+  country: { ko: string; en: string }; // 추가된 필드
 }
 
 interface TypeOption {
@@ -111,6 +114,10 @@ const TEXT = {
   en: { ko: "영어", en: "English" },
   cancel: { ko: "취소", en: "Cancel" },
   loading: { ko: "저장 중...", en: "Saving..." },
+  galleryDrop: { ko: "이미지를 드래그하여 업로드하거나 클릭하여 선택하세요", en: "Drag and drop image or click to select" },
+  galleryClick: { ko: "클릭하여 선택하세요", en: "Click to select" },
+  galleryMulti: { ko: "(여러 장 선택 가능)", en: "(Multiple selection allowed)" },
+  imageClick: { ko: "클릭하여 선택하세요", en: "Click to select" },
 };
 
 // 타입 옵션
@@ -176,37 +183,86 @@ const TAG_OPTIONS: TagOption[] = [
   { ko: "주말여행", en: "Weekend" }
 ];
 
-interface PillButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  selected: boolean;
+
+
+// 국가별 지역 옵션
+const REGION_OPTIONS_BY_COUNTRY = {
+  KR: [
+    { ko: '서울', en: 'Seoul' },
+    { ko: '부산', en: 'Busan' },
+    { ko: '제주', en: 'Jeju' },
+    { ko: '경주', en: 'Gyeongju' },
+    { ko: '전남', en: 'Jeonnam' },
+    { ko: '경기도', en: 'Gyeonggi' },
+    { ko: '강원도', en: 'Gangwon' },
+    { ko: '인천', en: 'Incheon' },
+    { ko: '대구', en: 'Daegu' },
+    { ko: '광주', en: 'Gwangju' },
+  ],
+  PH: [
+    { ko: '마닐라', en: 'Manila' },
+    { ko: '세부', en: 'Cebu' },
+    { ko: '보홀', en: 'Bohol' },
+    { ko: '팔라완', en: 'Palawan' },
+    { ko: '다바오', en: 'Davao' },
+    { ko: '바기오', en: 'Baguio' },
+    { ko: '푸에르토프린세사', en: 'Puerto Princesa' },
+    { ko: '엘니도', en: 'El Nido' },
+    { ko: '보라카이', en: 'Boracay' },
+    { ko: '시아르가오', en: 'Siargao' },
+  ],
+  JP: [
+    { ko: '도쿄', en: 'Tokyo' },
+    { ko: '오사카', en: 'Osaka' },
+    { ko: '교토', en: 'Kyoto' },
+    { ko: '요코하마', en: 'Yokohama' },
+    { ko: '나고야', en: 'Nagoya' },
+    { ko: '삿포로', en: 'Sapporo' },
+    { ko: '후쿠오카', en: 'Fukuoka' },
+    { ko: '고베', en: 'Kobe' },
+    { ko: '가와사키', en: 'Kawasaki' },
+    { ko: '히로시마', en: 'Hiroshima' },
+  ],
+  VN: [
+    { ko: '호치민', en: 'Ho Chi Minh City' },
+    { ko: '하노이', en: 'Hanoi' },
+    { ko: '다낭', en: 'Da Nang' },
+    { ko: '하이퐁', en: 'Hai Phong' },
+    { ko: '푸꾸옥', en: 'Phu Quoc' },
+    { ko: '나트랑', en: 'Nha Trang' },
+    { ko: '호이안', en: 'Hoi An' },
+    { ko: '달랏', en: 'Da Lat' },
+    { ko: '사파', en: 'Sapa' },
+    { ko: '하롱베이', en: 'Ha Long Bay' },
+  ],
+  TW: [
+    { ko: '타이페이', en: 'Taipei' },
+    { ko: '가오슝', en: 'Kaohsiung' },
+    { ko: '타이중', en: 'Taichung' },
+    { ko: '타이난', en: 'Tainan' },
+    { ko: '지룽', en: 'Keelung' },
+    { ko: '신주', en: 'Hsinchu' },
+    { ko: '자이', en: 'Chiayi' },
+    { ko: '화롄', en: 'Hualien' },
+    { ko: '타이둥', en: 'Taitung' },
+    { ko: '핑둥', en: 'Pingtung' },
+  ],
+};
+
+// 1. 타입 정의 추가
+interface CountryOption {
+  ko: string;
+  en: string;
+  code: string; // DB 저장용
 }
 
-function PillButton({ selected, children, ...props }: PillButtonProps) {
-  return (
-    <button
-      {...props}
-      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-        selected
-          ? "bg-blue-500 text-white"
-          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-// 지역 옵션 (한국어/영어)
-const REGION_OPTIONS = [
-  { ko: '서울', en: 'Seoul' },
-  { ko: '부산', en: 'Busan' },
-  { ko: '제주', en: 'Jeju' },
-  { ko: '경주', en: 'Gyeongju' },
-  { ko: '전남', en: 'Jeonnam' },
-  { ko: '경기도', en: 'Gyeonggi' },
-  { ko: '강원도', en: 'Gangwon' },
-  { ko: '인천', en: 'Incheon' },
-  { ko: '대구', en: 'Daegu' },
-  { ko: '광주', en: 'Gwangju' },
+// 2. 국가 옵션 상수 추가
+const COUNTRY_OPTIONS: CountryOption[] = [
+  { ko: '대한민국', en: 'Korea', code: 'KR' },
+  { ko: '필리핀', en: 'Philippines', code: 'PH' },
+  { ko: '일본', en: 'Japan', code: 'JP' },
+  { ko: '베트남', en: 'Vietnam', code: 'VN' },
+  { ko: '대만', en: 'Taiwan', code: 'TW' },
 ];
 
 // Firebase Storage 업로드 함수 복구
@@ -221,6 +277,7 @@ const uploadImageToStorage = async (file: File, folder: string = "spots"): Promi
 
 export default function NewSpotPage() {
   const { lang } = useLanguage();
+  const router = useRouter();
   
   // Google Maps API 키
   const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
@@ -239,11 +296,20 @@ export default function NewSpotPage() {
     mapUrl: "",
     imageUrl: "",
     extraImages: [],
+    country: { ko: "", en: "" }, // 추가된 상태
   });
 
+  // 이미지 업로드 관련 상태
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [thumbnailPreview, setThumbnailPreview] = useState<string>("");
+  const [galleryFiles, setGalleryFiles] = useState<File[]>([]);
+  const [galleryPreviews, setGalleryPreviews] = useState<string[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
 
-  const [isUploading, setIsUploading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // 1. 상태 추가
+  const [country, setCountry] = useState<{ ko: string; en: string } | null>(null);
+
   const [validationErrors, setValidationErrors] = useState<{
     name: { ko: boolean; en: boolean };
     description: { ko: boolean; en: boolean };
@@ -253,6 +319,7 @@ export default function NewSpotPage() {
     tags: boolean;
     mainImage: boolean;
     bestTime: boolean;
+    country: boolean; // 추가된 에러 상태
   }>({
     name: { ko: false, en: false },
     description: { ko: false, en: false },
@@ -262,6 +329,7 @@ export default function NewSpotPage() {
     tags: false,
     mainImage: false,
     bestTime: false,
+    country: false, // 추가된 에러 상태
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -441,33 +509,48 @@ export default function NewSpotPage() {
     e.preventDefault();
   };
 
-  const handleDrop = async (
-    e: React.DragEvent<HTMLDivElement>,
-    isMain: boolean = false
-  ): Promise<void> => {
-    e.preventDefault();
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      await handleImageFile(files[0], isMain);
-    }
+
+
+  // FileReader를 사용한 이미지 미리보기 생성
+  const createImagePreview = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        resolve(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
-  const handleImageFile = async (file: File, isMain: boolean = true): Promise<void> => {
+  // 대표 이미지 처리
+  const handleImageChange = async (file: File) => {
     if (!file.type.startsWith('image/')) return;
-    setIsUploading(true);
-    try {
-      const url = await uploadImageToStorage(file);
-      if (isMain) {
-        setFormData(prev => ({ ...prev, imageUrl: url }));
-        setValidationErrors(prev => ({ ...prev, mainImage: false }));
-      } else {
-        setFormData(prev => ({ ...prev, extraImages: [...prev.extraImages, url] }));
-      }
-    } catch (error) {
-      console.error('Image upload failed:', error);
-    } finally {
-      setIsUploading(false);
-    }
+    
+    setThumbnailFile(file);
+    const preview = await createImagePreview(file);
+    setThumbnailPreview(preview);
+    setValidationErrors(prev => ({ ...prev, mainImage: false }));
+  };
+
+  // 갤러리 이미지 처리
+  const handleGalleryChange = async (files: FileList) => {
+    const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+    setGalleryFiles(prev => [...prev, ...imageFiles]);
+    
+    const newPreviews = await Promise.all(imageFiles.map(file => createImagePreview(file)));
+    setGalleryPreviews(prev => [...prev, ...newPreviews]);
+  };
+
+  // 갤러리 이미지 제거
+  const removeGalleryImage = (index: number) => {
+    setGalleryFiles(prev => prev.filter((_, i) => i !== index));
+    setGalleryPreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // 대표 이미지 제거
+  const removeThumbnail = () => {
+    setThumbnailFile(null);
+    setThumbnailPreview("");
   };
 
   const handleInputChange = (
@@ -485,6 +568,7 @@ export default function NewSpotPage() {
     }));
   };
 
+  // 4. validateForm 수정
   const validateForm = (): boolean => {
     const errors = {
       name: { 
@@ -505,10 +589,10 @@ export default function NewSpotPage() {
       },
       type: formData.type.length === 0,
       tags: formData.tags.length === 0,
-      mainImage: !formData.imageUrl.trim(),
+      mainImage: !thumbnailFile,
       bestTime: formData.bestTime.length === 0,
+      country: !country, // 추가된 에러 상태
     };
-
     setValidationErrors(errors);
     
     return !Object.values(errors).some(field => 
@@ -516,26 +600,74 @@ export default function NewSpotPage() {
     );
   };
 
+  // 이미지 업로드 함수
+  const uploadImages = async (): Promise<{ imageUrl: string; extraImages: string[] }> => {
+    const uploadPromises: Promise<string>[] = [];
+    const totalFiles = (thumbnailFile ? 1 : 0) + galleryFiles.length;
+    let uploadedCount = 0;
+
+    // 대표 이미지 업로드
+    if (thumbnailFile) {
+      uploadPromises.push(
+        uploadImageToStorage(thumbnailFile, "spots").then(url => {
+          uploadedCount++;
+          setUploadProgress((uploadedCount / totalFiles) * 100);
+          return url;
+        })
+      );
+    }
+
+    // 갤러리 이미지들 업로드
+    galleryFiles.forEach(file => {
+      uploadPromises.push(
+        uploadImageToStorage(file, "spots").then(url => {
+          uploadedCount++;
+          setUploadProgress((uploadedCount / totalFiles) * 100);
+          return url;
+        })
+      );
+    });
+
+    const uploadedUrls = await Promise.all(uploadPromises);
+    
+    return {
+      imageUrl: thumbnailFile ? uploadedUrls[0] : "",
+      extraImages: thumbnailFile ? uploadedUrls.slice(1) : uploadedUrls
+    };
+  };
+
+  // 5. handleSubmit에서 country 반영
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     if (!validateForm()) {
       return;
     }
-    setIsSubmitting(true);
+    
+    setIsSaving(true);
+    setUploadProgress(0);
+    
     try {
+      // 이미지 업로드
+      const imageUrls = await uploadImages();
+      
       const spotData = {
         ...formData,
+        country: country ? { ko: country.ko, en: COUNTRY_OPTIONS.find(opt => opt.ko === country.ko)?.code || '' } : { ko: '', en: '' },
+        imageUrl: imageUrls.imageUrl,
+        extraImages: imageUrls.extraImages,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       };
+      
       await addDoc(collection(db, "spots"), spotData);
       alert(TEXT.saveSuccess[lang]);
-      // router.push('/admin/spots'); // Removed as per edit hint
+      router.push('/admin/spots');
     } catch (error) {
       console.error('Save failed:', error);
       alert(TEXT.saveFailed[lang]);
     } finally {
-      setIsSubmitting(false);
+      setIsSaving(false);
+      setUploadProgress(0);
     }
   };
 
@@ -851,24 +983,55 @@ export default function NewSpotPage() {
             )}
           </div>
 
+          {/* 국가 */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">국가</label>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {COUNTRY_OPTIONS.map(option => (
+                <PillButton
+                  key={option.ko}
+                  selected={country?.ko === option.ko}
+                  onClick={() => {
+                    setCountry({ ko: option.ko, en: option.code });
+                    setValidationErrors(prev => ({ ...prev, country: false }));
+                    // 국가가 변경되면 지역 선택 초기화
+                    setSelectedRegion(null);
+                    setFormData(prev => ({
+                      ...prev,
+                      region: { ko: "", en: "" }
+                    }));
+                  }}
+                >
+                  {lang === 'ko' ? option.ko : option.en}
+                </PillButton>
+              ))}
+            </div>
+            {validationErrors.country && (
+              <p className="text-red-500 text-sm mt-1">국가를 선택해주세요.</p>
+            )}
+          </div>
+
           {/* 지역 */}
           <div className="mb-4">
             <label className="block text-sm font-medium mb-2">{TEXT.region[lang]}</label>
             <div className="flex flex-wrap gap-2 mb-3">
-              {REGION_OPTIONS.map(region => (
-                <button
-                  key={region.ko}
-                  type="button"
-                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                    selectedRegion && selectedRegion.ko === region.ko 
-                      ? 'bg-blue-500 text-white' 
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                  }`}
-                  onClick={() => handleRegionSelect(region)}
-                >
-                  {region[lang]}
-                </button>
-              ))}
+              {country ? (
+                REGION_OPTIONS_BY_COUNTRY[country.ko === '대한민국' ? 'KR' : 
+                  country.ko === '필리핀' ? 'PH' :
+                  country.ko === '일본' ? 'JP' :
+                  country.ko === '베트남' ? 'VN' :
+                  country.ko === '대만' ? 'TW' : 'KR']?.map(region => (
+                  <PillButton
+                    key={region.ko}
+                    selected={selectedRegion?.ko === region.ko}
+                    onClick={() => handleRegionSelect(region)}
+                  >
+                    {region[lang]}
+                  </PillButton>
+                )) || []
+              ) : (
+                <p className="text-gray-500 text-sm">먼저 국가를 선택해주세요.</p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <input
@@ -894,6 +1057,8 @@ export default function NewSpotPage() {
           </div>
         </div>
 
+
+
         {/* 이미지 업로드 */}
         <div className="bg-white p-6 rounded-lg shadow">
           <h2 className="text-lg font-semibold mb-4">{TEXT.image[lang]}</h2>
@@ -906,22 +1071,26 @@ export default function NewSpotPage() {
                 validationErrors.mainImage ? 'border-red-500' : 'border-gray-300'
               }`}
               onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, true)}
+              onDrop={(e) => {
+                e.preventDefault();
+                const files = Array.from(e.dataTransfer.files);
+                if (files.length > 0) {
+                  handleImageChange(files[0]);
+                }
+              }}
             >
-              {formData.imageUrl ? (
+              {thumbnailPreview ? (
                 <div className="relative inline-block">
                   <Image
-                    src={formData.imageUrl}
+                    src={thumbnailPreview}
                     alt="대표 이미지"
                     width={400}
-                    height={300}
+                    height={192}
                     className="max-w-full h-48 object-cover rounded"
-                    style={{ width: '100%', height: 'auto' }}
-                    priority
                   />
                   <button
                     type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, imageUrl: '' }))}
+                    onClick={removeThumbnail}
                     className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-red-600"
                   >
                     ×
@@ -933,20 +1102,14 @@ export default function NewSpotPage() {
                     ref={fileInputRef}
                     type="file"
                     accept="image/*"
-                    onChange={(e) => e.target.files?.[0] && handleImageFile(e.target.files[0], true)}
+                    onChange={(e) => e.target.files?.[0] && handleImageChange(e.target.files[0])}
                     className="hidden"
                     id="main-image"
                   />
                   <label htmlFor="main-image" className="cursor-pointer">
                     <div className="text-gray-500">
-                      {isUploading ? (
-                        <p>{TEXT.imageUploading[lang]}</p>
-                      ) : (
-                        <>
-                          <p className="mb-2">{TEXT.dragDropImage[lang]}</p>
-                          <p className="text-blue-500 hover:text-blue-600">클릭하여 선택하세요</p>
-                        </>
-                      )}
+                      <p className="mb-2">{TEXT.dragDropImage[lang]}</p>
+                      <p className="text-blue-500 hover:text-blue-600">{TEXT.imageClick[lang]}</p>
                     </div>
                   </label>
                 </div>
@@ -957,31 +1120,34 @@ export default function NewSpotPage() {
             )}
           </div>
 
-          {/* 추가 이미지 */}
+          {/* 갤러리 이미지 */}
           <div>
             <label className="block text-sm font-medium mb-2">{TEXT.extraImages[lang]}</label>
             <div
               className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center transition-colors"
               onDragOver={handleDragOver}
-              onDrop={(e) => handleDrop(e, false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                  handleGalleryChange(files);
+                }
+              }}
             >
-              {formData.extraImages.length > 0 && (
+              {galleryPreviews.length > 0 && (
                 <div className="grid grid-cols-3 gap-4 mb-4">
-                  {formData.extraImages.map((url, index) => (
+                  {galleryPreviews.map((preview, index) => (
                     <div key={index} className="relative">
                       <Image
-                        src={url}
-                        alt={`추가 이미지 ${index + 1}`}
+                        src={preview}
+                        alt={`갤러리 이미지 ${index + 1}`}
                         width={200}
-                        height={150}
+                        height={128}
                         className="w-full h-32 object-cover rounded"
                       />
                       <button
                         type="button"
-                        onClick={() => {
-                          const newExtraImages = formData.extraImages.filter((_, i) => i !== index);
-                          setFormData(prev => ({ ...prev, extraImages: newExtraImages }));
-                        }}
+                        onClick={() => removeGalleryImage(index)}
                         className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-red-600"
                       >
                         ×
@@ -995,22 +1161,18 @@ export default function NewSpotPage() {
                 accept="image/*"
                 multiple
                 onChange={(e) => {
-                  Array.from(e.target.files || []).forEach(file => handleImageFile(file, false));
+                  if (e.target.files) {
+                    handleGalleryChange(e.target.files);
+                  }
                 }}
                 className="hidden"
-                id="extra-images"
+                id="gallery-images"
               />
-              <label htmlFor="extra-images" className="cursor-pointer">
+              <label htmlFor="gallery-images" className="cursor-pointer">
                 <div className="text-gray-500">
-                  {isUploading ? (
-                    <p>{TEXT.imageUploading[lang]}</p>
-                  ) : (
-                    <>
-                      <p className="mb-2">추가 이미지를 드래그하여 업로드하거나</p>
-                      <p className="text-blue-500 hover:text-blue-600">클릭하여 선택하세요</p>
-                      <p className="text-sm mt-2">(여러 장 선택 가능)</p>
-                    </>
-                  )}
+                  <p className="mb-2">{TEXT.galleryDrop[lang]}</p>
+                  <p className="text-blue-500 hover:text-blue-600">{TEXT.galleryClick[lang]}</p>
+                  <p className="text-sm mt-2">{TEXT.galleryMulti[lang]}</p>
                 </div>
               </label>
             </div>
@@ -1081,7 +1243,7 @@ export default function NewSpotPage() {
                   ...prev, 
                   duration: { ...prev.duration, ko: e.target.value, slug: e.target.value } 
                 }))}
-                placeholder="한국어 소요시간 (예: 2시간)"
+                placeholder="Korean duration (e.g : 2 hours)"
                 className="w-full p-2 border rounded"
               />
               <input
@@ -1176,23 +1338,40 @@ export default function NewSpotPage() {
         </div>
 
         {/* 저장 버튼 */}
-        <div className="flex justify-end gap-4">
-          {/* Removed router.push('/admin/spots') */}
-          <button
-            type="button"
-            onClick={() => {/* Removed router.push('/admin/spots') */}}
-            className="px-6 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-            disabled={isSubmitting}
-          >
-            {TEXT.cancel[lang]}
-          </button>
-          <button
-            type="submit"
-            className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? TEXT.loading[lang] : TEXT.save[lang]}
-          </button>
+        <div className="space-y-4">
+          {/* 업로드 진행률 */}
+          {isSaving && uploadProgress > 0 && (
+            <div className="bg-gray-100 rounded-lg p-4">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-medium text-gray-700">이미지 업로드 중...</span>
+                <span className="text-sm text-gray-500">{Math.round(uploadProgress)}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div 
+                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
+          
+          <div className="flex justify-end gap-4">
+            <button
+              type="button"
+              onClick={() => {/* Removed router.push('/admin/spots') */}}
+              className="px-6 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+              disabled={isSaving}
+            >
+              {TEXT.cancel[lang]}
+            </button>
+            <button
+              type="submit"
+              className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
+              disabled={isSaving}
+            >
+              {isSaving ? TEXT.loading[lang] : TEXT.save[lang]}
+            </button>
+          </div>
         </div>
       </form>
 
@@ -1287,8 +1466,6 @@ export default function NewSpotPage() {
                 <p><strong>{TEXT.mapModalSelected[lang]}</strong></p>
                 <p>주소 (한국어): {tempPlace.address}</p>
                 <p>주소 (영어): {tempPlace.addressEn}</p>
-                <p>지역 (한국어): {tempPlace.region}</p>
-                <p>지역 (영어): {tempPlace.regionEn}</p>
                 <p>좌표: {tempPlace.lat}, {tempPlace.lng}</p>
               </div>
             )}

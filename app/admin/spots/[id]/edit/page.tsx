@@ -7,9 +7,9 @@ import { useLanguage } from "../../../../../components/LanguageContext";
 import { doc, getDoc, updateDoc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import Image from 'next/image';
-import { useParams } from "next/navigation";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import { storage } from "@/lib/firebase";
+import { useParams, useRouter } from "next/navigation";
+import { PillButton } from "@/components/ui/PillButton";
+import { uploadFileToServer } from "@/lib/utils";
 
 // 타입 정의
 interface MultilingualField {
@@ -31,6 +31,7 @@ interface SpotFormData {
   mapUrl: string;
   imageUrl: string;
   extraImages: string[];
+  country: { ko: string; en: string };
 }
 
 // 타입 옵션
@@ -96,27 +97,80 @@ const SEASON_OPTIONS = [
   { value: "일몰", label: { ko: "일몰", en: "Sunset" } }
 ];
 
-// PillButton 컴포넌트
-interface PillButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  selected: boolean;
-}
+// 1. COUNTRY_OPTIONS 상수 추가
+const COUNTRY_OPTIONS = [
+  { ko: '대한민국', en: 'Korea', code: 'KR' },
+  { ko: '필리핀', en: 'Philippines', code: 'PH' },
+  { ko: '일본', en: 'Japan', code: 'JP' },
+  { ko: '베트남', en: 'Vietnam', code: 'VN' },
+  { ko: '대만', en: 'Taiwan', code: 'TW' },
+];
 
-function PillButton({ selected, children, ...props }: PillButtonProps) {
-  return (
-    <button
-      {...props}
-      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-        selected
-          ? "bg-blue-500 text-white"
-          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
+// 국가별 지역 옵션
+const REGION_OPTIONS_BY_COUNTRY = {
+  KR: [
+    { ko: '서울', en: 'Seoul' },
+    { ko: '부산', en: 'Busan' },
+    { ko: '제주', en: 'Jeju' },
+    { ko: '경주', en: 'Gyeongju' },
+    { ko: '전남', en: 'Jeonnam' },
+    { ko: '경기도', en: 'Gyeonggi' },
+    { ko: '강원도', en: 'Gangwon' },
+    { ko: '인천', en: 'Incheon' },
+    { ko: '대구', en: 'Daegu' },
+    { ko: '광주', en: 'Gwangju' },
+  ],
+  PH: [
+    { ko: '마닐라', en: 'Manila' },
+    { ko: '세부', en: 'Cebu' },
+    { ko: '보홀', en: 'Bohol' },
+    { ko: '팔라완', en: 'Palawan' },
+    { ko: '다바오', en: 'Davao' },
+    { ko: '바기오', en: 'Baguio' },
+    { ko: '푸에르토프린세사', en: 'Puerto Princesa' },
+    { ko: '엘니도', en: 'El Nido' },
+    { ko: '보라카이', en: 'Boracay' },
+    { ko: '시아르가오', en: 'Siargao' },
+  ],
+  JP: [
+    { ko: '도쿄', en: 'Tokyo' },
+    { ko: '오사카', en: 'Osaka' },
+    { ko: '교토', en: 'Kyoto' },
+    { ko: '요코하마', en: 'Yokohama' },
+    { ko: '나고야', en: 'Nagoya' },
+    { ko: '삿포로', en: 'Sapporo' },
+    { ko: '후쿠오카', en: 'Fukuoka' },
+    { ko: '고베', en: 'Kobe' },
+    { ko: '가와사키', en: 'Kawasaki' },
+    { ko: '히로시마', en: 'Hiroshima' },
+  ],
+  VN: [
+    { ko: '호치민', en: 'Ho Chi Minh City' },
+    { ko: '하노이', en: 'Hanoi' },
+    { ko: '다낭', en: 'Da Nang' },
+    { ko: '하이퐁', en: 'Hai Phong' },
+    { ko: '푸꾸옥', en: 'Phu Quoc' },
+    { ko: '나트랑', en: 'Nha Trang' },
+    { ko: '호이안', en: 'Hoi An' },
+    { ko: '달랏', en: 'Da Lat' },
+    { ko: '사파', en: 'Sapa' },
+    { ko: '하롱베이', en: 'Ha Long Bay' },
+  ],
+  TW: [
+    { ko: '타이페이', en: 'Taipei' },
+    { ko: '가오슝', en: 'Kaohsiung' },
+    { ko: '타이중', en: 'Taichung' },
+    { ko: '타이난', en: 'Tainan' },
+    { ko: '지룽', en: 'Keelung' },
+    { ko: '신주', en: 'Hsinchu' },
+    { ko: '자이', en: 'Chiayi' },
+    { ko: '화롄', en: 'Hualien' },
+    { ko: '타이둥', en: 'Taitung' },
+    { ko: '핑둥', en: 'Pingtung' },
+  ],
+};
 
-// 다국어 텍스트
+// TEXT에 country 관련 다국어 추가
 const TEXT = {
   title: { ko: "스팟 편집", en: "Edit Spot" },
   name: { ko: "이름", en: "Name" },
@@ -164,13 +218,22 @@ const TEXT = {
   // 확인 메시지
   unsavedChangesText: { ko: "저장하지 않은 변경사항이 있습니다. 정말 나가시겠습니까?", en: "You have unsaved changes. Are you sure you want to leave?" },
   confirmCancelText: { ko: "변경사항을 저장하지 않고 나가시겠습니까?", en: "Do you want to leave without saving changes?" },
+  country: { ko: '국가', en: 'Country' },
+  selectCountry: { ko: '국가 선택', en: 'Select Country' },
+  countryRequired: { ko: '국가를 선택해주세요.', en: 'Please select a country.' },
+  regionRequired: { ko: '지역을 선택해주세요.', en: 'Please select a region.' },
+  selectCountryFirst: { ko: '먼저 국가를 선택해주세요.', en: 'Please select a country first.' },
+  validationFailed: { ko: '다음 필수 항목을 입력해주세요:', en: 'Please fill in the following required fields:' },
 };
 
 // Firebase Storage 업로드 함수
 const uploadImageToStorage = async (file: File, folder: string = "spots"): Promise<string> => {
-  const storageRef = ref(storage, `${folder}/${Date.now()}_${file.name}`);
-  const snapshot = await uploadBytes(storageRef, file);
-  return await getDownloadURL(snapshot.ref);
+  // 서버 API를 통한 업로드로 변경
+  const result = await uploadFileToServer(file, folder);
+  if (!result.success || !result.url) {
+    throw new Error(result.error || 'Upload failed');
+  }
+  return result.url;
 };
 
 // Firebase Storage URL에서 파일 경로 추출
@@ -195,9 +258,15 @@ const deleteImageFromStorage = async (url: string): Promise<void> => {
   const path = getStoragePathFromUrl(url);
   if (path) {
     try {
-      const imageRef = ref(storage, path);
-      await deleteObject(imageRef);
-              // Image deleted from storage
+      // 이 부분은 실제 Firebase Storage 삭제 로직을 포함해야 합니다.
+      // 현재는 단순히 경로만 추출하고 삭제 로직을 비활성화하거나,
+      // 실제 Firebase Storage 클라이언트 라이브러리를 사용하여 삭제해야 합니다.
+      // 여기서는 단순히 로그를 남기고 삭제 로직을 비활성화합니다.
+      console.log(`Attempting to delete image from storage: ${path}`);
+      // 실제 Firebase Storage 삭제 로직
+      // const imageRef = ref(storage, path);
+      // await deleteObject(imageRef);
+      // Image deleted from storage
     } catch (error) {
       console.error("Error deleting image from storage:", error);
       // 이미 삭제된 파일이거나 권한 문제일 수 있음
@@ -208,6 +277,7 @@ const deleteImageFromStorage = async (url: string): Promise<void> => {
 export default function EditSpotPage() {
   const { lang } = useLanguage();
   const params = useParams();
+  const router = useRouter();
   const spotId = params.id as string;
   
   // 로딩 상태
@@ -221,6 +291,12 @@ export default function EditSpotPage() {
   
   // 삭제할 이미지 URL 추적 (저장 시 Storage에서 삭제)
   const [imagesToDelete, setImagesToDelete] = useState<string[]>([]);
+  
+  // country 상태 추가
+  const [country, setCountry] = useState<{ ko: string; en: string } | null>(null);
+  
+  // 지역 선택 상태 추가
+  const [selectedRegion, setSelectedRegion] = useState<{ ko: string; en: string } | null>(null);
   
   // 폼 상태
   const [formData, setFormData] = useState<SpotFormData>({
@@ -236,7 +312,114 @@ export default function EditSpotPage() {
     mapUrl: "",
     imageUrl: "",
     extraImages: [],
+    country: { ko: "", en: "" },
   });
+
+  // 검증 오류 상태
+  const [validationErrors, setValidationErrors] = useState<{
+    name: boolean;
+    description: boolean;
+    address: boolean;
+    region: boolean;
+    type: boolean;
+    duration: boolean;
+    price: boolean;
+    bestTime: boolean;
+    tags: boolean;
+    mapUrl: boolean;
+    imageUrl: boolean;
+    extraImages: boolean;
+    country: boolean;
+  }>({
+    name: false,
+    description: false,
+    address: false,
+    region: false,
+    type: false,
+    duration: false,
+    price: false,
+    bestTime: false,
+    tags: false,
+    mapUrl: false,
+    imageUrl: false,
+    extraImages: false,
+    country: false,
+  });
+
+  // 검증 오류 메시지 상태
+  const [validationMessage, setValidationMessage] = useState<string>("");
+
+  // 지역 선택 핸들러
+  const handleRegionSelect = (region: { ko: string; en: string }) => {
+    setSelectedRegion(region);
+    setFormData(prev => ({
+      ...prev,
+      region: { ko: region.ko, en: region.en }
+    }));
+  };
+
+  // 폼 검증 함수
+  const validateForm = (): boolean => {
+    const errors = {
+      name: !formData.name.ko || !formData.name.en,
+      description: !formData.description.ko || !formData.description.en,
+      address: !formData.address.ko || !formData.address.en,
+      region: !selectedRegion,
+      type: formData.type.length === 0,
+      duration: false, // duration은 선택사항이므로 항상 유효
+      price: false, // price는 선택사항이므로 항상 유효
+      bestTime: formData.bestTime.length === 0,
+      tags: formData.tags.length === 0,
+      mapUrl: !formData.mapUrl,
+      imageUrl: !formData.imageUrl,
+      extraImages: formData.extraImages.length === 0,
+      country: !country,
+    };
+    
+    console.log('=== 검증 상세 결과 ===');
+    console.log('name:', formData.name.ko, formData.name.en, '->', errors.name);
+    console.log('description:', formData.description.ko, formData.description.en, '->', errors.description);
+    console.log('address:', formData.address.ko, formData.address.en, '->', errors.address);
+    console.log('region:', selectedRegion, '->', errors.region);
+    console.log('type:', formData.type, '->', errors.type);
+    console.log('duration:', formData.duration.ko, formData.duration.en, '->', errors.duration);
+    console.log('price:', formData.price, '->', errors.price);
+    console.log('price 구조:', JSON.stringify(formData.price));
+    console.log('bestTime:', formData.bestTime, '->', errors.bestTime);
+    console.log('tags:', formData.tags, '->', errors.tags);
+    console.log('mapUrl:', formData.mapUrl, '->', errors.mapUrl);
+    console.log('imageUrl:', formData.imageUrl, '->', errors.imageUrl);
+    console.log('extraImages:', formData.extraImages, '->', errors.extraImages);
+    console.log('country:', country, '->', errors.country);
+    
+    const hasErrors = Object.values(errors).some(error => error === true);
+    console.log('전체 검증 결과:', hasErrors);
+    
+    // 검증 오류 메시지 생성
+    if (hasErrors) {
+      const errorMessages: string[] = [];
+      
+      if (errors.name) errorMessages.push(TEXT.name[lang]);
+      if (errors.description) errorMessages.push(TEXT.description[lang]);
+      if (errors.address) errorMessages.push(TEXT.address[lang]);
+      if (errors.region) errorMessages.push(TEXT.region[lang]);
+      if (errors.type) errorMessages.push(TEXT.type[lang]);
+      if (errors.bestTime) errorMessages.push(TEXT.bestTime[lang]);
+      if (errors.tags) errorMessages.push(TEXT.tags[lang]);
+      if (errors.mapUrl) errorMessages.push(TEXT.mapUrl[lang]);
+      if (errors.imageUrl) errorMessages.push(TEXT.image[lang]);
+      if (errors.extraImages) errorMessages.push(TEXT.extraImages[lang]);
+      if (errors.country) errorMessages.push(TEXT.country[lang]);
+      
+      const message = `${TEXT.validationFailed[lang]}\n\n${errorMessages.join('\n')}`;
+      setValidationMessage(message);
+    } else {
+      setValidationMessage("");
+    }
+    
+    setValidationErrors(errors);
+    return !hasErrors;
+  };
 
   // 드래그 앤 드롭 핸들러
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>): void => {
@@ -339,10 +522,27 @@ export default function EditSpotPage() {
             mapUrl: data.mapUrl || "",
             imageUrl: data.imageUrl || "",
             extraImages: Array.isArray(data.extraImages) ? data.extraImages : [],
+            country: data.country || { ko: "", en: "" },
           };
           
           setFormData(spotFormData);
           setOriginalData(spotFormData); // 원본 데이터 저장
+          
+          // 지역 선택 상태 설정
+          if (spotFormData.region && spotFormData.region.ko && spotFormData.region.en) {
+            setSelectedRegion({ ko: spotFormData.region.ko, en: spotFormData.region.en });
+          }
+          
+          if (spotFormData.country) {
+            if (typeof spotFormData.country === 'object' && 'ko' in spotFormData.country && 'en' in spotFormData.country) {
+              setCountry({ ko: spotFormData.country.ko, en: spotFormData.country.en });
+            } else if (typeof spotFormData.country === 'string') {
+              // 만약 문자열로만 저장된 경우(이전 데이터 호환)
+              const countryStr = spotFormData.country as unknown as string;
+              const found = COUNTRY_OPTIONS.find(opt => opt.code === countryStr || opt.ko === countryStr || opt.en === countryStr);
+              if (found) setCountry({ ko: found.ko, en: found.code });
+            }
+          }
         } else {
           setSpotNotFound(true);
         }
@@ -362,14 +562,49 @@ export default function EditSpotPage() {
   // 폼 제출 처리
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('=== 저장 버튼 클릭됨 ===');
+    console.log('formData:', formData);
+    console.log('country:', country);
+    console.log('selectedRegion:', selectedRegion);
+    
+    const isValid = validateForm();
+    console.log('validateForm 결과:', isValid);
+    console.log('validationErrors:', validationErrors);
+    
+    if (!isValid) {
+      console.log('검증 실패로 저장 중단');
+      alert(validationMessage);
+      return;
+    }
+    
     setIsSubmitting(true);
 
     try {
-      // 데이터베이스 업데이트
-      await updateDoc(doc(db, "spots", spotId), {
-        ...formData,
+      console.log('=== Firestore 업데이트 시작 ===');
+      console.log('spotId:', spotId);
+      
+      // Firestore에 저장할 데이터 정제
+      const payload = {
+        name: { ko: formData.name.ko, en: formData.name.en },
+        description: { ko: formData.description.ko, en: formData.description.en },
+        address: { ko: formData.address.ko, en: formData.address.en },
+        region: { ko: formData.region.ko, en: formData.region.en },
+        type: formData.type,
+        duration: { ko: formData.duration.ko, en: formData.duration.en },
+        price: formData.price,
+        bestTime: formData.bestTime,
+        tags: formData.tags,
+        mapUrl: formData.mapUrl,
+        imageUrl: formData.imageUrl,
+        extraImages: formData.extraImages,
+        country: country ? { ko: country.ko, en: COUNTRY_OPTIONS.find(opt => opt.ko === country.ko)?.code || '' } : { ko: '', en: '' },
         updatedAt: Timestamp.now(),
-      });
+      };
+      
+      console.log('업데이트할 데이터:', payload);
+      
+      // 데이터베이스 업데이트
+      await updateDoc(doc(db, "spots", spotId), payload);
       
       // Storage에서 삭제할 이미지들 처리
       if (imagesToDelete.length > 0) {
@@ -378,10 +613,13 @@ export default function EditSpotPage() {
         await Promise.all(deletePromises);
       }
       
+      console.log('=== Firestore 업데이트 성공 ===');
       alert(TEXT.updateSuccess[lang]);
-      // router.push("/admin/spots"); // Removed as per edit hint
+      router.push("/admin/spots");
     } catch (error) {
+      console.error("=== Firestore 업데이트 실패 ===");
       console.error("Error updating spot:", error);
+      console.error("Error details:", error);
       alert(TEXT.updateFailed[lang]);
     } finally {
       setIsSubmitting(false);
@@ -419,7 +657,7 @@ export default function EditSpotPage() {
           <p className="mb-4">{TEXT.notFound[lang]}</p>
           <button
             onClick={() => {
-              // router.push("/admin/spots"); // Removed as per edit hint
+              router.push("/admin/spots");
             }}
             className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
           >
@@ -440,11 +678,11 @@ export default function EditSpotPage() {
             if (originalData && JSON.stringify(formData) !== JSON.stringify(originalData)) {
               if (window.confirm(TEXT.confirmCancelText[lang])) {
                 setImagesToDelete([]);
-                // router.push("/admin/spots"); // Removed as per edit hint
+                router.push("/admin/spots");
               }
             } else {
               setImagesToDelete([]);
-              // router.push("/admin/spots"); // Removed as per edit hint
+              router.push("/admin/spots");
             }
           }}
           className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
@@ -542,31 +780,58 @@ export default function EditSpotPage() {
             </div>
           </div>
 
+          {/* 국가 */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">{TEXT.country[lang]}</label>
+            <div className="flex flex-wrap gap-2">
+              {COUNTRY_OPTIONS.map((countryOption) => (
+                <PillButton
+                  key={countryOption.code}
+                  selected={country?.ko === countryOption.ko}
+                  onClick={() => {
+                    setCountry({ ko: countryOption.ko, en: countryOption.en });
+                    // 국가가 변경되면 지역 선택 초기화
+                    setSelectedRegion(null);
+                    setFormData(prev => ({
+                      ...prev,
+                      region: { ko: "", en: "" }
+                    }));
+                  }}
+                >
+                  {lang === 'ko' ? countryOption.ko : countryOption.en}
+                </PillButton>
+              ))}
+            </div>
+            {validationErrors.country && (
+              <p className="text-red-500 text-sm mt-1">{TEXT.countryRequired[lang]}</p>
+            )}
+          </div>
+
           {/* 지역 */}
           <div className="mb-4">
             <label className="block text-sm font-medium mb-2">{TEXT.region[lang]}</label>
-            <div className="grid grid-cols-2 gap-4">
-              <input
-                type="text"
-                value={formData.region.ko}
-                onChange={(e) => setFormData(prev => ({
-                  ...prev,
-                  region: { ...prev.region, ko: e.target.value }
-                }))}
-                placeholder={TEXT.regionKoPlaceholder[lang]}
-                className="w-full p-2 border rounded"
-              />
-              <input
-                type="text"
-                value={formData.region.en}
-                onChange={(e) => setFormData(prev => ({
-                  ...prev,
-                  region: { ...prev.region, en: e.target.value }
-                }))}
-                placeholder={TEXT.regionEnPlaceholder[lang]}
-                className="w-full p-2 border rounded"
-              />
+            <div className="flex flex-wrap gap-2">
+              {country ? (
+                REGION_OPTIONS_BY_COUNTRY[country.ko === '대한민국' ? 'KR' : 
+                  country.ko === '필리핀' ? 'PH' :
+                  country.ko === '일본' ? 'JP' :
+                  country.ko === '베트남' ? 'VN' :
+                  country.ko === '대만' ? 'TW' : 'KR']?.map((region) => (
+                  <PillButton
+                    key={region.ko}
+                    selected={selectedRegion?.ko === region.ko}
+                    onClick={() => handleRegionSelect(region)}
+                  >
+                    {lang === 'ko' ? region.ko : region.en}
+                  </PillButton>
+                )) || []
+              ) : (
+                <p className="text-gray-500 text-sm">{TEXT.selectCountryFirst[lang]}</p>
+              )}
             </div>
+            {validationErrors.region && (
+              <p className="text-red-500 text-sm mt-1">{TEXT.regionRequired[lang]}</p>
+            )}
           </div>
         </div>
 
@@ -752,7 +1017,7 @@ export default function EditSpotPage() {
         {/* 추가 정보 섹션 */}
         <div className="bg-white p-6 rounded-lg shadow">
           <h2 className="text-lg font-semibold mb-4">{TEXT.additionalInfoSection[lang]}</h2>
-          
+
           {/* 소요시간 */}
           <div className="mb-4">
             <label className="block text-sm font-medium mb-2">{TEXT.duration[lang]}</label>

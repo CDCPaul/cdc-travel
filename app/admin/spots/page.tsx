@@ -3,8 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useLanguage } from "../../../components/LanguageContext";
 import { collection, getDocs, query, orderBy, deleteDoc, doc } from "firebase/firestore";
-import { db, storage } from "@/lib/firebase";
-import { ref, deleteObject } from "firebase/storage";
+import { db } from "@/lib/firebase";
 import Image from 'next/image';
 import { useRouter } from "next/navigation";
 import Select, { StylesConfig, CSSObjectWithLabel } from 'react-select';
@@ -97,35 +96,33 @@ function normalizeTag(tag: unknown, lang: 'ko' | 'en'): string {
   }
 }
 
-// Firebase Storage URL에서 파일 경로 추출
-const getStoragePathFromUrl = (url: string): string | null => {
-  try {
-    const baseUrl = "https://firebasestorage.googleapis.com/v0/b/";
-    if (!url.startsWith(baseUrl)) return null;
-    
-    const pathMatch = url.match(/o\/(.*?)\?/);
-    if (pathMatch && pathMatch[1]) {
-      return decodeURIComponent(pathMatch[1]);
-    }
-    return null;
-  } catch (error) {
-    console.error("Error parsing storage URL:", error);
-    return null;
-  }
-};
-
-// Firebase Storage에서 이미지 삭제
+// Firebase Storage에서 이미지 삭제 (서버 API 사용)
 const deleteImageFromStorage = async (url: string): Promise<void> => {
-  const path = getStoragePathFromUrl(url);
-  if (path) {
-    try {
-      const imageRef = ref(storage, path);
-      await deleteObject(imageRef);
-              // Image deleted from storage
-    } catch (error) {
-      console.error("Error deleting image from storage:", error);
-      // 이미 삭제된 파일이거나 권한 문제일 수 있음
+  console.log('Deleting image from storage:', { url });
+  
+  try {
+    const response = await fetch('/api/delete-image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Delete failed');
     }
+
+    console.log('Image deleted from storage successfully:', url);
+  } catch (error) {
+    console.error("Error deleting image from storage:", error);
+    console.error("Error details:", {
+      url,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    // 이미 삭제된 파일이거나 권한 문제일 수 있음
   }
 };
 
@@ -146,7 +143,7 @@ export default function SpotsPage() {
   
   // 페이지네이션 상태
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 12;
+  const itemsPerPage = 20; // 더 많은 아이템을 한 번에 표시
   
   // spots 목록 불러오기
   const fetchSpots = useCallback(async () => {
@@ -281,6 +278,8 @@ export default function SpotsPage() {
           if (spotToDelete.extraImages && spotToDelete.extraImages.length > 0) {
             imagesToDelete.push(...spotToDelete.extraImages);
           }
+          
+          console.log('Images to delete:', imagesToDelete);
           
           // 모든 이미지 삭제
           const deletePromises = imagesToDelete.map(url => deleteImageFromStorage(url));
@@ -445,11 +444,11 @@ export default function SpotsPage() {
       ) : (
         <>
           {/* 카드 그리드 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
             {paginatedSpots.map(spot => (
               <div key={spot.id} className="bg-white rounded-lg shadow-md hover:shadow-xl transition-shadow overflow-hidden">
                 {/* 이미지 */}
-                <div className="h-48 bg-gray-100 relative">
+                <div className="h-40 bg-gray-100 relative">
                   {spot.imageUrl ? (
                     <Image 
                       src={spot.imageUrl} 
@@ -469,8 +468,8 @@ export default function SpotsPage() {
                 </div>
 
                 {/* 정보 */}
-                <div className="p-4">
-                  <h3 className="font-bold text-lg mb-1">
+                <div className="p-3">
+                  <h3 className="font-bold text-base mb-1">
                     {typeof spot.name === 'object' ? spot.name[lang] : spot.name || '-'}
                   </h3>
                   <p className="text-sm text-gray-600 mb-2">
@@ -481,32 +480,32 @@ export default function SpotsPage() {
                   </p>
 
                   {/* 태그 */}
-                  <div className="flex flex-wrap gap-1 mb-3">
+                  <div className="flex flex-wrap gap-1 mb-2">
                     {spot.tags && spot.tags.length > 0 && 
-                      spot.tags.slice(0, 3).map((tag, i) => (
+                      spot.tags.slice(0, 2).map((tag, i) => (
                         <span 
                           key={i} 
-                          className="inline-block bg-blue-100 text-blue-700 rounded-full px-2 py-1 text-xs"
+                          className="inline-block bg-blue-100 text-blue-700 rounded-full px-1.5 py-0.5 text-xs"
                         >
                           {normalizeTag(tag, lang)}
                         </span>
                       ))
                     }
-                    {spot.tags && spot.tags.length > 3 && (
-                      <span className="text-xs text-gray-500">+{spot.tags.length - 3}</span>
+                    {spot.tags && spot.tags.length > 2 && (
+                      <span className="text-xs text-gray-500">+{spot.tags.length - 2}</span>
                     )}
                   </div>
 
                   {/* 버튼 */}
-                  <div className="flex gap-2">
+                  <div className="flex gap-1">
                     <button 
-                      className="flex-1 px-3 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500 text-sm"
+                      className="flex-1 px-2 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500 text-xs"
                       onClick={() => handleEdit(spot.id)}
                     >
                       {TEXT.edit[lang]}
                     </button>
                     <button 
-                      className="flex-1 px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm disabled:opacity-50"
+                      className="flex-1 px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-xs disabled:opacity-50"
                       onClick={() => handleDelete(spot.id)}
                       disabled={deletingId === spot.id}
                     >
