@@ -236,41 +236,24 @@ const uploadImageToStorage = async (file: File, folder: string = "spots"): Promi
   return result.url;
 };
 
-// Firebase Storage URL에서 파일 경로 추출
-const getStoragePathFromUrl = (url: string): string | null => {
-  try {
-    const baseUrl = "https://firebasestorage.googleapis.com/v0/b/";
-    if (!url.startsWith(baseUrl)) return null;
-    
-    const pathMatch = url.match(/o\/(.*?)\?/);
-    if (pathMatch && pathMatch[1]) {
-      return decodeURIComponent(pathMatch[1]);
-    }
-    return null;
-  } catch (error) {
-    console.error("Error parsing storage URL:", error);
-    return null;
-  }
-};
-
 // Firebase Storage에서 이미지 삭제
 const deleteImageFromStorage = async (url: string): Promise<void> => {
-  const path = getStoragePathFromUrl(url);
-  if (path) {
-    try {
-      // 이 부분은 실제 Firebase Storage 삭제 로직을 포함해야 합니다.
-      // 현재는 단순히 경로만 추출하고 삭제 로직을 비활성화하거나,
-      // 실제 Firebase Storage 클라이언트 라이브러리를 사용하여 삭제해야 합니다.
-      // 여기서는 단순히 로그를 남기고 삭제 로직을 비활성화합니다.
-      console.log(`Attempting to delete image from storage: ${path}`);
-      // 실제 Firebase Storage 삭제 로직
-      // const imageRef = ref(storage, path);
-      // await deleteObject(imageRef);
-      // Image deleted from storage
-    } catch (error) {
-      console.error("Error deleting image from storage:", error);
-      // 이미 삭제된 파일이거나 권한 문제일 수 있음
+  try {
+    const res = await fetch('/api/delete-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      // 에러는 콘솔에만 찍고 throw하지 않음
+      console.error('Error deleting image from storage via API:', data.error);
+      return;
     }
+    console.log('Successfully deleted image from storage via API');
+  } catch (error) {
+    console.error('Error deleting image from storage via API:', error);
+    // throw하지 않음
   }
 };
 
@@ -284,13 +267,20 @@ export default function EditSpotPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [spotNotFound, setSpotNotFound] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
   
   // 원본 데이터 보관 (취소 시 복원용)
   const [originalData, setOriginalData] = useState<SpotFormData | null>(null);
   
   // 삭제할 이미지 URL 추적 (저장 시 Storage에서 삭제)
   const [imagesToDelete, setImagesToDelete] = useState<string[]>([]);
+  
+  // 새로 업로드할 이미지 파일들 (저장 시에만 업로드)
+  const [newMainImageFile, setNewMainImageFile] = useState<File | null>(null);
+  const [newExtraImageFiles, setNewExtraImageFiles] = useState<File[]>([]);
+  
+  // 이미지 미리보기 (새로 선택된 파일들)
+  const [mainImagePreview, setMainImagePreview] = useState<string>("");
+  const [extraImagePreviews, setExtraImagePreviews] = useState<string[]>([]);
   
   // country 상태 추가
   const [country, setCountry] = useState<{ ko: string; en: string } | null>(null);
@@ -349,6 +339,17 @@ export default function EditSpotPage() {
   // 검증 오류 메시지 상태
   const [validationMessage, setValidationMessage] = useState<string>("");
 
+  // 이미지 미리보기 생성 함수
+  const createImagePreview = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        resolve(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   // 지역 선택 핸들러
   const handleRegionSelect = (region: { ko: string; en: string }) => {
     setSelectedRegion(region);
@@ -371,8 +372,8 @@ export default function EditSpotPage() {
       bestTime: formData.bestTime.length === 0,
       tags: formData.tags.length === 0,
       mapUrl: !formData.mapUrl,
-      imageUrl: !formData.imageUrl,
-      extraImages: formData.extraImages.length === 0,
+      imageUrl: !formData.imageUrl && !newMainImageFile, // 기존 이미지가 있거나 새 이미지가 선택되어야 함
+      extraImages: formData.extraImages.length === 0 && newExtraImageFiles.length === 0, // 기존 이미지가 있거나 새 이미지가 선택되어야 함
       country: !country,
     };
     
@@ -453,20 +454,54 @@ export default function EditSpotPage() {
 
   const handleImageFile = async (file: File, isMain: boolean = true): Promise<void> => {
     if (!file.type.startsWith('image/')) return;
-    setIsUploading(true);
+    
     try {
-      const url = await uploadImageToStorage(file);
+      const preview = await createImagePreview(file);
+      
       if (isMain) {
-        setFormData(prev => ({ ...prev, imageUrl: url }));
+        setNewMainImageFile(file);
+        setMainImagePreview(preview);
       } else {
-        setFormData(prev => ({ ...prev, extraImages: [...prev.extraImages, url] }));
+        setNewExtraImageFiles(prev => [...prev, file]);
+        setExtraImagePreviews(prev => [...prev, preview]);
       }
     } catch (error) {
-      console.error('Image upload failed:', error);
+      console.error('Image preview creation failed:', error);
       alert(TEXT.uploadFailedText[lang]);
-    } finally {
-      setIsUploading(false);
     }
+  };
+
+  // 새로 업로드할 이미지들 처리 함수
+  const uploadNewImages = async (): Promise<{ imageUrl: string; extraImages: string[] }> => {
+    const uploadPromises: Promise<string>[] = [];
+    
+    // 새 대표 이미지 업로드
+    if (newMainImageFile) {
+      uploadPromises.push(
+        uploadImageToStorage(newMainImageFile, "spots").then(url => {
+          return url;
+        })
+      );
+    }
+
+    // 새 추가 이미지들 업로드
+    newExtraImageFiles.forEach(file => {
+      uploadPromises.push(
+        uploadImageToStorage(file, "spots").then(url => {
+          return url;
+        })
+      );
+    });
+
+    const uploadedUrls = await Promise.all(uploadPromises);
+    
+    return {
+      imageUrl: newMainImageFile ? uploadedUrls[0] : formData.imageUrl,
+      extraImages: [
+        ...formData.extraImages, // 기존 이미지들
+        ...(newMainImageFile ? uploadedUrls.slice(1) : uploadedUrls) // 새로 업로드된 이미지들
+      ]
+    };
   };
 
   // 스팟 데이터 불러오기
@@ -580,10 +615,22 @@ export default function EditSpotPage() {
     setIsSubmitting(true);
 
     try {
-      console.log('=== Firestore 업데이트 시작 ===');
+      console.log('=== 저장 프로세스 시작 ===');
       console.log('spotId:', spotId);
       
-      // Firestore에 저장할 데이터 정제
+      // 1. 새로 업로드할 이미지들 먼저 처리
+      let finalImageUrl = formData.imageUrl;
+      let finalExtraImages = [...formData.extraImages];
+      
+      if (newMainImageFile || newExtraImageFiles.length > 0) {
+        console.log('새 이미지 업로드 시작...');
+        const { imageUrl, extraImages } = await uploadNewImages();
+        finalImageUrl = imageUrl;
+        finalExtraImages = extraImages;
+        console.log('새 이미지 업로드 완료');
+      }
+      
+      // 2. Firestore에 저장할 데이터 정제
       const payload = {
         name: { ko: formData.name.ko, en: formData.name.en },
         description: { ko: formData.description.ko, en: formData.description.en },
@@ -595,29 +642,32 @@ export default function EditSpotPage() {
         bestTime: formData.bestTime,
         tags: formData.tags,
         mapUrl: formData.mapUrl,
-        imageUrl: formData.imageUrl,
-        extraImages: formData.extraImages,
+        imageUrl: finalImageUrl,
+        extraImages: finalExtraImages,
         country: country ? { ko: country.ko, en: COUNTRY_OPTIONS.find(opt => opt.ko === country.ko)?.code || '' } : { ko: '', en: '' },
         updatedAt: Timestamp.now(),
       };
       
       console.log('업데이트할 데이터:', payload);
       
-      // 데이터베이스 업데이트
+      // 3. 데이터베이스 업데이트
       await updateDoc(doc(db, "spots", spotId), payload);
       
-      // Storage에서 삭제할 이미지들 처리
+      // 4. Storage에서 삭제할 이미지들 처리 (DB 업데이트 성공 후)
       if (imagesToDelete.length > 0) {
-        // Deleting images from storage
-        const deletePromises = imagesToDelete.map(url => deleteImageFromStorage(url));
-        await Promise.all(deletePromises);
+        console.log('삭제할 이미지들 처리 중...', imagesToDelete);
+        const uniqueImagesToDelete = Array.from(new Set(imagesToDelete));
+        for (const url of uniqueImagesToDelete) {
+          await deleteImageFromStorage(url);
+        }
+        console.log('이미지 삭제 완료');
       }
       
-      console.log('=== Firestore 업데이트 성공 ===');
+      console.log('=== 저장 성공 ===');
       alert(TEXT.updateSuccess[lang]);
       router.push("/admin/spots");
     } catch (error) {
-      console.error("=== Firestore 업데이트 실패 ===");
+      console.error("=== 저장 실패 ===");
       console.error("Error updating spot:", error);
       console.error("Error details:", error);
       alert(TEXT.updateFailed[lang]);
@@ -848,7 +898,29 @@ export default function EditSpotPage() {
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, true)}
             >
-              {formData.imageUrl ? (
+              {mainImagePreview ? (
+                // 새로 선택된 이미지 미리보기
+                <div className="relative inline-block">
+                  <Image
+                    src={mainImagePreview}
+                    alt="대표 이미지 미리보기"
+                    width={400}
+                    height={300}
+                    className="max-w-full h-48 object-cover rounded"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewMainImageFile(null);
+                      setMainImagePreview("");
+                    }}
+                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-red-600"
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : formData.imageUrl ? (
+                // 기존 이미지
                 <div className="relative inline-block">
                   <Image
                     src={formData.imageUrl}
@@ -871,6 +943,7 @@ export default function EditSpotPage() {
                   </button>
                 </div>
               ) : (
+                // 업로드 UI
                 <div>
                   <input
                     type="file"
@@ -881,14 +954,8 @@ export default function EditSpotPage() {
                   />
                   <label htmlFor="main-image" className="cursor-pointer">
                     <div className="text-gray-500">
-                      {isUploading ? (
-                        <p>{TEXT.uploadingText[lang]}</p>
-                      ) : (
-                        <>
-                          <p className="mb-2">{TEXT.dragDropText[lang]}</p>
-                          <p className="text-blue-500 hover:text-blue-600">{TEXT.clickSelectText[lang]}</p>
-                        </>
-                      )}
+                      <p className="mb-2">{TEXT.dragDropText[lang]}</p>
+                      <p className="text-blue-500 hover:text-blue-600">{TEXT.clickSelectText[lang]}</p>
                     </div>
                   </label>
                 </div>
@@ -905,10 +972,11 @@ export default function EditSpotPage() {
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, false)}
             >
+              {/* 기존 추가 이미지들 */}
               {formData.extraImages.length > 0 && (
                 <div className="grid grid-cols-3 gap-4 mb-4">
                   {formData.extraImages.map((url, index) => (
-                    <div key={index} className="relative">
+                    <div key={`existing-${index}`} className="relative">
                       <Image
                         src={url}
                         alt={`추가 이미지 ${index + 1}`}
@@ -934,6 +1002,34 @@ export default function EditSpotPage() {
                   ))}
                 </div>
               )}
+              
+              {/* 새로 선택된 추가 이미지들 미리보기 */}
+              {extraImagePreviews.length > 0 && (
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  {extraImagePreviews.map((preview, index) => (
+                    <div key={`new-${index}`} className="relative">
+                      <Image
+                        src={preview}
+                        alt={`새 추가 이미지 ${index + 1}`}
+                        width={200}
+                        height={150}
+                        className="w-full h-32 object-cover rounded"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewExtraImageFiles(prev => prev.filter((_, i) => i !== index));
+                          setExtraImagePreviews(prev => prev.filter((_, i) => i !== index));
+                        }}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-red-600"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
               <input
                 type="file"
                 accept="image/*"
@@ -946,15 +1042,9 @@ export default function EditSpotPage() {
               />
               <label htmlFor="extra-images" className="cursor-pointer">
                 <div className="text-gray-500">
-                  {isUploading ? (
-                    <p>{TEXT.uploadingText[lang]}</p>
-                  ) : (
-                    <>
-                      <p className="mb-2">{TEXT.dragDropText[lang]}</p>
-                      <p className="text-blue-500 hover:text-blue-600">{TEXT.clickSelectText[lang]}</p>
-                      <p className="text-sm mt-2">{TEXT.multipleImagesText[lang]}</p>
-                    </>
-                  )}
+                  <p className="mb-2">{TEXT.dragDropText[lang]}</p>
+                  <p className="text-blue-500 hover:text-blue-600">{TEXT.clickSelectText[lang]}</p>
+                  <p className="text-sm mt-2">{TEXT.multipleImagesText[lang]}</p>
                 </div>
               </label>
             </div>
@@ -1139,11 +1229,19 @@ export default function EditSpotPage() {
               if (originalData && JSON.stringify(formData) !== JSON.stringify(originalData)) {
                 if (window.confirm(TEXT.confirmCancelText[lang])) {
                   setImagesToDelete([]);
-                  // router.push("/admin/spots"); // Removed as per edit hint
+                  setNewMainImageFile(null);
+                  setNewExtraImageFiles([]);
+                  setMainImagePreview("");
+                  setExtraImagePreviews([]);
+                  router.push("/admin/spots");
                 }
               } else {
                 setImagesToDelete([]);
-                // router.push("/admin/spots"); // Removed as per edit hint
+                setNewMainImageFile(null);
+                setNewExtraImageFiles([]);
+                setMainImagePreview("");
+                setExtraImagePreviews([]);
+                router.push("/admin/spots");
               }
             }}
             className="px-6 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
