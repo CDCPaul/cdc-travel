@@ -1,16 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStorage } from 'firebase-admin/storage';
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { ServiceAccount } from 'firebase-admin';
-import adminServiceAccount from '@/lib/cdc-home-fb4d1-firebase-adminsdk.json';
-
-// Firebase Admin 초기화 (이미 되어있으면 재사용)
-if (!getApps().length) {
-  initializeApp({
-    credential: cert(adminServiceAccount as ServiceAccount),
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  });
-}
+import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
 
 function extractStoragePath(url: string): string | null {
   // Firebase Storage URL
@@ -53,7 +43,9 @@ export async function POST(req: NextRequest) {
     console.log('서버에서 삭제 시도하는 filePath:', filePath); // 로그 추가
     if (!filePath) return NextResponse.json({ success: false, error: 'Invalid storage url' }, { status: 400 });
 
-    const bucket = getStorage().bucket();
+    // 함수 내부에서만 storage 초기화
+    const storage = getStorage(initializeFirebaseAdmin());
+    const bucket = storage.bucket();
     try {
       await bucket.file(filePath).delete();
       console.log('삭제 성공:', filePath);
