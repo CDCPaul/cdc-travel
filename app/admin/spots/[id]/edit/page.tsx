@@ -27,7 +27,7 @@ interface SpotFormData {
   duration: MultilingualField;
   price: { KRW: string; PHP: string; USD: string };
   bestTime: string[];
-  tags: string[];
+  tags: { ko: string; en: string }[];
   mapUrl: string;
   imageUrl: string;
   extraImages: string[];
@@ -515,29 +515,27 @@ export default function EditSpotPage() {
                   // Raw data from Firebase loaded
           
           // tags가 객체인 경우 배열로 변환
-          let tagsArray: string[] = [];
+          let tagsArray: { ko: string; en: string }[] = [];
           if (Array.isArray(data.tags)) {
-            // 배열인 경우 각 요소를 확인
             tagsArray = data.tags.map(tag => {
-              if (typeof tag === 'string') {
-                return tag;
-              } else if (tag && typeof tag === 'object' && 'ko' in tag) {
-                // 다국어 객체인 경우 한국어 값 사용
-                return tag.ko;
+              if (typeof tag === 'object' && tag !== null && 'ko' in tag && 'en' in tag) {
+                const t = tag as { ko: unknown; en: unknown };
+                return { ko: String(t.ko), en: String(t.en) };
+              } else if (typeof tag === 'string') {
+                return { ko: tag, en: tag };
               }
-              return String(tag);
+              return { ko: '', en: '' };
             });
           } else if (data.tags && typeof data.tags === 'object') {
-            // 객체를 배열로 변환 (Firebase에서 배열이 객체로 저장된 경우)
             const values = Object.values(data.tags);
             tagsArray = values.map(tag => {
-              if (typeof tag === 'string') {
-                return tag;
-              } else if (tag && typeof tag === 'object' && 'ko' in tag) {
-                // 다국어 객체인 경우 한국어 값 사용
-                return (tag as { ko: string }).ko;
+              if (typeof tag === 'object' && tag !== null && 'ko' in tag && 'en' in tag) {
+                const t = tag as { ko: unknown; en: unknown };
+                return { ko: String(t.ko), en: String(t.en) };
+              } else if (typeof tag === 'string') {
+                return { ko: tag, en: tag };
               }
-              return String(tag);
+              return { ko: '', en: '' };
             });
           }
           
@@ -1087,13 +1085,13 @@ export default function EditSpotPage() {
                 <PillButton
                   key={tag.ko}
                   type="button"
-                  selected={formData.tags.includes(tag.ko)}
+                  selected={formData.tags.some(t => t.ko === tag.ko && t.en === tag.en)}
                   onClick={() => {
                     setFormData(prev => ({
                       ...prev,
-                      tags: prev.tags.includes(tag.ko)
-                        ? prev.tags.filter(t => t !== tag.ko)
-                        : [...prev.tags, tag.ko]
+                      tags: prev.tags.some(t => t.ko === tag.ko && t.en === tag.en)
+                        ? prev.tags.filter(t => !(t.ko === tag.ko && t.en === tag.en))
+                        : [...prev.tags, tag]
                     }));
                   }}
                 >

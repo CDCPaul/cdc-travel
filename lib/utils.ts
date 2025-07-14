@@ -135,3 +135,25 @@ export async function uploadFileToServer(
     };
   }
 } 
+
+// 항공사명(ko, en) → 로고 파일명 매핑 (2자리 코드 기준)
+export const airlineLogoMap: Record<string, string> = {
+  '진에어': '/images/airline/LJ.png',
+  'Jin Air': '/images/airline/LJ.png',
+  '에어부산': '/images/airline/BX.png',
+  'Air Busan': '/images/airline/BX.png',
+  '제주항공': '/images/airline/7c.png',
+  'Jeju Air': '/images/airline/7c.png',
+  '대한항공': '/images/airline/KE.png',
+  'Korean Air': '/images/airline/KE.png',
+  '아시아나항공': '/images/airline/OZ.png',
+  'Asiana Airlines': '/images/airline/OZ.png',
+  '세부퍼시픽': '/images/airline/5J.png',
+  'Cebu Pacific': '/images/airline/5J.png',
+  '필리핀항공': '/images/airline/PR.png',
+  'Philippine Airlines': '/images/airline/PR.png',
+  '티웨이항공': '/images/airline/TW.png',
+  'Tway Air': '/images/airline/TW.png',
+  '에어서울': '/images/airline/RS.png',
+  'Air Seoul': '/images/airline/RS.png',
+}; 

@@ -161,8 +161,9 @@ export const TRAVEL_INFO_TEXTS = {
   }
 };
 
-export function safeLang(val: string | { ko: string; en: string }, lang: string): string {
-  if (typeof val === 'object' && val !== null) {
+export function safeLang(val: string | { ko: string; en: string } | undefined | null, lang: string): string {
+  if (val === undefined || val === null) return '';
+  if (typeof val === 'object') {
     return (val as Record<string, string>)[lang] || (val as Record<string, string>).ko || '';
   }
   return typeof val === 'string' ? val : '';
