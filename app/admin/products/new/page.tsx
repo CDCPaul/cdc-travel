@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, getDocs, query, orderBy, addDoc } from 'firebase/firestore';
-import { auth, storage, db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { useLanguage } from '../../../../components/LanguageContext';
+import { uploadFileToServer } from '@/lib/utils';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -59,7 +59,9 @@ const PRODUCTS_TEXTS = {
     save: "등록",
     cancel: "취소",
     saveSuccess: "상품이 성공적으로 등록되었습니다!",
-    saveFailed: "상품 등록에 실패했습니다."
+    saveFailed: "상품 등록에 실패했습니다.",
+    saving: "저장 중...",
+    uploadProgress: "이미지 업로드 중... ({progress}%)"
   },
   en: {
     loading: "Loading...",
@@ -98,7 +100,9 @@ const PRODUCTS_TEXTS = {
     save: "Add",
     cancel: "Cancel",
     saveSuccess: "Product added successfully!",
-    saveFailed: "Failed to add product."
+    saveFailed: "Failed to add product.",
+    saving: "Saving...",
+    uploadProgress: "Uploading images... ({progress}%)"
   }
 };
 
@@ -168,8 +172,13 @@ export default function NewProductPage() {
     notIncluded: [] as string[]
   });
 
-  const [uploadingCount, setUploadingCount] = useState(0);
+  // 이미지 업로드 관련 상태 (새 스팟 등록 페이지와 동일한 방식)
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [imageUploadError, setImageUploadError] = useState('');
+
   const [spots, setSpots] = useState<Spot[]>([]);
   const [availableIncludedItems, setAvailableIncludedItems] = useState<IncludeItem[]>([]);
   const [availableNotIncludedItems, setAvailableNotIncludedItems] = useState<NotIncludeItem[]>([]);
@@ -268,31 +277,29 @@ export default function NewProductPage() {
     }));
   };
 
-  // 포함/불포함 아이템 선택 토글
   const toggleIncluded = (id: string) => {
     setFormData(prev => ({
       ...prev,
-      included: prev.included.includes(id)
-        ? prev.included.filter(i => i !== id)
-        : [...prev.included, id],
+      included: prev.included.includes(id) 
+        ? prev.included.filter(item => item !== id)
+        : [...prev.included, id]
     }));
   };
+
   const toggleNotIncluded = (id: string) => {
     setFormData(prev => ({
       ...prev,
-      notIncluded: prev.notIncluded.includes(id)
-        ? prev.notIncluded.filter(i => i !== id)
-        : [...prev.notIncluded, id],
+      notIncluded: prev.notIncluded.includes(id) 
+        ? prev.notIncluded.filter(item => item !== id)
+        : [...prev.notIncluded, id]
     }));
   };
 
-  // 일정에 포함된 모든 스팟들 가져오기
   const getSpotsInSchedule = () => {
-    const spotIds = formData.schedule.flatMap(day => day.spots.map(spot => spot.spotId));
-    return spots.filter(spot => spotIds.includes(spot.id));
+    const allSpots = formData.schedule.flatMap(day => day.spots);
+    return spots.filter(spot => allSpots.some(s => s.spotId === spot.id));
   };
 
-  // 하이라이트 관련 함수들
   const addHighlight = (spot: Spot) => {
     setFormData(prev => ({
       ...prev,
@@ -310,56 +317,88 @@ export default function NewProductPage() {
     }));
   };
 
-  const handleImageUpload = async (file: File) => {
-    const storageRef = ref(storage, `products/${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
+  // 이미지 업로드 관련 함수들 (새 스팟 등록 페이지와 동일한 방식)
+  const createImagePreview = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        resolve(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
-  const handleMultiImageUpload = async (files: FileList | File[]) => {
-    setUploadingCount((prev) => prev + (files.length || 0));
+  const handleImageChange = async (files: FileList) => {
     setImageUploadError('');
-    try {
-      const urls: string[] = [];
-      for (const file of Array.from(files)) {
-        const url = await handleImageUpload(file);
-        urls.push(url);
-      }
-      setFormData(prev => ({ ...prev, imageUrls: [...prev.imageUrls, ...urls] }));
-    } catch {
-      setImageUploadError(texts.imageUploadError);
-    } finally {
-      setUploadingCount((prev) => prev - (files.length || 0));
-    }
+    const newFiles = Array.from(files);
+    
+    // 미리보기 생성
+    const previews = await Promise.all(newFiles.map(createImagePreview));
+    
+    setImageFiles(prev => [...prev, ...newFiles]);
+    setImagePreviews(prev => [...prev, ...previews]);
   };
 
-  const handleRemoveImage = (idx: number) => {
-    setFormData(prev => ({ ...prev, imageUrls: prev.imageUrls.filter((_, i) => i !== idx) }));
+  const removeImage = (index: number) => {
+    setImageFiles(prev => prev.filter((_, i) => i !== index));
+    setImagePreviews(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
   };
 
-  const handleDrop = async (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const files = e.dataTransfer.files;
     if (files.length > 0) {
-      await handleMultiImageUpload(files);
+      await handleImageChange(files);
     }
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      await handleMultiImageUpload(files);
+      await handleImageChange(files);
     }
+  };
+
+  // 이미지 업로드 함수 (새 스팟 등록 페이지와 동일한 방식)
+  const uploadImages = async (): Promise<string[]> => {
+    if (imageFiles.length === 0) return [];
+
+    const uploadPromises: Promise<string>[] = [];
+    const totalFiles = imageFiles.length;
+    let uploadedCount = 0;
+
+    imageFiles.forEach(file => {
+      uploadPromises.push(
+        uploadFileToServer(file, "products").then(result => {
+          uploadedCount++;
+          setUploadProgress((uploadedCount / totalFiles) * 100);
+          
+          if (!result.success || !result.url) {
+            throw new Error(result.error || 'Upload failed');
+          }
+          return result.url;
+        })
+      );
+    });
+
+    return await Promise.all(uploadPromises);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-            // Product form data prepared
+    
+    setIsSaving(true);
+    setUploadProgress(0);
+    setImageUploadError('');
+    
     try {
+      // 이미지 업로드
+      const uploadedUrls = await uploadImages();
+      
       const productData = {
         title: formData.title,
         description: formData.description,
@@ -367,20 +406,24 @@ export default function NewProductPage() {
         duration: formData.duration,
         country: formData.country,
         region: formData.region,
-        imageUrls: formData.imageUrls,
+        imageUrls: uploadedUrls,
         schedule: formData.schedule,
         highlights: formData.highlights,
         includedItems: formData.included.filter(item => item.trim() !== ''),
         notIncludedItems: formData.notIncluded.filter(item => item.trim() !== ''),
         createdAt: new Date()
       };
-              // Product data ready for save
+
       await addDoc(collection(db, 'products'), productData);
       alert(texts.saveSuccess);
       // router.push('/admin/products'); // Removed as per edit hint
     } catch (error) {
       console.error('[Product Submit] Error saving product:', error);
+      setImageUploadError(texts.imageUploadError);
       alert(texts.saveFailed);
+    } finally {
+      setIsSaving(false);
+      setUploadProgress(0);
     }
   };
 
@@ -574,7 +617,7 @@ export default function NewProductPage() {
             </div>
           </div>
 
-          {/* 이미지 업로드 */}
+          {/* 이미지 업로드 (새 스팟 등록 페이지와 동일한 방식) */}
           <div>
             <label className="block text-sm font-medium mb-2">{texts.formImageUpload}</label>
             <div
@@ -592,8 +635,8 @@ export default function NewProductPage() {
               />
               <label htmlFor="image-upload" className="cursor-pointer">
                 <div className="text-gray-600">
-                  {uploadingCount > 0 ? (
-                    <div>{texts.imageUploading} ({uploadingCount})</div>
+                  {isSaving && uploadProgress > 0 ? (
+                    <div>{texts.uploadProgress.replace('{progress}', Math.round(uploadProgress).toString())}</div>
                   ) : (
                     <div>{texts.dragDropImages}</div>
                   )}
@@ -606,12 +649,12 @@ export default function NewProductPage() {
             )}
 
             {/* 이미지 미리보기 */}
-            {formData.imageUrls.length > 0 && (
+            {imagePreviews.length > 0 && (
               <div className="mt-4 grid grid-cols-4 gap-4">
-                {formData.imageUrls.map((url, index) => (
+                {imagePreviews.map((preview, index) => (
                   <div key={index} className="relative">
                     <Image
-                      src={url}
+                      src={preview}
                       alt={`Product image ${index + 1}`}
                       width={200}
                       height={200}
@@ -619,7 +662,7 @@ export default function NewProductPage() {
                     />
                     <button
                       type="button"
-                      onClick={() => handleRemoveImage(index)}
+                      onClick={() => removeImage(index)}
                       className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm"
                     >
                       ×
@@ -805,9 +848,10 @@ export default function NewProductPage() {
           <div className="flex gap-4">
             <button
               type="submit"
-              className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              disabled={isSaving}
+              className="px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              {texts.save}
+              {isSaving ? texts.saving : texts.save}
             </button>
             <Link
               href="/admin/products"
