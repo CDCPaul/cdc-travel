@@ -9,6 +9,8 @@ import { auth, storage, db } from '@/lib/firebase';
 import { useLanguage } from '../../../../../components/LanguageContext';
 import Link from 'next/link';
 import Image from 'next/image';
+import { PillButton } from '@/components/ui/PillButton';
+import { useRouter } from 'next/navigation';
 
 interface Spot {
   id: string;
@@ -21,6 +23,16 @@ interface Spot {
 
 interface IncludeItem { id: string; ko: string; en: string; }
 interface NotIncludeItem { id: string; ko: string; en: string; }
+
+// 1. 타입 정의 추가
+interface FlightInfo {
+  airline: { ko: string; en: string };
+  flightNumber: string;
+  from: string;
+  to: string;
+  departTime: string;
+  arriveTime: string;
+}
 
 const PRODUCTS_TEXTS = {
   ko: {
@@ -62,7 +74,16 @@ const PRODUCTS_TEXTS = {
     saveSuccess: "상품이 성공적으로 수정되었습니다!",
     saveFailed: "상품 수정에 실패했습니다.",
     notFound: "상품을 찾을 수 없습니다.",
-    loadingProduct: "상품 정보를 불러오는 중..."
+    loadingProduct: "상품 정보를 불러오는 중...",
+    depInput: "출발 항공편 입력",
+    retInput: "리턴 항공편 입력",
+    comboInput: "항공편 조합 입력",
+    addCombo: "조합 추가",
+    comboGuide: "조합은 출발 항공편과 리턴 항공편의 조합으로 구성됩니다. 중복된 조합은 추가되지 않습니다.",
+    flightNo: "항공편명",
+    from: "출발지",
+    to: "도착지",
+    date: "날짜",
   },
   en: {
     loading: "Loading...",
@@ -103,7 +124,16 @@ const PRODUCTS_TEXTS = {
     saveSuccess: "Product updated successfully!",
     saveFailed: "Failed to update product.",
     notFound: "Product not found.",
-    loadingProduct: "Loading product information..."
+    loadingProduct: "Loading product information...",
+    depInput: "Departure Flight Input",
+    retInput: "Return Flight Input",
+    comboInput: "Flight Combo Input",
+    addCombo: "Add Combo",
+    comboGuide: "Combos consist of a combination of departure and return flights. Duplicate combos are not added.",
+    flightNo: "Flight Number",
+    from: "From",
+    to: "To",
+    date: "Date",
   }
 };
 
@@ -143,7 +173,87 @@ const REGION_OPTIONS = {
   ],
 };
 
+// FlightInputForm 컴포넌트 (상품등록페이지와 동일하게, 타입 명시, lang prop 지원)
+function FlightInputForm({ onAdd, lang = 'en' }: { onAdd: (flight: FlightInfo) => void; lang?: 'ko' | 'en' }) {
+  const airlineOptions = [
+    { ko: '진에어', en: 'Jin Air' },
+    { ko: '에어부산', en: 'Air Busan' },
+    { ko: '제주항공', en: 'Jeju Air' },
+    { ko: '대한항공', en: 'Korean Air' },
+    { ko: '아시아나항공', en: 'Asiana Airlines' },
+    { ko: '세부퍼시픽', en: 'Cebu Pacific' },
+    { ko: '필리핀항공', en: 'Philippine Airlines' },
+    { ko: '티웨이항공', en: 'Tway Air' },
+    { ko: '에어서울', en: 'Air Seoul' },
+  ];
+  const [airlineIdx, setAirlineIdx] = useState<number>(0);
+  const [flightNumber, setFlightNumber] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [date, setDate] = useState('');
+  const [hour, setHour] = useState('00');
+  const [minute, setMinute] = useState('00');
+  const [arriveDate, setArriveDate] = useState('');
+  const [arriveHour, setArriveHour] = useState('00');
+  const [arriveMinute, setArriveMinute] = useState('00');
+  const hourOptions = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'));
+  const minuteOptions = Array.from({ length: 12 }, (_, i) => (i * 5).toString().padStart(2, '0'));
+  const texts = PRODUCTS_TEXTS[lang];
+  return (
+    <div className="flex flex-wrap gap-2 mb-2 items-center">
+      <select value={airlineIdx} onChange={e => setAirlineIdx(Number(e.target.value))} className="p-2 border rounded min-w-[120px]">
+        {airlineOptions.map((opt, idx) => (
+          <option key={opt.en} value={idx}>{opt.en}</option>
+        ))}
+      </select>
+      <input type="text" placeholder={texts.flightNo} value={flightNumber} onChange={e => setFlightNumber(e.target.value)} className="p-2 border rounded min-w-[90px] max-w-[120px] flex-1" />
+      <input type="text" placeholder={texts.from} value={from} onChange={e => setFrom(e.target.value)} className="p-2 border rounded min-w-[70px] max-w-[90px] flex-1" />
+      <input type="text" placeholder={texts.to} value={to} onChange={e => setTo(e.target.value)} className="p-2 border rounded min-w-[70px] max-w-[90px] flex-1" />
+      {/* 출발 날짜/시간 */}
+      <div className="flex gap-1 items-center min-w-[220px]">
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} className="p-2 border rounded w-[110px]" placeholder={texts.date} />
+        <select value={hour} onChange={e => setHour(e.target.value)} className="p-2 border rounded w-[55px]">
+          {hourOptions.map(h => <option key={h} value={h}>{h}</option>)}
+        </select>
+        :
+        <select value={minute} onChange={e => setMinute(e.target.value)} className="p-2 border rounded w-[55px]">
+          {minuteOptions.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </div>
+      {/* 도착 날짜/시간 */}
+      <div className="flex gap-1 items-center min-w-[220px]">
+        <input type="date" value={arriveDate} onChange={e => setArriveDate(e.target.value)} className="p-2 border rounded w-[110px]" placeholder={texts.date} />
+        <select value={arriveHour} onChange={e => setArriveHour(e.target.value)} className="p-2 border rounded w-[55px]">
+          {hourOptions.map(h => <option key={h} value={h}>{h}</option>)}
+        </select>
+        :
+        <select value={arriveMinute} onChange={e => setArriveMinute(e.target.value)} className="p-2 border rounded w-[55px]">
+          {minuteOptions.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </div>
+      <button type="button" className="bg-blue-500 text-white rounded px-3 py-1 mt-1 min-w-[60px]" onClick={() => {
+        if (
+          flightNumber && from && to && date && hour && minute && arriveDate && arriveHour && arriveMinute
+        ) {
+          const departTime = `${date}T${hour}:${minute}`;
+          const arriveTime = `${arriveDate}T${arriveHour}:${arriveMinute}`;
+          onAdd({
+            airline: airlineOptions[airlineIdx],
+            flightNumber,
+            from,
+            to,
+            departTime,
+            arriveTime,
+          });
+          setFlightNumber(''); setFrom(''); setTo(''); setDate(''); setHour('00'); setMinute('00'); setArriveDate(''); setArriveHour('00'); setArriveMinute('00');
+        }
+      }}>{texts.addCombo}</button>
+    </div>
+  );
+}
+
 export default function EditProductPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [productLoading, setProductLoading] = useState(true);
   const params = useParams();
@@ -172,8 +282,23 @@ export default function EditProductPage() {
       spotName: { ko: string; en: string };
     }>,
     included: [''] as string[],
-    notIncluded: [''] as string[]
+    notIncluded: [''] as string[],
+    nights: 1,
+    days: 1,
+    flightInfo: {
+      airline: { ko: '', en: '' },
+      flightNumber: '',
+      departure: { from: '', to: '', departTime: '', arriveTime: '' },
+      return: { from: '', to: '', departTime: '', arriveTime: '' },
+    },
   });
+
+  // 2. 상태 추가
+  const [flightDepartures, setFlightDepartures] = useState<FlightInfo[]>([]);
+  const [flightReturns, setFlightReturns] = useState<FlightInfo[]>([]);
+  const [flightCombos, setFlightCombos] = useState<{ departure: FlightInfo; return: FlightInfo }[]>([]);
+  const [selectedDepIdx, setSelectedDepIdx] = useState<number>(0);
+  const [selectedRetIdx, setSelectedRetIdx] = useState<number>(0);
 
   const [uploadingCount, setUploadingCount] = useState(0);
   const [imageUploadError, setImageUploadError] = useState('');
@@ -181,6 +306,7 @@ export default function EditProductPage() {
   const [availableIncludedItems, setAvailableIncludedItems] = useState<IncludeItem[]>([]);
   const [availableNotIncludedItems, setAvailableNotIncludedItems] = useState<NotIncludeItem[]>([]);
 
+  // fetchProduct에서 불러오기
   const fetchProduct = useCallback(async () => {
     try {
       setProductLoading(true);
@@ -202,8 +328,19 @@ export default function EditProductPage() {
           }],
           highlights: productData.highlights || [],
           included: productData.includedItems || [''],
-          notIncluded: productData.notIncludedItems || ['']
+          notIncluded: productData.notIncludedItems || [''],
+          nights: productData.nights || 1,
+          days: productData.days || 1,
+          flightInfo: productData.flightInfo || {
+            airline: { ko: '', en: '' },
+            flightNumber: '',
+            departure: { from: '', to: '', departTime: '', arriveTime: '' },
+            return: { from: '', to: '', departTime: '', arriveTime: '' },
+          },
         });
+        setFlightDepartures(productData.flightDepartures || []);
+        setFlightReturns(productData.flightReturns || []);
+        setFlightCombos(productData.flightCombos || []);
       } else {
         alert(texts.notFound);
         // router.push('/admin/products'); // Removed useRouter
@@ -404,6 +541,7 @@ export default function EditProductPage() {
     }
   };
 
+  // handleSubmit에서 저장
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
             // Product form data prepared
@@ -420,12 +558,17 @@ export default function EditProductPage() {
         highlights: formData.highlights,
         includedItems: formData.included.filter(item => item.trim() !== ''),
         notIncludedItems: formData.notIncluded.filter(item => item.trim() !== ''),
+        nights: formData.nights,
+        days: formData.days,
+        flightDepartures,
+        flightReturns,
+        flightCombos,
         updatedAt: new Date()
       };
               // Product data ready for update
       await updateDoc(doc(db, 'products', params.id as string), productData);
       alert(texts.saveSuccess);
-      // router.push('/admin/products'); // Removed useRouter
+      router.push('/admin/products');
     } catch (error) {
       console.error('[Product Update] Error updating product:', error);
       alert(texts.saveFailed);
@@ -590,7 +733,7 @@ export default function EditProductPage() {
           {/* 기간 선택 */}
           <div>
             <label className="block text-sm font-medium mb-2">{texts.formDuration}</label>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-xs text-gray-600 mb-1">{texts.startDate}</label>
                 <input
@@ -617,6 +760,217 @@ export default function EditProductPage() {
                   required
                 />
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">박 (Nights)</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={formData.nights || ''}
+                  onChange={e => setFormData(prev => ({ ...prev, nights: Number(e.target.value) }))}
+                  className="w-full p-2 border rounded"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">일 (Days)</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={formData.days || ''}
+                  onChange={e => setFormData(prev => ({ ...prev, days: Number(e.target.value) }))}
+                  className="w-full p-2 border rounded"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 항공정보 입력 */}
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h2 className="text-lg font-semibold mb-4">항공 정보 (Flight Info)</h2>
+          {/* 기존 flightInfo 관련 코드는 주석처리 */}
+          {/*
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">항공사 (한국어)</label>
+              <input
+                type="text"
+                value={formData.flightInfo.airline.ko}
+                onChange={e => setFormData(prev => ({ ...prev, flightInfo: { ...prev.flightInfo, airline: { ...prev.flightInfo.airline, ko: e.target.value } } }))}
+                className="w-full p-2 border rounded"
+                placeholder="대한항공"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Airline (English)</label>
+              <input
+                type="text"
+                value={formData.flightInfo.airline.en}
+                onChange={e => setFormData(prev => ({ ...prev, flightInfo: { ...prev.flightInfo, airline: { ...prev.flightInfo.airline, en: e.target.value } } }))}
+                className="w-full p-2 border rounded"
+                placeholder="Korean Air"
+              />
+            </div>
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">항공편명 (Flight Number)</label>
+            <input
+              type="text"
+              value={formData.flightInfo.flightNumber}
+              onChange={e => setFormData(prev => ({ ...prev, flightInfo: { ...prev.flightInfo, flightNumber: e.target.value } }))}
+              className="w-full p-2 border rounded"
+              placeholder="KE123"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">출발편 - 출발지</label>
+              <input
+                type="text"
+                value={formData.flightInfo.departure.from}
+                onChange={e => setFormData(prev => ({ ...prev, flightInfo: { ...prev.flightInfo, departure: { ...prev.flightInfo.departure, from: e.target.value } } }))}
+                className="w-full p-2 border rounded"
+                placeholder="ICN"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">출발편 - 도착지</label>
+              <input
+                type="text"
+                value={formData.flightInfo.departure.to}
+                onChange={e => setFormData(prev => ({ ...prev, flightInfo: { ...prev.flightInfo, departure: { ...prev.flightInfo.departure, to: e.target.value } } }))}
+                className="w-full p-2 border rounded"
+                placeholder="CEB"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">출발편 - 출발시간</label>
+              <input
+                type="datetime-local"
+                value={formData.flightInfo.departure.departTime}
+                onChange={e => setFormData(prev => ({ ...prev, flightInfo: { ...prev.flightInfo, departure: { ...prev.flightInfo.departure, departTime: e.target.value } } }))}
+                className="w-full p-2 border rounded"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">출발편 - 도착시간</label>
+              <input
+                type="datetime-local"
+                value={formData.flightInfo.departure.arriveTime}
+                onChange={e => setFormData(prev => ({ ...prev, flightInfo: { ...prev.flightInfo, departure: { ...prev.flightInfo.departure, arriveTime: e.target.value } } }))}
+                className="w-full p-2 border rounded"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">리턴편 - 출발지</label>
+              <input
+                type="text"
+                value={formData.flightInfo.return.from}
+                onChange={e => setFormData(prev => ({ ...prev, flightInfo: { ...prev.flightInfo, return: { ...prev.flightInfo.return, from: e.target.value } } }))}
+                className="w-full p-2 border rounded"
+                placeholder="CEB"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">리턴편 - 도착지</label>
+              <input
+                type="text"
+                value={formData.flightInfo.return.to}
+                onChange={e => setFormData(prev => ({ ...prev, flightInfo: { ...prev.flightInfo, return: { ...prev.flightInfo.return, to: e.target.value } } }))}
+                className="w-full p-2 border rounded"
+                placeholder="ICN"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">리턴편 - 출발시간</label>
+              <input
+                type="datetime-local"
+                value={formData.flightInfo.return.departTime}
+                onChange={e => setFormData(prev => ({ ...prev, flightInfo: { ...prev.flightInfo, return: { ...prev.flightInfo.return, departTime: e.target.value } } }))}
+                className="w-full p-2 border rounded"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">리턴편 - 도착시간</label>
+              <input
+                type="datetime-local"
+                value={formData.flightInfo.return.arriveTime}
+                onChange={e => setFormData(prev => ({ ...prev, flightInfo: { ...prev.flightInfo, return: { ...prev.flightInfo.return, arriveTime: e.target.value } } }))}
+                className="w-full p-2 border rounded"
+              />
+            </div>
+          </div>
+          */}
+          {/* 항공편 입력/조합 UI (등록페이지와 동일하게, 다국어 지원) */}
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h2 className="text-lg font-bold mb-2">{texts.depInput}</h2>
+            <FlightInputForm onAdd={flight => setFlightDepartures(prev => [...prev, flight])} lang={lang} />
+            <div className="flex flex-wrap gap-2 mt-2">
+              {flightDepartures.map((flight, idx) => (
+                <PillButton key={idx} selected={selectedDepIdx === idx} onClick={() => setSelectedDepIdx(idx)}>
+                  {flight.airline[lang]} {flight.flightNumber} {flight.from}-{flight.to} {flight.departTime}-{flight.arriveTime}
+                </PillButton>
+              ))}
+            </div>
+            <h2 className="text-lg font-bold mb-2 mt-6">{texts.retInput}</h2>
+            <FlightInputForm onAdd={flight => setFlightReturns(prev => [...prev, flight])} lang={lang} />
+            <div className="flex flex-wrap gap-2 mt-2">
+              {flightReturns.map((flight, idx) => (
+                <PillButton key={idx} selected={selectedRetIdx === idx} onClick={() => setSelectedRetIdx(idx)}>
+                  {flight.airline[lang]} {flight.flightNumber} {flight.from}-{flight.to} {flight.departTime}-{flight.arriveTime}
+                </PillButton>
+              ))}
+            </div>
+            <div className="mt-8">
+              <h2 className="text-lg font-bold mb-2">{texts.comboInput}</h2>
+              <div className="flex items-center gap-2 mb-4">
+                <select value={selectedDepIdx} onChange={e => setSelectedDepIdx(Number(e.target.value))} className="p-2 border rounded">
+                  {flightDepartures.map((flight, idx) => (
+                    <option key={idx} value={idx}>
+                      {flight.airline[lang]} {flight.flightNumber} {flight.from}-{flight.to} {flight.departTime}
+                    </option>
+                  ))}
+                </select>
+                <span>→</span>
+                <select value={selectedRetIdx} onChange={e => setSelectedRetIdx(Number(e.target.value))} className="p-2 border rounded">
+                  {flightReturns.map((flight, idx) => (
+                    <option key={idx} value={idx}>
+                      {flight.airline[lang]} {flight.flightNumber} {flight.from}-{flight.to} {flight.departTime}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="bg-blue-500 text-white rounded px-3 py-1"
+                  onClick={() => {
+                    const dep = flightDepartures[selectedDepIdx];
+                    const ret = flightReturns[selectedRetIdx];
+                    if (!dep || !ret) return;
+                    if (flightCombos.some(c => c.departure === dep && c.return === ret)) return;
+                    setFlightCombos(prev => [...prev, { departure: dep, return: ret }]);
+                  }}
+                >{texts.addCombo}</button>
+              </div>
+              <div className="min-h-[60px] border rounded p-2 flex flex-col gap-2 bg-gray-50">
+                {flightCombos.map((combo, idx) => (
+                  <div key={idx} className="flex items-center gap-2 bg-white rounded shadow p-2">
+                    <span className="font-semibold">[{combo.departure.airline[lang]} {combo.departure.flightNumber}]</span>
+                    <span>→</span>
+                    <span className="font-semibold">[{combo.return.airline[lang]} {combo.return.flightNumber}]</span>
+                    <button type="button" className="ml-2 text-red-500" onClick={() => setFlightCombos(prev => prev.filter((_, i) => i !== idx))}>{texts.delete}</button>
+                  </div>
+                ))}
+              </div>
+              <div className="text-xs text-gray-500 mt-2">{texts.comboGuide}</div>
             </div>
           </div>
         </div>

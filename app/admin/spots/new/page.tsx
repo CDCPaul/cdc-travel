@@ -44,7 +44,7 @@ interface SpotFormData {
   duration: MultilingualField;
   price: { KRW: string; PHP: string; USD: string };
   bestTime: string[];
-  tags: string[];
+  tags: { ko: string; en: string }[];
   mapUrl: string;
   imageUrl: string;
   extraImages: string[];
@@ -448,13 +448,12 @@ export default function NewSpotPage() {
     }
   };
 
-  const addTag = (tag: string): void => {
-    if (!formData.tags.includes(tag)) {
+  const addTag = (tag: { ko: string; en: string }): void => {
+    if (!formData.tags.some((t: { ko: string; en: string }) => t.ko === tag.ko && t.en === tag.en)) {
       setFormData(prev => ({
         ...prev,
-        tags: [...prev.tags, tag]
+        tags: [...(prev.tags as { ko: string; en: string }[]), tag]
       }));
-      // 태그 선택 시 에러 상태 해제
       setValidationErrors(prev => ({
         ...prev,
         tags: false
@@ -462,10 +461,10 @@ export default function NewSpotPage() {
     }
   };
 
-  const removeTag = (tag: string): void => {
+  const removeTag = (tag: { ko: string; en: string }): void => {
     setFormData(prev => ({
       ...prev,
-      tags: prev.tags.filter(t => t !== tag)
+      tags: (prev.tags as { ko: string; en: string }[]).filter(t => !(t.ko === tag.ko && t.en === tag.en))
     }));
   };
 
@@ -1209,12 +1208,12 @@ export default function NewSpotPage() {
               {TAG_OPTIONS.map((tag) => (
                 <PillButton
                   key={tag[lang]}
-                  selected={formData.tags.includes(tag[lang])}
+                  selected={formData.tags.some(t => t.ko === tag.ko && t.en === tag.en)}
                   onClick={() => {
-                    if (formData.tags.includes(tag[lang])) {
-                      removeTag(tag[lang]);
+                    if (formData.tags.some(t => t.ko === tag.ko && t.en === tag.en)) {
+                      removeTag(tag);
                     } else {
-                      addTag(tag[lang]);
+                      addTag(tag);
                     }
                   }}
                 >
