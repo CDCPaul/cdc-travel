@@ -51,6 +51,7 @@ interface SpotFormData {
   extraImages: string[];
   country: { ko: string; en: string }; // 추가된 필드
   coordinates?: { lat: number; lng: number }; // 위도/경도 추가
+  isPublic: boolean; // 공개 여부 추가
 }
 
 interface TypeOption {
@@ -120,6 +121,11 @@ const TEXT = {
   galleryClick: { ko: "클릭하여 선택하세요", en: "Click to select" },
   galleryMulti: { ko: "(여러 장 선택 가능)", en: "(Multiple selection allowed)" },
   imageClick: { ko: "클릭하여 선택하세요", en: "Click to select" },
+  isPublic: { ko: "공개 여부", en: "Public Status" },
+  public: { ko: "공개", en: "Public" },
+  private: { ko: "비공개", en: "Private" },
+  publicDescription: { ko: "공개로 설정하면 여행정보 페이지에서 보입니다.", en: "When set to public, it will be visible on the travel info page." },
+  privateDescription: { ko: "비공개로 설정하면 여행정보 페이지에서 숨겨집니다.", en: "When set to private, it will be hidden from the travel info page." },
 };
 
 // 타입 옵션
@@ -297,6 +303,7 @@ export default function NewSpotPage() {
     extraImages: [],
     country: { ko: "", en: "" }, // 추가된 상태
     coordinates: undefined, // 좌표 필드 추가
+    isPublic: true, // 공개 여부 (기본값: 공개)
   });
 
   // 이미지 업로드 관련 상태
@@ -1406,6 +1413,38 @@ export default function NewSpotPage() {
               placeholder="Google Maps URL"
               className="w-full p-2 border rounded"
             />
+          </div>
+
+          {/* 공개 여부 */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">{TEXT.isPublic[lang]}</label>
+            <div className="flex gap-4">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="isPublic"
+                  value="true"
+                  checked={formData.isPublic === true}
+                  onChange={(e) => setFormData(prev => ({ ...prev, isPublic: e.target.value === 'true' }))}
+                  className="mr-2"
+                />
+                <span className="text-sm">{TEXT.public[lang]}</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="isPublic"
+                  value="false"
+                  checked={formData.isPublic === false}
+                  onChange={(e) => setFormData(prev => ({ ...prev, isPublic: e.target.value === 'true' }))}
+                  className="mr-2"
+                />
+                <span className="text-sm">{TEXT.private[lang]}</span>
+              </label>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {formData.isPublic ? TEXT.publicDescription[lang] : TEXT.privateDescription[lang]}
+            </p>
           </div>
         </div>
 
