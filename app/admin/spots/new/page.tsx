@@ -10,6 +10,7 @@ import { db } from "@/lib/firebase";
 import { PillButton } from "@/components/ui/PillButton";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { loadGoogleMapsAPI } from "@/lib/google-maps";
 // import Script from "next/script"; // 완전히 제거
 
 // Google Places API 타입 정의
@@ -49,6 +50,7 @@ interface SpotFormData {
   imageUrl: string;
   extraImages: string[];
   country: { ko: string; en: string }; // 추가된 필드
+  coordinates?: { lat: number; lng: number }; // 위도/경도 추가
 }
 
 interface TypeOption {
@@ -279,9 +281,6 @@ export default function NewSpotPage() {
   const { lang } = useLanguage();
   const router = useRouter();
   
-  // Google Maps API 키
-  const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
-  
   // 폼 상태
   const [formData, setFormData] = useState<SpotFormData>({
     name: { ko: "", en: "", slug: "" },
@@ -297,6 +296,7 @@ export default function NewSpotPage() {
     imageUrl: "",
     extraImages: [],
     country: { ko: "", en: "" }, // 추가된 상태
+    coordinates: undefined, // 좌표 필드 추가
   });
 
   // 이미지 업로드 관련 상태
@@ -336,47 +336,67 @@ export default function NewSpotPage() {
   // Google Maps API 관련 상태
   const [isGoogleMapsLoaded, setIsGoogleMapsLoaded] = useState(false);
 
-  // Google Maps API 동적 로드 (중복 load 이벤트 등록 방지)
+  // Google Maps API 로드
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    function handleReady() {
-      if (window.google && window.google.maps && window.google.maps.places) {
+    const loadAPI = async () => {
+      try {
+        await loadGoogleMapsAPI();
         setIsGoogleMapsLoaded(true);
+      } catch (error) {
+        console.error('Failed to load Google Maps API:', error);
       }
-    }
+    };
 
-    // 이미 완전히 로드된 경우
-    if (window.google && window.google.maps && window.google.maps.places) {
-      setIsGoogleMapsLoaded(true);
-      return;
-    }
-
-    // 이미 스크립트가 추가된 경우
-    const existingScript = document.getElementById('google-maps-script');
-    if (existingScript) {
-      // load 이벤트 중복 등록 방지
-      existingScript.removeEventListener('load', handleReady);
-      existingScript.addEventListener('load', handleReady);
-      // 이미 로드된 상태라면 바로 실행
-      if (window.google && window.google.maps && window.google.maps.places) {
-        setIsGoogleMapsLoaded(true);
-      }
-      return;
-    }
-
-    // 스크립트가 없으면 추가
-    const script = document.createElement('script');
-    script.id = 'google-maps-script';
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`;
-    script.async = true;
-    script.defer = true;
-    script.setAttribute('loading', 'async');
-    script.onload = handleReady;
-    document.body.appendChild(script);
-  }, [GOOGLE_MAPS_API_KEY]);
+    loadAPI();
+  }, []);
   const [addressSearchResults, setAddressSearchResults] = useState<GooglePlaceResult[]>([]);
   const [showAddressModal, setShowAddressModal] = useState(false);
+
+  // 주소 검색 기능
+  const searchAddress = async (query: string) => {
+    if (!isGoogleMapsLoaded || !query.trim()) {
+      setAddressSearchResults([]);
+      return;
+    }
+
+    try {
+      const service = new window.google.maps.places.AutocompleteService();
+      const results = await service.getPlacePredictions({
+        input: query,
+        componentRestrictions: { country: ['kr', 'ph', 'us'] }
+      });
+
+      if (results.predictions) {
+        const places = await Promise.all(
+          results.predictions.slice(0, 5).map(async (prediction) => {
+            const geocoder = new window.google.maps.Geocoder();
+            const geocodeResult = await geocoder.geocode({ placeId: prediction.place_id });
+            if (geocodeResult.results && geocodeResult.results[0]) {
+              const place = geocodeResult.results[0];
+              return {
+                formatted_address: place.formatted_address,
+                address_components: place.address_components,
+                geometry: place.geometry ? {
+                  location: {
+                    lat: place.geometry.location.lat(),
+                    lng: place.geometry.location.lng()
+                  }
+                } : undefined
+              } as GooglePlaceResult;
+            }
+            return null;
+          })
+        );
+
+        setAddressSearchResults(places.filter(Boolean) as GooglePlaceResult[]);
+      }
+    } catch (error) {
+      console.error('Address search error:', error);
+      setAddressSearchResults([]);
+    }
+  };
 
 
 
@@ -414,7 +434,12 @@ export default function NewSpotPage() {
           ...prev.address,
           ko: formattedAddress,
           slug: formattedAddress
-        }
+        },
+        // 좌표 정보 추가
+        coordinates: place.geometry?.location ? {
+          lat: place.geometry.location.lat,
+          lng: place.geometry.location.lng
+        } : undefined
       }));
 
       // 주소 컴포넌트에서 지역 추출
@@ -654,6 +679,7 @@ export default function NewSpotPage() {
         country: country ? { ko: country.ko, en: COUNTRY_OPTIONS.find(opt => opt.ko === country.ko)?.code || '' } : { ko: '', en: '' },
         imageUrl: imageUrls.imageUrl,
         extraImages: imageUrls.extraImages,
+        coordinates: formData.coordinates, // 좌표 정보 포함
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       };
@@ -672,8 +698,7 @@ export default function NewSpotPage() {
 
   // 지도 선택 적용 (address.ko → address.en 자동 번역)
   const applyMapSelection = async () => {
-            // Apply button clicked
-    
+    // Apply button clicked
     if (tempPlace) {
       setFormData(prev => ({
         ...prev,
@@ -687,7 +712,11 @@ export default function NewSpotPage() {
           en: tempPlace.regionEn || tempPlace.region,
           slug: tempPlace.region
         },
-        mapUrl: `https://maps.google.com/?q=${tempPlace.address}`
+        mapUrl: `https://maps.google.com/?q=${tempPlace.address}`,
+        coordinates: {
+          lat: tempPlace.lat,
+          lng: tempPlace.lng
+        }
       }));
       // 주소 선택 시 에러 상태 해제
       setValidationErrors(prev => ({
@@ -949,13 +978,13 @@ export default function NewSpotPage() {
           <div className="mb-4">
             <label className="block text-sm font-medium mb-2">{TEXT.address[lang]}</label>
             <div className="grid grid-cols-2 gap-4">
-              <div>
+              <div className="relative">
                 <input
                   type="text"
                   value={formData.address.ko}
                   onChange={(e) => handleInputChange('address', 'ko', e.target.value)}
                   placeholder={TEXT.addressKo[lang]}
-                  className={`w-full p-2 border rounded ${validationErrors.address.ko ? 'border-red-500' : ''}`}
+                  className={`w-full p-2 border rounded pr-20 ${validationErrors.address.ko ? 'border-red-500' : ''}`}
                   required
                 />
               </div>
@@ -980,6 +1009,50 @@ export default function NewSpotPage() {
             {(validationErrors.address.ko || validationErrors.address.en) && (
               <p className="text-red-500 text-sm mt-1">주소를 모든 언어로 입력해주세요.</p>
             )}
+          </div>
+
+          {/* 좌표 정보 */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">좌표 정보</label>
+            <div className="bg-gray-50 p-3 rounded border">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">위도 (Latitude)</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={formData.coordinates?.lat || ''}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      coordinates: {
+                        lat: parseFloat(e.target.value) || 0,
+                        lng: prev.coordinates?.lng || 0
+                      }
+                    }))}
+                    className="w-full p-2 border rounded bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">경도 (Longitude)</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={formData.coordinates?.lng || ''}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      coordinates: {
+                        lat: prev.coordinates?.lat || 0,
+                        lng: parseFloat(e.target.value) || 0
+                      }
+                    }))}
+                    className="w-full p-2 border rounded bg-white"
+                  />
+                </div>
+              </div>
+              <div className="mt-2 text-xs text-gray-500">
+                Google Maps에서 자동으로 가져온 좌표입니다. 필요시 수동으로 수정할 수 있습니다.
+              </div>
+            </div>
           </div>
 
           {/* 국가 */}
@@ -1379,12 +1452,12 @@ export default function NewSpotPage() {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">{TEXT.mapModalTitle[lang]}</h3>
+              <h3 className="text-lg font-semibold">주소 검색</h3>
               <button
                 onClick={() => setShowAddressModal(false)}
                 className="text-gray-500 hover:text-gray-700"
               >
-                {TEXT.mapModalClose[lang]}
+                ✕
               </button>
             </div>
             
@@ -1392,8 +1465,9 @@ export default function NewSpotPage() {
               <input
                 ref={inputRef}
                 type="text"
-                placeholder={TEXT.mapModalSearchPlaceholder[lang]}
+                placeholder="주소를 검색하세요..."
                 className="w-full p-2 border rounded"
+                onChange={(e) => searchAddress(e.target.value)}
                 autoFocus
               />
             </div>
@@ -1420,7 +1494,7 @@ export default function NewSpotPage() {
                 </div>
               ) : (
                 <div className="text-center py-4">
-                  <p className="text-gray-500">{TEXT.mapModalNoResult[lang]}</p>
+                  <p className="text-gray-500">검색 결과가 없습니다.</p>
                 </div>
               )}
             </div>
@@ -1430,7 +1504,7 @@ export default function NewSpotPage() {
                 onClick={() => setShowAddressModal(false)}
                 className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
               >
-                {TEXT.mapModalCancel[lang]}
+                취소
               </button>
             </div>
           </div>
