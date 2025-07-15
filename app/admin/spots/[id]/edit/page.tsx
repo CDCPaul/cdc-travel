@@ -37,6 +37,7 @@ interface SpotFormData {
   extraImages: string[];
   country: { ko: string; en: string };
   coordinates?: { lat: number; lng: number }; // 위도/경도 추가
+  isPublic: boolean; // 공개 여부 추가
 }
 
 // 타입 옵션
@@ -229,6 +230,12 @@ const TEXT = {
   regionRequired: { ko: '지역을 선택해주세요.', en: 'Please select a region.' },
   selectCountryFirst: { ko: '먼저 국가를 선택해주세요.', en: 'Please select a country first.' },
   validationFailed: { ko: '다음 필수 항목을 입력해주세요:', en: 'Please fill in the following required fields:' },
+  // 공개 여부 관련
+  isPublic: { ko: "공개 여부", en: "Public Status" },
+  public: { ko: "공개", en: "Public" },
+  private: { ko: "비공개", en: "Private" },
+  publicDescription: { ko: "공개로 설정하면 여행정보 페이지에서 보입니다.", en: "When set to public, it will be visible on the travel info page." },
+  privateDescription: { ko: "비공개로 설정하면 여행정보 페이지에서 숨겨집니다.", en: "When set to private, it will be hidden from the travel info page." },
 };
 
 // Firebase Storage 업로드 함수
@@ -308,6 +315,7 @@ export default function EditSpotPage() {
     imageUrl: "",
     extraImages: [],
     country: { ko: "", en: "" },
+    isPublic: true, // 공개 여부 (기본값: 공개)
   });
 
   // 검증 오류 상태
@@ -680,6 +688,7 @@ export default function EditSpotPage() {
             extraImages: Array.isArray(data.extraImages) ? data.extraImages : [],
             country: data.country || { ko: "", en: "" },
             coordinates: data.coordinates || undefined, // 좌표 정보 추가
+            isPublic: data.isPublic !== undefined ? data.isPublic : true, // 공개 여부 (기본값: 공개)
           };
           
           setFormData(spotFormData);
@@ -768,6 +777,7 @@ export default function EditSpotPage() {
         extraImages: finalExtraImages,
         country: country ? { ko: country.ko, en: COUNTRY_OPTIONS.find(opt => opt.ko === country.ko)?.code || '' } : { ko: '', en: '' },
         coordinates: formData.coordinates, // 좌표 정보 포함
+        isPublic: formData.isPublic, // 공개 여부 포함
         updatedAt: Timestamp.now(),
       };
       
@@ -1453,6 +1463,38 @@ export default function EditSpotPage() {
                 Google Maps에서 자동으로 가져온 좌표입니다. 필요시 수동으로 수정할 수 있습니다.
               </div>
             </div>
+          </div>
+
+          {/* 공개 여부 */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">{TEXT.isPublic[lang]}</label>
+            <div className="flex gap-4">
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="isPublic"
+                  value="true"
+                  checked={formData.isPublic === true}
+                  onChange={(e) => setFormData(prev => ({ ...prev, isPublic: e.target.value === 'true' }))}
+                  className="mr-2"
+                />
+                <span className="text-sm">{TEXT.public[lang]}</span>
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="radio"
+                  name="isPublic"
+                  value="false"
+                  checked={formData.isPublic === false}
+                  onChange={(e) => setFormData(prev => ({ ...prev, isPublic: e.target.value === 'true' }))}
+                  className="mr-2"
+                />
+                <span className="text-sm">{TEXT.private[lang]}</span>
+              </label>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {formData.isPublic ? TEXT.publicDescription[lang] : TEXT.privateDescription[lang]}
+            </p>
           </div>
         </div>
 

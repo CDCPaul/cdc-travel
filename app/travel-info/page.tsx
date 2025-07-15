@@ -26,6 +26,7 @@ interface TravelInfo {
   extraImages?: string[];
   price?: string | { KRW?: string; PHP?: string; USD?: string } | { ko: string; en: string };
   duration?: string | { ko: string; en: string };
+  isPublic?: boolean; // 공개 여부 추가
 }
 
 const COUNTRIES = [
@@ -133,7 +134,15 @@ export default function TravelInfoPage() {
     fetchTravelInfos();
   }, []);
 
-  const filteredByCountry = useMemo(() => country === 'ALL' ? travelInfos : travelInfos.filter(s => {
+  // 공개된 스팟만 필터링
+  const publicSpots = useMemo(() => {
+    return travelInfos.filter(spot => {
+      // isPublic이 undefined이거나 true인 경우 공개로 간주
+      return spot.isPublic !== false;
+    });
+  }, [travelInfos]);
+
+  const filteredByCountry = useMemo(() => country === 'ALL' ? publicSpots : publicSpots.filter(s => {
     if (!s.country) return false;
     if (typeof s.country === 'object') {
       return (
@@ -142,7 +151,7 @@ export default function TravelInfoPage() {
       );
     }
     return String(s.country).toLowerCase() === country.toLowerCase();
-  }), [travelInfos, country]);
+  }), [publicSpots, country]);
   const filteredByRegion = useMemo(() => region === 'ALL' ? filteredByCountry : filteredByCountry.filter(s => {
     if (!s.region) return false;
     if (typeof s.region === 'object') {
