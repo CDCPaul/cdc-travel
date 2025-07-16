@@ -9,6 +9,7 @@ import { useLanguage } from "@/components/LanguageContext";
 import { db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { safeLang } from "@/lib/types";
+import { formatDate } from "@/lib/utils";
 import { Swiper, SwiperSlide } from "swiper/react";
 import "swiper/css";
 import { Pagination } from "swiper/modules";
@@ -266,8 +267,8 @@ export default function TravelInfoDetailPage() {
             {TEXT.createdAt[lang]}: {
               info.createdAt ? 
                 typeof info.createdAt === 'object' && 'seconds' in info.createdAt ?
-                  new Date((info.createdAt as { seconds: number; nanoseconds: number }).seconds * 1000).toLocaleDateString() :
-                  new Date(info.createdAt as string | Date).toLocaleDateString()
+                  formatDate(new Date((info.createdAt as { seconds: number; nanoseconds: number }).seconds * 1000), 'YYYY-MM-DD') :
+                  formatDate(new Date(info.createdAt as string | Date), 'YYYY-MM-DD')
                 : 'N/A'
             }
           </div>

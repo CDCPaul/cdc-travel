@@ -98,18 +98,32 @@ export function formatRelativeTime(
   return formatDate(dateObj, 'YYYY-MM-DD');
 } 
 
+import { ImageUsage } from '@/lib/image-optimizer';
+
 /**
  * 서버 사이드를 통한 Firebase Storage 업로드
  * CORS 문제를 우회하기 위해 서버 API를 통해 업로드
  */
 export async function uploadFileToServer(
   file: File,
-  folder: string = 'uploads'
-): Promise<{ success: boolean; url?: string; fileName?: string; error?: string }> {
+  folder: string = 'uploads',
+  optimize: boolean = true,
+  usage?: ImageUsage
+): Promise<{ 
+  success: boolean; 
+  url?: string; 
+  fileName?: string; 
+  error?: string;
+  optimized?: boolean;
+}> {
   try {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('folder', folder);
+    formData.append('optimize', optimize.toString());
+    if (usage) {
+      formData.append('usage', usage);
+    }
 
     const response = await fetch('/api/upload', {
       method: 'POST',
@@ -126,6 +140,7 @@ export async function uploadFileToServer(
       success: true,
       url: result.url,
       fileName: result.fileName,
+      optimized: result.optimized,
     };
   } catch (error) {
     console.error('Upload error:', error);

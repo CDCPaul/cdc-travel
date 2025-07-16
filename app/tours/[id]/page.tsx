@@ -1113,14 +1113,18 @@ export default function TourDetailPage() {
             </div>
             <div className="bg-gray-50 p-4 rounded-lg flex flex-col items-center justify-center min-w-[160px] break-keep">
               <h3 className="font-semibold text-gray-700 mb-1">{texts.period}</h3>
-              <p className="text-lg whitespace-nowrap">
-                {product.duration?.startDate && product.duration?.endDate
-                  ? `${product.duration.startDate} ~ ${product.duration.endDate}`
-                  : ''}
-                {product.nights && product.days && (
-                  <span className="ml-2 text-gray-500">{getNightsDaysText(product.nights, product.days, lang)}</span>
+              <div className="text-center">
+                {product.duration?.startDate && product.duration?.endDate && (
+                  <p className="text-lg font-medium">
+                    {product.duration.startDate} ~ {product.duration.endDate}
+                  </p>
                 )}
-              </p>
+                {product.nights && product.days && (
+                  <p className="text-sm text-gray-500 mt-1">
+                    {getNightsDaysText(product.nights, product.days, lang)}
+                  </p>
+                )}
+              </div>
             </div>
             <div className="bg-gray-50 p-4 rounded-lg flex flex-col items-center justify-center">
               <h3 className="font-semibold text-gray-700 mb-1">{texts.region}</h3>

@@ -4,12 +4,11 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useLanguage } from "../../../../components/LanguageContext";
-import { uploadFileToServer } from '@/lib/utils';
 import { collection, addDoc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { PillButton } from "@/components/ui/PillButton";
+import ImageUploader from "@/components/ui/ImageUploader";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { loadGoogleMapsAPI } from "@/lib/google-maps";
 // import Script from "next/script"; // 완전히 제거
 
@@ -273,19 +272,15 @@ const COUNTRY_OPTIONS: CountryOption[] = [
   { ko: '대만', en: 'Taiwan', code: 'TW' },
 ];
 
-// Firebase Storage 업로드 함수 복구
-const uploadImageToStorage = async (file: File, folder: string = "spots"): Promise<string> => {
-  // 서버 API를 통한 업로드로 변경
-  const result = await uploadFileToServer(file, folder);
-  if (!result.success || !result.url) {
-    throw new Error(result.error || 'Upload failed');
-  }
-  return result.url;
-};
+
 
 export default function NewSpotPage() {
   const { lang } = useLanguage();
   const router = useRouter();
+  
+  // ImageUploader refs
+  const mainImageUploaderRef = useRef<{ uploadToStorage: () => Promise<{ urls: string[] }>; getLocalImages: () => { file: File; preview: string; originalName: string }[]; clearAll: () => void }>(null);
+  const galleryImageUploaderRef = useRef<{ uploadToStorage: () => Promise<{ urls: string[] }>; getLocalImages: () => { file: File; preview: string; originalName: string }[]; clearAll: () => void }>(null);
   
   // 폼 상태
   const [formData, setFormData] = useState<SpotFormData>({
@@ -307,11 +302,8 @@ export default function NewSpotPage() {
   });
 
   // 이미지 업로드 관련 상태
-  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
-  const [thumbnailPreview, setThumbnailPreview] = useState<string>("");
-  const [galleryFiles, setGalleryFiles] = useState<File[]>([]);
-  const [galleryPreviews, setGalleryPreviews] = useState<string[]>([]);
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
+
+
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
   // 1. 상태 추가
@@ -338,7 +330,7 @@ export default function NewSpotPage() {
     bestTime: false,
     country: false, // 추가된 에러 상태
   });
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
 
   // Google Maps API 관련 상태
   const [isGoogleMapsLoaded, setIsGoogleMapsLoaded] = useState(false);
@@ -536,53 +528,14 @@ export default function NewSpotPage() {
     });
   };
 
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>): void => {
-    e.preventDefault();
-  };
+
 
 
 
   // FileReader를 사용한 이미지 미리보기 생성
-  const createImagePreview = (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        resolve(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    });
-  };
 
-  // 대표 이미지 처리
-  const handleImageChange = async (file: File) => {
-    if (!file.type.startsWith('image/')) return;
-    
-    setThumbnailFile(file);
-    const preview = await createImagePreview(file);
-    setThumbnailPreview(preview);
-    setValidationErrors(prev => ({ ...prev, mainImage: false }));
-  };
 
-  // 갤러리 이미지 처리
-  const handleGalleryChange = async (files: FileList) => {
-    const imageFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
-    setGalleryFiles(prev => [...prev, ...imageFiles]);
-    
-    const newPreviews = await Promise.all(imageFiles.map(file => createImagePreview(file)));
-    setGalleryPreviews(prev => [...prev, ...newPreviews]);
-  };
 
-  // 갤러리 이미지 제거
-  const removeGalleryImage = (index: number) => {
-    setGalleryFiles(prev => prev.filter((_, i) => i !== index));
-    setGalleryPreviews(prev => prev.filter((_, i) => i !== index));
-  };
-
-  // 대표 이미지 제거
-  const removeThumbnail = () => {
-    setThumbnailFile(null);
-    setThumbnailPreview("");
-  };
 
   const handleInputChange = (
     field: keyof Pick<SpotFormData, 'name' | 'description' | 'address' | 'region'>,
@@ -620,7 +573,7 @@ export default function NewSpotPage() {
       },
       type: formData.type.length === 0,
       tags: formData.tags.length === 0,
-      mainImage: !thumbnailFile,
+      mainImage: !formData.imageUrl,
       bestTime: formData.bestTime.length === 0,
       country: !country, // 추가된 에러 상태
     };
@@ -632,40 +585,7 @@ export default function NewSpotPage() {
   };
 
   // 이미지 업로드 함수
-  const uploadImages = async (): Promise<{ imageUrl: string; extraImages: string[] }> => {
-    const uploadPromises: Promise<string>[] = [];
-    const totalFiles = (thumbnailFile ? 1 : 0) + galleryFiles.length;
-    let uploadedCount = 0;
-
-    // 대표 이미지 업로드
-    if (thumbnailFile) {
-      uploadPromises.push(
-        uploadImageToStorage(thumbnailFile, "spots").then(url => {
-          uploadedCount++;
-          setUploadProgress((uploadedCount / totalFiles) * 100);
-          return url;
-        })
-      );
-    }
-
-    // 갤러리 이미지들 업로드
-    galleryFiles.forEach(file => {
-      uploadPromises.push(
-        uploadImageToStorage(file, "spots").then(url => {
-          uploadedCount++;
-          setUploadProgress((uploadedCount / totalFiles) * 100);
-          return url;
-        })
-      );
-    });
-
-    const uploadedUrls = await Promise.all(uploadPromises);
-    
-    return {
-      imageUrl: thumbnailFile ? uploadedUrls[0] : "",
-      extraImages: thumbnailFile ? uploadedUrls.slice(1) : uploadedUrls
-    };
-  };
+  // 이미지 업로드는 ImageUploader 컴포넌트에서 처리되므로 별도 함수 불필요
 
   // 5. handleSubmit에서 country 반영
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
@@ -675,17 +595,33 @@ export default function NewSpotPage() {
     }
     
     setIsSaving(true);
-    setUploadProgress(0);
     
     try {
-      // 이미지 업로드
-      const imageUrls = await uploadImages();
+      // 이미지 업로드 처리
+      let mainImageUrl = formData.imageUrl;
+      let extraImageUrls = [...formData.extraImages];
+      
+      // 대표 이미지 업로드
+      if (mainImageUploaderRef.current) {
+        const mainImageResult = await mainImageUploaderRef.current.uploadToStorage();
+        if (mainImageResult.urls.length > 0) {
+          mainImageUrl = mainImageResult.urls[0];
+        }
+      }
+      
+      // 갤러리 이미지 업로드
+      if (galleryImageUploaderRef.current) {
+        const galleryResult = await galleryImageUploaderRef.current.uploadToStorage();
+        if (galleryResult.urls.length > 0) {
+          extraImageUrls = [...extraImageUrls, ...galleryResult.urls];
+        }
+      }
       
       const spotData = {
         ...formData,
+        imageUrl: mainImageUrl,
+        extraImages: extraImageUrls,
         country: country ? { ko: country.ko, en: COUNTRY_OPTIONS.find(opt => opt.ko === country.ko)?.code || '' } : { ko: '', en: '' },
-        imageUrl: imageUrls.imageUrl,
-        extraImages: imageUrls.extraImages,
         coordinates: formData.coordinates, // 좌표 정보 포함
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
@@ -699,7 +635,6 @@ export default function NewSpotPage() {
       alert(TEXT.saveFailed[lang]);
     } finally {
       setIsSaving(false);
-      setUploadProgress(0);
     }
   };
 
@@ -1145,55 +1080,16 @@ export default function NewSpotPage() {
           {/* 대표 이미지 */}
           <div className="mb-6">
             <label className="block text-sm font-medium mb-2">{TEXT.image[lang]}</label>
-            <div
-              className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                validationErrors.mainImage ? 'border-red-500' : 'border-gray-300'
-              }`}
-              onDragOver={handleDragOver}
-              onDrop={(e) => {
-                e.preventDefault();
-                const files = Array.from(e.dataTransfer.files);
-                if (files.length > 0) {
-                  handleImageChange(files[0]);
-                }
+            <ImageUploader
+              ref={mainImageUploaderRef}
+              onImagesSelected={(files) => {
+                // 로컬 파일 선택 시 처리
+                console.log('대표 이미지 선택됨:', files.length);
               }}
-            >
-              {thumbnailPreview ? (
-                <div className="relative inline-block">
-                  <Image
-                    src={thumbnailPreview}
-                    alt="대표 이미지"
-                    width={400}
-                    height={192}
-                    className="max-w-full h-48 object-cover rounded"
-                  />
-                  <button
-                    type="button"
-                    onClick={removeThumbnail}
-                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-red-600"
-                  >
-                    ×
-                  </button>
-                </div>
-              ) : (
-                <div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => e.target.files?.[0] && handleImageChange(e.target.files[0])}
-                    className="hidden"
-                    id="main-image"
-                  />
-                  <label htmlFor="main-image" className="cursor-pointer">
-                    <div className="text-gray-500">
-                      <p className="mb-2">{TEXT.dragDropImage[lang]}</p>
-                      <p className="text-blue-500 hover:text-blue-600">{TEXT.imageClick[lang]}</p>
-                    </div>
-                  </label>
-                </div>
-              )}
-            </div>
+              folder="spots"
+              multiple={false}
+              className={validationErrors.mainImage ? 'border-red-500' : ''}
+            />
             {validationErrors.mainImage && (
               <p className="text-red-500 text-sm mt-2">대표 이미지를 업로드해주세요.</p>
             )}
@@ -1202,59 +1098,16 @@ export default function NewSpotPage() {
           {/* 갤러리 이미지 */}
           <div>
             <label className="block text-sm font-medium mb-2">{TEXT.extraImages[lang]}</label>
-            <div
-              className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center transition-colors"
-              onDragOver={handleDragOver}
-              onDrop={(e) => {
-                e.preventDefault();
-                const files = e.dataTransfer.files;
-                if (files.length > 0) {
-                  handleGalleryChange(files);
-                }
+            <ImageUploader
+              ref={galleryImageUploaderRef}
+              onImagesSelected={(files) => {
+                // 로컬 파일 선택 시 처리
+                console.log('갤러리 이미지 선택됨:', files.length);
               }}
-            >
-              {galleryPreviews.length > 0 && (
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  {galleryPreviews.map((preview, index) => (
-                    <div key={index} className="relative">
-                      <Image
-                        src={preview}
-                        alt={`갤러리 이미지 ${index + 1}`}
-                        width={200}
-                        height={128}
-                        className="w-full h-32 object-cover rounded"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeGalleryImage(index)}
-                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-red-600"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(e) => {
-                  if (e.target.files) {
-                    handleGalleryChange(e.target.files);
-                  }
-                }}
-                className="hidden"
-                id="gallery-images"
-              />
-              <label htmlFor="gallery-images" className="cursor-pointer">
-                <div className="text-gray-500">
-                  <p className="mb-2">{TEXT.galleryDrop[lang]}</p>
-                  <p className="text-blue-500 hover:text-blue-600">{TEXT.galleryClick[lang]}</p>
-                  <p className="text-sm mt-2">{TEXT.galleryMulti[lang]}</p>
-                </div>
-              </label>
-            </div>
+              folder="spots"
+              multiple={true}
+              maxFiles={10}
+            />
           </div>
         </div>
 
@@ -1450,22 +1303,6 @@ export default function NewSpotPage() {
 
         {/* 저장 버튼 */}
         <div className="space-y-4">
-          {/* 업로드 진행률 */}
-          {isSaving && uploadProgress > 0 && (
-            <div className="bg-gray-100 rounded-lg p-4">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium text-gray-700">이미지 업로드 중...</span>
-                <span className="text-sm text-gray-500">{Math.round(uploadProgress)}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${uploadProgress}%` }}
-                ></div>
-              </div>
-            </div>
-          )}
-          
           <div className="flex justify-end gap-4">
             <button
               type="button"

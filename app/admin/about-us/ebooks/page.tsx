@@ -3,6 +3,7 @@ import AdminLayout from "../../components/AdminLayout";
 import { useEffect, useState } from "react";
 import { Ebook } from "@/lib/types";
 import { db, storage } from "@/lib/firebase";
+import { formatDate } from "@/lib/utils";
 import { collection, getDocs, query, orderBy, updateDoc, deleteDoc, doc as firestoreDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { addDoc } from "firebase/firestore";
@@ -242,7 +243,7 @@ export default function AdminEbookManagementPage() {
                         >비공개</button>
                       </div>
                     </td>
-                    <td className="p-3 border text-center align-top w-32">{new Date(ebook.createdAt).toLocaleDateString()}</td>
+                    <td className="p-3 border text-center align-top w-32">{formatDate(new Date(ebook.createdAt), 'YYYY-MM-DD')}</td>
                     <td className="p-3 border">
                       <div className="flex w-full justify-center items-center gap-2">
                         <button
