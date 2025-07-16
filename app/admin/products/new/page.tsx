@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, query, orderBy, addDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
@@ -9,6 +9,7 @@ import { uploadFileToServer } from '@/lib/utils';
 import Link from 'next/link';
 import Image from 'next/image';
 import { PillButton } from '@/components/ui/PillButton';
+import ImageUploader from '@/components/ui/ImageUploader';
 
 interface Spot {
   id: string;
@@ -209,7 +210,6 @@ export default function NewProductPage() {
   // 이미지 업로드 관련 상태 (새 스팟 등록 페이지와 동일한 방식)
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [imageUploadError, setImageUploadError] = useState('');
 
@@ -221,6 +221,9 @@ export default function NewProductPage() {
   const [flightCombos, setFlightCombos] = useState<{ departure: FlightInfo; return: FlightInfo }[]>([]);
   const [selectedDepIdx, setSelectedDepIdx] = useState<number>(0);
   const [selectedRetIdx, setSelectedRetIdx] = useState<number>(0);
+
+  // ImageUploader 관련 상태
+  const imageUploaderRef = useRef<{ uploadToStorage: () => Promise<{ urls: string[] }>; getLocalImages: () => { file: File; preview: string; originalName: string }[]; clearAll: () => void }>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -356,50 +359,13 @@ export default function NewProductPage() {
     }));
   };
 
-  // 이미지 업로드 관련 함수들 (새 스팟 등록 페이지와 동일한 방식)
-  const createImagePreview = (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        resolve(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    });
-  };
 
-  const handleImageChange = async (files: FileList) => {
-    setImageUploadError('');
-    const newFiles = Array.from(files);
-    
-    // 미리보기 생성
-    const previews = await Promise.all(newFiles.map(createImagePreview));
-    
-    setImageFiles(prev => [...prev, ...newFiles]);
-    setImagePreviews(prev => [...prev, ...previews]);
-  };
+
+
 
   const removeImage = (index: number) => {
     setImageFiles(prev => prev.filter((_, i) => i !== index));
     setImagePreviews(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      await handleImageChange(files);
-    }
-  };
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      await handleImageChange(files);
-    }
   };
 
   // 이미지 업로드 함수 (새 스팟 등록 페이지와 동일한 방식)
@@ -407,15 +373,10 @@ export default function NewProductPage() {
     if (imageFiles.length === 0) return [];
 
     const uploadPromises: Promise<string>[] = [];
-    const totalFiles = imageFiles.length;
-    let uploadedCount = 0;
 
     imageFiles.forEach(file => {
       uploadPromises.push(
         uploadFileToServer(file, "products").then(result => {
-          uploadedCount++;
-          setUploadProgress((uploadedCount / totalFiles) * 100);
-          
           if (!result.success || !result.url) {
             throw new Error(result.error || 'Upload failed');
           }
@@ -427,11 +388,16 @@ export default function NewProductPage() {
     return await Promise.all(uploadPromises);
   };
 
+  const handleImagesUploaded = async (uploadedUrls: string[]) => {
+    setImageUploadError('');
+    setImagePreviews(uploadedUrls);
+    setFormData(prev => ({ ...prev, imageUrls: uploadedUrls }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     setIsSaving(true);
-    setUploadProgress(0);
     setImageUploadError('');
     
     try {
@@ -473,7 +439,6 @@ export default function NewProductPage() {
       alert(texts.saveFailed);
     } finally {
       setIsSaving(false);
-      setUploadProgress(0);
     }
   };
 
@@ -754,29 +719,18 @@ export default function NewProductPage() {
           {/* 이미지 업로드 (새 스팟 등록 페이지와 동일한 방식) */}
           <div>
             <label className="block text-sm font-medium mb-2">{texts.formImageUpload}</label>
-            <div
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors"
-            >
-              <input
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={handleFileSelect}
-                className="hidden"
-                id="image-upload"
-              />
-              <label htmlFor="image-upload" className="cursor-pointer">
-                <div className="text-gray-600">
-                  {isSaving && uploadProgress > 0 ? (
-                    <div>{texts.uploadProgress.replace('{progress}', Math.round(uploadProgress).toString())}</div>
-                  ) : (
-                    <div>{texts.dragDropImages}</div>
-                  )}
-                </div>
-              </label>
-            </div>
+            <ImageUploader
+              ref={imageUploaderRef}
+              onImagesSelected={(files) => {
+                console.log('상품 이미지 선택됨:', files.length);
+              }}
+              onImagesUploaded={handleImagesUploaded}
+              folder="products"
+              multiple={true}
+              maxFiles={10}
+              showOptimizationInfo={true}
+              usage="product-detail" // 상품 상세용 최적화 적용
+            />
             
             {imageUploadError && (
               <p className="text-red-500 text-sm mt-2">{imageUploadError}</p>
