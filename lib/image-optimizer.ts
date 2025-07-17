@@ -4,7 +4,7 @@ export interface ImageOptimizationOptions {
   quality?: number;
   width?: number;
   height?: number;
-  format?: 'jpeg' | 'png' | 'webp';
+  format?: 'jpeg' | 'png' | 'webp' | 'gif';
   fit?: 'cover' | 'contain' | 'fill' | 'inside' | 'outside';
 }
 
@@ -72,6 +72,8 @@ export async function optimizeImageForUsage(
   return await optimizeImage(buffer, mainOptions);
 }
 
+
+
 /**
  * 이미지 최적화 함수
  * @param buffer 원본 이미지 버퍼
@@ -90,7 +92,25 @@ export async function optimizeImage(
     fit = 'cover'
   } = options;
 
+  // BMP 파일인지 확인하고 메타데이터 먼저 확인
   let sharpInstance = sharp(buffer);
+  
+  try {
+    // 메타데이터 확인
+    const metadata = await sharpInstance.metadata();
+    console.log('이미지 메타데이터:', metadata);
+    
+    if (!metadata.format) {
+      throw new Error('이미지 형식을 확인할 수 없습니다.');
+    }
+  } catch (error) {
+    console.error('메타데이터 확인 실패:', error);
+    // BMP 파일인 경우 다른 방법 시도
+    if (error instanceof Error && error.message.includes('unsupported')) {
+      throw new Error('지원하지 않는 이미지 형식입니다. BMP 파일은 PNG나 JPEG로 변환 후 사용해주세요.');
+    }
+    throw error;
+  }
 
   // 리사이징
   if (width || height) {
@@ -107,6 +127,9 @@ export async function optimizeImage(
       break;
     case 'webp':
       sharpInstance = sharpInstance.webp({ quality });
+      break;
+    case 'gif':
+      sharpInstance = sharpInstance.gif();
       break;
   }
 
