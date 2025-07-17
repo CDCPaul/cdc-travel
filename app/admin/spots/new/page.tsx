@@ -554,6 +554,9 @@ export default function NewSpotPage() {
 
   // 4. validateForm 수정
   const validateForm = (): boolean => {
+    // ImageUploader ref를 통해 실제 이미지 선택 여부 확인
+    const hasMainImage = mainImageUploaderRef.current && 
+      mainImageUploaderRef.current.getLocalImages().length > 0;
     const errors = {
       name: { 
         ko: !formData.name.ko.trim(), 
@@ -573,8 +576,8 @@ export default function NewSpotPage() {
       },
       type: formData.type.length === 0,
       tags: formData.tags.length === 0,
-      mainImage: !formData.imageUrl,
-      bestTime: formData.bestTime.length === 0,
+      mainImage: !hasMainImage, // ImageUploader ref를 통해 확인
+      bestTime: formData.bestTime.length ===0,
       country: !country, // 추가된 에러 상태
     };
     setValidationErrors(errors);
@@ -590,33 +593,46 @@ export default function NewSpotPage() {
   // 5. handleSubmit에서 country 반영
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
+    console.log('=== 저장 버튼 클릭됨 ===');
     if (!validateForm()) {
+      console.log('검증 실패로 저장 중단');
       return;
     }
     
+    console.log('검증 통과, 저장 시작');
     setIsSaving(true);
     
     try {
+      console.log('이미지업로드 처리 시작');
       // 이미지 업로드 처리
       let mainImageUrl = formData.imageUrl;
       let extraImageUrls = [...formData.extraImages];
       
       // 대표 이미지 업로드
       if (mainImageUploaderRef.current) {
+        console.log('대표 이미지 업로드 시작');
         const mainImageResult = await mainImageUploaderRef.current.uploadToStorage();
         if (mainImageResult.urls.length > 0) {
           mainImageUrl = mainImageResult.urls[0];
+          console.log('대표 이미지 업로드 완료:', mainImageUrl);
         }
+      } else {
+        console.log('mainImageUploaderRef.current가 null입니다');
       }
       
       // 갤러리 이미지 업로드
       if (galleryImageUploaderRef.current) {
+        console.log('갤러리 이미지 업로드 시작');
         const galleryResult = await galleryImageUploaderRef.current.uploadToStorage();
         if (galleryResult.urls.length > 0) {
           extraImageUrls = [...extraImageUrls, ...galleryResult.urls];
+          console.log('갤러리 이미지 업로드 완료:', galleryResult.urls);
         }
+      } else {
+        console.log('galleryImageUploaderRef.current가 null입니다');
       }
       
+      console.log('Firestore 저장 시작');
       const spotData = {
         ...formData,
         imageUrl: mainImageUrl,
@@ -627,7 +643,9 @@ export default function NewSpotPage() {
         updatedAt: Timestamp.now(),
       };
       
+      console.log('저장할 데이터:', spotData);
       await addDoc(collection(db, "spots"), spotData);
+      console.log('Firestore 저장 완료');
       alert(TEXT.saveSuccess[lang]);
       router.push('/admin/spots');
     } catch (error) {
@@ -1088,6 +1106,7 @@ export default function NewSpotPage() {
               }}
               folder="spots"
               multiple={false}
+              usage="spot-main"
               className={validationErrors.mainImage ? 'border-red-500' : ''}
             />
             {validationErrors.mainImage && (
@@ -1107,6 +1126,7 @@ export default function NewSpotPage() {
               folder="spots"
               multiple={true}
               maxFiles={10}
+              usage="spot-gallery"
             />
           </div>
         </div>

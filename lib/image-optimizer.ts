@@ -14,6 +14,8 @@ export type ImageUsage =
   | 'product-card'     // 상품 카드 (600x400)
   | 'travel-info'      // 여행정보 (800x500)
   | 'product-detail'   // 상품 상세 (800x1132)
+  | 'spot-main'        // 스팟 대표 이미지 (800x600)
+  | 'spot-gallery'     // 스팟 갤러리 이미지 (600x400)
   | 'custom';          // 커스텀 설정
 
 export interface ImageUsagePreset {
@@ -43,6 +45,12 @@ export const IMAGE_USAGE_PRESETS: Record<ImageUsage, ImageUsagePreset> = {
   },
   'product-detail': {
     main: { width: 800, height: 1132, format: 'webp', quality: 80, fit: 'cover' } // A4 비율
+  },
+  'spot-main': {
+    main: { width: 800, height: 600, format: 'webp', quality: 85, fit: 'inside' } // 스팟 대표 이미지 - 비율 유지
+  },
+  'spot-gallery': {
+    main: { width: 600, height: 400, format: 'webp', quality: 80, fit: 'inside' } // 스팟 갤러리 이미지 - 비율 유지
   },
   'custom': {
     main: { format: 'webp', quality: 80, fit: 'cover' }

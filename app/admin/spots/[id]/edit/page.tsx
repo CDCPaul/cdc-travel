@@ -239,9 +239,10 @@ const TEXT = {
 };
 
 // Firebase Storage 업로드 함수
-const uploadImageToStorage = async (file: File, folder: string = "spots"): Promise<string> => {
+const uploadImageToStorage = async (file: File, folder: string = "spots", isMain: boolean = true): Promise<string> => {
   // 서버 API를 통한 업로드로 변경
-  const result = await uploadFileToServer(file, folder);
+  const usage = isMain ? 'spot-main' : 'spot-gallery';
+  const result = await uploadFileToServer(file, folder, true, usage);
   if (!result.success || !result.url) {
     throw new Error(result.error || 'Upload failed');
   }
@@ -609,7 +610,7 @@ export default function EditSpotPage() {
     // 새 대표 이미지 업로드
     if (newMainImageFile) {
       uploadPromises.push(
-        uploadImageToStorage(newMainImageFile, "spots").then(url => {
+        uploadImageToStorage(newMainImageFile, "spots", true).then(url => {
           return url;
         })
       );
@@ -618,7 +619,7 @@ export default function EditSpotPage() {
     // 새 추가 이미지들 업로드
     newExtraImageFiles.forEach(file => {
       uploadPromises.push(
-        uploadImageToStorage(file, "spots").then(url => {
+        uploadImageToStorage(file, "spots", false).then(url => {
           return url;
         })
       );

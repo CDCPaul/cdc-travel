@@ -5,7 +5,6 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, query, orderBy, addDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { useLanguage } from '../../../../components/LanguageContext';
-import { uploadFileToServer } from '@/lib/utils';
 import Link from 'next/link';
 import Image from 'next/image';
 import { PillButton } from '@/components/ui/PillButton';
@@ -207,9 +206,9 @@ export default function NewProductPage() {
     flightReturns: [] as FlightInfo[],
   });
 
-  // 이미지 업로드 관련 상태 (새 스팟 등록 페이지와 동일한 방식)
-  const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  // 이미지 업로드 관련 상태 (ImageUploader 사용으로 인해 불필요)
+  // const [imageFiles, setImageFiles] = useState<File[]>([]);
+  // const [imagePreviews, setImagePreviews] = useState<string>([]);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [imageUploadError, setImageUploadError] = useState('');
 
@@ -363,34 +362,23 @@ export default function NewProductPage() {
 
 
 
-  const removeImage = (index: number) => {
-    setImageFiles(prev => prev.filter((_, i) => i !== index));
-    setImagePreviews(prev => prev.filter((_, i) => i !== index));
-  };
+  // 이미지 업로드 함수 (ImageUploader 사용으로 인해 불필요)
+  // const uploadImages = async (): Promise<string> => {
+  //   if (imageFiles.length === 0) return //   const uploadPromises: Promise<string>[] =
+  //   imageFiles.forEach(file =>[object Object] //     uploadPromises.push(
+  //       uploadFileToServer(file, "products").then(result =>[object Object]  //         if (!result.success || !result.url) {
+  //           throw new Error(result.error || Upload failed');
+  //         }
+  //         return result.url;
+  //       })
+  //     );
+  //   });
 
-  // 이미지 업로드 함수 (새 스팟 등록 페이지와 동일한 방식)
-  const uploadImages = async (): Promise<string[]> => {
-    if (imageFiles.length === 0) return [];
-
-    const uploadPromises: Promise<string>[] = [];
-
-    imageFiles.forEach(file => {
-      uploadPromises.push(
-        uploadFileToServer(file, "products").then(result => {
-          if (!result.success || !result.url) {
-            throw new Error(result.error || 'Upload failed');
-          }
-          return result.url;
-        })
-      );
-    });
-
-    return await Promise.all(uploadPromises);
-  };
+  //   return await Promise.all(uploadPromises);
+  // };
 
   const handleImagesUploaded = async (uploadedUrls: string[]) => {
     setImageUploadError('');
-    setImagePreviews(uploadedUrls);
     setFormData(prev => ({ ...prev, imageUrls: uploadedUrls }));
   };
 
@@ -401,8 +389,13 @@ export default function NewProductPage() {
     setImageUploadError('');
     
     try {
-      // 이미지 업로드
-      const uploadedUrls = await uploadImages();
+      // ImageUploader를 통한 이미지 업로드
+      let uploadedUrls: string[] = [];
+      
+      if (imageUploaderRef.current) {
+        const result = await imageUploaderRef.current.uploadToStorage();
+        uploadedUrls = result.urls;
+      }
       
       const productData = {
         title: formData.title,
@@ -737,9 +730,9 @@ export default function NewProductPage() {
             )}
 
             {/* 이미지 미리보기 */}
-            {imagePreviews.length > 0 && (
+            {formData.imageUrls.length > 0 && (
               <div className="mt-4 grid grid-cols-4 gap-4">
-                {imagePreviews.map((preview, index) => (
+                {formData.imageUrls.map((preview, index) => (
                   <div key={index} className="relative">
                     <Image
                       src={preview}
@@ -750,7 +743,7 @@ export default function NewProductPage() {
                     />
                     <button
                       type="button"
-                      onClick={() => removeImage(index)}
+                      onClick={() => setFormData(prev => ({ ...prev, imageUrls: prev.imageUrls.filter((_, i) => i !== index) }))}
                       className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm"
                     >
                       ×
