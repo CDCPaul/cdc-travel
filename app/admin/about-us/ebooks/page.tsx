@@ -30,6 +30,11 @@ export default function AdminEbookManagementPage() {
   useEffect(() => {
     // Firestore에서 eBook 목록 불러오기
     async function fetchEbooks() {
+      if (!db) {
+        console.warn('Firebase 데이터베이스가 초기화되지 않았습니다.');
+        return;
+      }
+      
       const q = query(collection(db, "ebooks"), orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
       const list: Ebook[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ebook));

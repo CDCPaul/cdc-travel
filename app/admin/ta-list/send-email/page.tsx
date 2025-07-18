@@ -215,6 +215,9 @@ export default function SendEmailPage() {
       
       // 현재 로그인한 사용자의 ID 토큰 가져오기
       const { auth } = await import('@/lib/firebase');
+      if (!auth) {
+        throw new Error('Firebase 인증이 초기화되지 않았습니다.');
+      }
       const user = auth.currentUser;
       if (!user) {
         throw new Error('로그인이 필요합니다.');

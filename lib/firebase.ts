@@ -1,7 +1,7 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
+import { getFirestore, Firestore } from "firebase/firestore";
+import { getStorage, FirebaseStorage } from "firebase/storage";
+import { getAuth, Auth, GoogleAuthProvider } from "firebase/auth";
 import { getAnalytics, isSupported, Analytics } from "firebase/analytics";
 
 const firebaseConfig = {
@@ -14,23 +14,36 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-
-// Analytics 초기화 (브라우저 환경에서만)
+// 빌드 시에는 초기화하지 않음
+let app: FirebaseApp;
+let db: Firestore;
+let storage: FirebaseStorage;
+let auth: Auth;
+let googleProvider: GoogleAuthProvider;
 let analytics: Analytics | null = null;
-if (typeof window !== 'undefined') {
+
+// 클라이언트 사이드에서만 Firebase 초기화
+if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
+  app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+  db = getFirestore(app);
+  storage = getStorage(app);
+  auth = getAuth(app);
+  googleProvider = new GoogleAuthProvider();
+  
+  // Gmail API 권한 추가
+  googleProvider.addScope('https://www.googleapis.com/auth/gmail.send');
+  
+  // Analytics 초기화 (브라우저 환경에서만)
   isSupported().then(yes => yes ? getAnalytics(app) : null).then(analyticsInstance => {
     analytics = analyticsInstance;
   });
+} else {
+  // 빌드 시에는 더미 객체 생성
+  app = {} as FirebaseApp;
+  db = {} as Firestore;
+  storage = {} as FirebaseStorage;
+  auth = {} as Auth;
+  googleProvider = {} as GoogleAuthProvider;
 }
 
-export const db = getFirestore(app);
-// Firebase Storage 초기화 (기본 설정 사용)
-export const storage = getStorage(app);
-export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
-
-// Gmail API 권한 추가
-googleProvider.addScope('https://www.googleapis.com/auth/gmail.send');
-
-export { app, analytics }; 
+export { app, db, storage, auth, googleProvider, analytics }; 

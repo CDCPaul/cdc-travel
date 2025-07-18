@@ -37,6 +37,11 @@ export default function EbookCollectionPage() {
 
   useEffect(() => {
     async function fetchEbooks() {
+      if (!db) {
+        console.warn('Firebase 데이터베이스가 초기화되지 않았습니다.');
+        return;
+      }
+      
       const q = query(
         collection(db, "ebooks"),
         where("isPublic", "==", true),

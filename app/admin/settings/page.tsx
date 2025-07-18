@@ -109,6 +109,10 @@ export default function AdminSettings() {
   });
 
   useEffect(() => {
+    if (!auth) {
+      console.warn('Firebase 인증이 초기화되지 않았습니다.');
+      return;
+    }
     const unsubscribe = auth.onAuthStateChanged(user => {
       if (!user) {
         // router.replace("/admin-login"); // Removed as per edit hint
@@ -133,6 +137,13 @@ export default function AdminSettings() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    
+    if (!db) {
+      alert('Firebase 데이터베이스가 초기화되지 않았습니다.');
+      setSaving(false);
+      return;
+    }
+    
     const docRef = doc(db, 'settings', 'site');
     try {
       await updateDoc(docRef, {

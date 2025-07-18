@@ -55,6 +55,11 @@ export default function EbookDetailPage() {
       if (!id || typeof id !== "string") return;
       
       try {
+        if (!db) {
+          console.warn('Firebase 데이터베이스가 초기화되지 않았습니다.');
+          return;
+        }
+        
         const snap = await getDoc(doc(db, "ebooks", id));
         if (snap.exists()) {
           setEbook({ id: snap.id, ...snap.data() } as Ebook);

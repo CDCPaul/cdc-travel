@@ -15,6 +15,9 @@ export interface EmailData {
 export async function sendEmail(emailData: EmailData): Promise<boolean> {
   try {
     // 현재 로그인한 사용자 확인
+    if (!auth) {
+      throw new Error('Firebase 인증이 초기화되지 않았습니다.');
+    }
     const user = auth.currentUser;
     if (!user) {
       throw new Error('로그인이 필요합니다.');

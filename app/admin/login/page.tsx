@@ -21,6 +21,11 @@ export default function AdminLogin() {
     setError('');
     
     try {
+      if (!auth || !googleProvider) {
+        setError('Firebase 인증이 초기화되지 않았습니다.');
+        return;
+      }
+      
       // 자동 로그인 설정
       if (rememberMe) {
         await setPersistence(auth, browserLocalPersistence);
