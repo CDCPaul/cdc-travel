@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, getDocs, orderBy, query } from 'firebase/firestore';
+import { getAdminDb } from '@/lib/firebase-admin';
 
 export async function GET() {
   try {
+    // Firebase Admin Firestore 사용
+    const db = getAdminDb();
+    
     // TA 목록 가져오기
-    const tasRef = collection(db, 'tas');
-    const q = query(tasRef, orderBy('createdAt', 'desc'));
-    const querySnapshot = await getDocs(q);
+    const tasRef = db.collection('tas');
+    const querySnapshot = await tasRef.orderBy('createdAt', 'desc').get();
 
-    const tas = querySnapshot.docs.map(doc => ({
+    const tas = querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data()
     }));
@@ -41,6 +42,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Firebase Admin Firestore 사용
+    const db = getAdminDb();
+    
     // TA 데이터 생성
     const taData = {
       companyName,
@@ -50,12 +54,12 @@ export async function POST(request: NextRequest) {
       email,
       logo: logo || "",
       contactPersons: contactPersons || [],
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
+      createdAt: new Date(),
+      updatedAt: new Date()
     };
 
     // Firestore에 저장
-    const docRef = await addDoc(collection(db, 'tas'), taData);
+    const docRef = await db.collection('tas').add(taData);
 
     return NextResponse.json({
       success: true,

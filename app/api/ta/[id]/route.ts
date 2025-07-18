@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { getAdminDb } from '@/lib/firebase-admin';
 import { getStorage } from 'firebase-admin/storage';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
 
@@ -11,11 +10,14 @@ export async function GET(
   try {
     const { id } = await params;
     
+    // Firebase Admin Firestore 사용
+    const db = getAdminDb();
+    
     // TA 데이터 가져오기
-    const taRef = doc(db, 'tas', id);
-    const taDoc = await getDoc(taRef);
+    const taRef = db.collection('tas').doc(id);
+    const taDoc = await taRef.get();
 
-    if (!taDoc.exists()) {
+    if (!taDoc.exists) {
       return NextResponse.json(
         { error: 'TA를 찾을 수 없습니다.' },
         { status: 404 }
@@ -58,11 +60,14 @@ export async function PUT(
       );
     }
 
+    // Firebase Admin Firestore 사용
+    const db = getAdminDb();
+    
     // TA 데이터 업데이트
-    const taRef = doc(db, 'tas', id);
-    const taDoc = await getDoc(taRef);
+    const taRef = db.collection('tas').doc(id);
+    const taDoc = await taRef.get();
 
-    if (!taDoc.exists()) {
+    if (!taDoc.exists) {
       return NextResponse.json(
         { error: 'TA를 찾을 수 없습니다.' },
         { status: 404 }
@@ -77,10 +82,10 @@ export async function PUT(
       email,
       logo: logo || "",
       contactPersons: contactPersons || [],
-      updatedAt: serverTimestamp()
+      updatedAt: new Date()
     };
 
-    await updateDoc(taRef, updateData);
+    await taRef.update(updateData);
 
     return NextResponse.json({
       success: true,
@@ -103,11 +108,14 @@ export async function DELETE(
   try {
     const { id } = await params;
     
+    // Firebase Admin Firestore 사용
+    const db = getAdminDb();
+    
     // TA 데이터 가져오기 (로고 파일 삭제를 위해)
-    const taRef = doc(db, 'tas', id);
-    const taDoc = await getDoc(taRef);
+    const taRef = db.collection('tas').doc(id);
+    const taDoc = await taRef.get();
 
-    if (!taDoc.exists()) {
+    if (!taDoc.exists) {
       return NextResponse.json(
         { error: 'TA를 찾을 수 없습니다.' },
         { status: 404 }
@@ -117,7 +125,7 @@ export async function DELETE(
     const taData = taDoc.data();
     
     // 로고 파일이 있으면 Firebase Storage에서 삭제
-    if (taData.logo && taData.logo.startsWith('https://storage.googleapis.com/')) {
+    if (taData && taData.logo && taData.logo.startsWith('https://storage.googleapis.com/')) {
       try {
         const storage = getStorage(initializeFirebaseAdmin());
         const bucket = storage.bucket();
@@ -139,7 +147,7 @@ export async function DELETE(
     }
 
     // Firestore에서 TA 문서 삭제
-    await deleteDoc(taRef);
+    await taRef.delete();
 
     return NextResponse.json({
       success: true,
