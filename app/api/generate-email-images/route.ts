@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { getAdminDb } from '@/lib/firebase-admin';
 import sharp from 'sharp';
 import { getStorage } from 'firebase-admin/storage';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
@@ -17,12 +16,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Firebase Admin Firestore 사용
+    const db = getAdminDb();
+    
     // 선택된 TA들의 데이터 가져오기
-    const tasRef = collection(db, 'tas');
-    const q = query(tasRef, where('__name__', 'in', taIds));
-    const querySnapshot = await getDocs(q);
+    const tasRef = db.collection('tas');
+    const querySnapshot = await tasRef.where('__name__', 'in', taIds).get();
 
-    const tas = querySnapshot.docs.map(doc => ({
+    const tas = querySnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data()
     })) as Array<{
