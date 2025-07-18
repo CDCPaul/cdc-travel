@@ -16,11 +16,6 @@ export async function checkAdminRole(uid: string | null): Promise<boolean> {
   if (!uid) return false;
   
   try {
-    if (!db) {
-      console.warn('Firebase 데이터베이스가 초기화되지 않았습니다.');
-      return false;
-    }
-    
     const userDoc = doc(db, 'users', uid);
     const userSnap = await getDoc(userDoc);
     
