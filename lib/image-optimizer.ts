@@ -16,6 +16,7 @@ export type ImageUsage =
   | 'product-detail'   // 상품 상세 (800x1132)
   | 'spot-main'        // 스팟 대표 이미지 (800x600)
   | 'spot-gallery'     // 스팟 갤러리 이미지 (600x400)
+  | 'email'            // 이메일 첨부 이미지 (2480x3508)
   | 'custom';          // 커스텀 설정
 
 export interface ImageUsagePreset {
@@ -51,6 +52,9 @@ export const IMAGE_USAGE_PRESETS: Record<ImageUsage, ImageUsagePreset> = {
   },
   'spot-gallery': {
     main: { width: 600, height: 400, format: 'webp', quality: 80, fit: 'inside' } // 스팟 갤러리 이미지 - 비율 유지
+  },
+  'email': {
+    main: { width: 2480, height: 3508, format: 'png', quality: 90, fit: 'cover' } // 이메일 첨부 이미지 - A4 비율
   },
   'custom': {
     main: { format: 'webp', quality: 80, fit: 'cover' }

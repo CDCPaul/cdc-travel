@@ -1,6 +1,7 @@
 import { getApps, initializeApp, cert, App } from 'firebase-admin/app';
 import { getStorage } from 'firebase-admin/storage';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 
 let app: App | null = null;
 
@@ -51,8 +52,14 @@ export function getAdminDb() {
   return getFirestore(adminApp);
 }
 
+export function getAdminAuth() {
+  const adminApp = initializeFirebaseAdmin();
+  return getAuth(adminApp);
+}
+
 // 빌드 시에는 null 반환, 런타임에만 실제 초기화
 // process.env.NODE_ENV === 'production' && !process.env.FIREBASE_SERVICE_ACCOUNT_JSON 조건으로 빌드 시 초기화 방지
 export const adminStorage = (process.env.NODE_ENV === 'production' && !process.env.FIREBASE_SERVICE_ACCOUNT_JSON) ? null : getAdminStorage();
 export const adminDb = (process.env.NODE_ENV === 'production' && !process.env.FIREBASE_SERVICE_ACCOUNT_JSON) ? null : getAdminDb();
+export const adminAuth = (process.env.NODE_ENV === 'production' && !process.env.FIREBASE_SERVICE_ACCOUNT_JSON) ? null : getAdminAuth();
 export { app }; 

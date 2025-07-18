@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
-  const { idToken } = await req.json();
+  const { idToken, googleAccessToken } = await req.json();
   if (!idToken) {
     return NextResponse.json({ success: false, error: 'No idToken provided' }, { status: 400 });
   }
@@ -17,5 +17,11 @@ export async function POST(req: NextRequest) {
 
   const res = NextResponse.json({ success: true });
   res.headers.append('Set-Cookie', `idToken=${idToken}; ${cookieOptions}`);
+  
+  // Google Access Token도 쿠키에 저장
+  if (googleAccessToken) {
+    res.headers.append('Set-Cookie', `googleAccessToken=${googleAccessToken}; ${cookieOptions}`);
+  }
+  
   return res;
 } 
