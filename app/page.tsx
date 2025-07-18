@@ -96,6 +96,8 @@ const TEXT = {
   inquiry: { ko: "문의하기", en: "Contact" },
   email2: { ko: "이메일", en: "Email" },
   phone: { ko: "전화", en: "Phone" },
+  privacy: { ko: "개인정보처리방침", en: "Privacy Policy" },
+  terms: { ko: "서비스 이용약관", en: "Terms of Service" },
   copyright: { ko: "All rights reserved.", en: "All rights reserved." },
   viewDetails: { ko: "자세히 보기", en: "View Details" },
   heroTitle: { ko: "새로운 여행의 시작", en: "Start Your New Journey" },
@@ -602,6 +604,8 @@ export default function HomePage() {
               <ul className="space-y-3 text-gray-300">
                 <li><Link href="/contact" className="hover:text-white hover:translate-x-1 inline-block transition-all">{TEXT.inquiry[lang]}</Link></li>
                 <li><a href={`mailto:${settings?.contactEmail || 'info@cdc-travel.com'}`} className="hover:text-white hover:translate-x-1 inline-block transition-all">{TEXT.email2[lang]}</a></li>
+                <li><Link href="/privacy-policy" className="hover:text-white hover:translate-x-1 inline-block transition-all">{TEXT.privacy[lang]}</Link></li>
+                <li><Link href="/terms-of-service" className="hover:text-white hover:translate-x-1 inline-block transition-all">{TEXT.terms[lang]}</Link></li>
               </ul>
             </div>
             <div>

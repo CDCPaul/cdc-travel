@@ -1,7 +1,7 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
-import { getAuth } from "firebase/auth";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getAnalytics, isSupported, Analytics } from "firebase/analytics";
 
 const firebaseConfig = {
@@ -28,4 +28,9 @@ export const db = getFirestore(app);
 // Firebase Storage 초기화 (기본 설정 사용)
 export const storage = getStorage(app);
 export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
+
+// Gmail API 권한 추가
+googleProvider.addScope('https://www.googleapis.com/auth/gmail.send');
+
 export { app, analytics }; 
