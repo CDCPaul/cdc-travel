@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { doc, updateDoc, setDoc } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { useLanguage } from '../../../components/LanguageContext';
 import Link from 'next/link';
@@ -107,6 +107,25 @@ export default function AdminSettings() {
       instagram: ''
     }
   });
+
+  // 기존 설정 불러오기
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const docRef = doc(db, 'settings', 'site');
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          const data = docSnap.data() as SiteSettings;
+          setFormData(data);
+        }
+      } catch (error) {
+        console.error('설정 불러오기 실패:', error);
+      }
+    };
+
+    fetchSettings();
+  }, []);
 
   useEffect(() => {
     if (!auth) {

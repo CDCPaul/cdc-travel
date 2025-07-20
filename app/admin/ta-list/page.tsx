@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useLanguage } from "../../../components/LanguageContext";
 import Link from "next/link";
 import Image from "next/image";
+import { auth } from "../../../lib/firebase";
 
 // 다국어 텍스트
 const TEXT = {
@@ -97,6 +98,30 @@ export default function TAListPage() {
           throw new Error(result.error || '삭제에 실패했습니다.');
         }
 
+        // 활동 기록
+        try {
+          const user = auth.currentUser;
+          if (user) {
+            const deletedTA = tas.find(ta => ta.id === id);
+            const idToken = await user.getIdToken();
+            await fetch('/api/users/activity', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`
+              },
+              body: JSON.stringify({
+                action: 'taDelete',
+                details: `TA "${deletedTA?.companyName}" 삭제`,
+                userId: user.uid,
+                userEmail: user.email
+              })
+            });
+          }
+        } catch (error) {
+          console.error('활동 기록 실패:', error);
+        }
+        
         alert("TA가 성공적으로 삭제되었습니다.");
         
         // 목록에서 삭제된 TA 제거
@@ -216,7 +241,8 @@ export default function TAListPage() {
 
       {/* TA 목록 테이블 */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -266,24 +292,30 @@ export default function TAListPage() {
                     />
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="relative w-12 h-12">
-                      {ta.logo ? (
-                        <Image
-                          src={ta.logo}
-                          alt={`${ta.companyName} 로고`}
-                          width={48}
-                          height={48}
-                          className="object-contain rounded"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 bg-gray-200 rounded flex items-center justify-center">
-                          <span className="text-gray-500 text-xs">No Logo</span>
-                        </div>
-                      )}
-                    </div>
+                    <Link href={`/admin/ta-list/${ta.id}`} className="block">
+                      <div className="relative w-12 h-12">
+                        {ta.logo ? (
+                          <Image
+                            src={ta.logo}
+                            alt={`${ta.companyName} 로고`}
+                            width={48}
+                            height={48}
+                            className="object-contain rounded hover:opacity-80 transition-opacity"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 bg-gray-200 rounded flex items-center justify-center hover:bg-gray-300 transition-colors">
+                            <span className="text-gray-500 text-xs">No Logo</span>
+                          </div>
+                        )}
+                      </div>
+                    </Link>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {ta.companyName}
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                    <Link href={`/admin/ta-list/${ta.id}`} className="block">
+                      <div className="max-w-xs truncate hover:text-blue-600 transition-colors" title={ta.companyName}>
+                        {ta.companyName}
+                      </div>
+                    </Link>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {ta.taCode}
@@ -291,11 +323,17 @@ export default function TAListPage() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {ta.phone}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {ta.address}
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    <div className="max-w-xs truncate" title={ta.address}>
+                      {ta.address}
+                    </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {ta.email}
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    <Link href={`/admin/ta-list/${ta.id}`} className="block">
+                      <div className="max-w-xs truncate hover:text-blue-600 transition-colors" title={ta.email}>
+                        {ta.email}
+                      </div>
+                    </Link>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {ta.contactPersons.length > 0 ? (
@@ -309,14 +347,14 @@ export default function TAListPage() {
                     <div className="flex gap-2">
                       <Link
                         href={`/admin/ta-list/${ta.id}/edit`}
-                        className="text-blue-600 hover:text-blue-900"
+                        className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors"
                       >
                         {TEXT.edit[lang]}
                       </Link>
                       <button 
                         onClick={() => handleDelete(ta.id)}
                         disabled={isLoading}
-                        className="text-red-600 hover:text-red-900 disabled:opacity-50"
+                        className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {TEXT.delete[lang]}
                       </button>
@@ -333,6 +371,7 @@ export default function TAListPage() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

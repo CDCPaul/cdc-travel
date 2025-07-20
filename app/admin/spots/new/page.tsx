@@ -5,7 +5,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useLanguage } from "../../../../components/LanguageContext";
 import { collection, addDoc, Timestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import { PillButton } from "@/components/ui/PillButton";
 import ImageUploader from "@/components/ui/ImageUploader";
 import { useRouter } from "next/navigation";
@@ -646,6 +646,30 @@ export default function NewSpotPage() {
       console.log('저장할 데이터:', spotData);
       await addDoc(collection(db, "spots"), spotData);
       console.log('Firestore 저장 완료');
+      
+      // 활동 기록
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const idToken = await user.getIdToken();
+          await fetch('/api/users/activity', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({
+              action: 'spotCreate',
+              details: `새 스팟 "${formData.name[lang]}" 생성 - ${Object.keys(spotData).join(', ')}`,
+              userId: user.uid,
+              userEmail: user.email
+            })
+          });
+        }
+      } catch (error) {
+        console.error('활동 기록 실패:', error);
+      }
+      
       alert(TEXT.saveSuccess[lang]);
       router.push('/admin/spots');
     } catch (error) {

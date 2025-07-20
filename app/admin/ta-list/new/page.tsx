@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { useLanguage } from "../../../../components/LanguageContext";
 import Link from "next/link";
 import ImageUploader, { LocalImage } from "../../../../components/ui/ImageUploader";
+import { auth } from "../../../../lib/firebase";
 
 // 다국어 텍스트
 const TEXT = {
@@ -160,6 +161,29 @@ export default function NewTAPage() {
         throw new Error(result.error || '저장에 실패했습니다.');
       }
 
+      // 활동 기록
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const idToken = await user.getIdToken();
+          await fetch('/api/users/activity', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({
+              action: 'taCreate',
+              details: `새 TA "${companyName}" 등록 - ${Object.keys(taData).join(', ')}`,
+              userId: user.uid,
+              userEmail: user.email
+            })
+          });
+        }
+      } catch (error) {
+        console.error('활동 기록 실패:', error);
+      }
+      
       alert(result.message || 'TA가 성공적으로 등록되었습니다.');
       window.location.href = "/admin/ta-list";
     } catch (error) {

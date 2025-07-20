@@ -5,7 +5,7 @@
 import { useState, useEffect } from "react";
 import { useLanguage } from "../../../../../components/LanguageContext";
 import { doc, getDoc, updateDoc, Timestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import Image from 'next/image';
 import { useParams, useRouter } from "next/navigation";
 import { PillButton } from "@/components/ui/PillButton";
@@ -787,7 +787,30 @@ export default function EditSpotPage() {
       // 3. 데이터베이스 업데이트
       await updateDoc(doc(db, "spots", spotId), payload);
       
-      // 4. Storage에서 삭제할 이미지들 처리 (DB 업데이트 성공 후)
+      // 4. 활동 기록
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const idToken = await user.getIdToken();
+          await fetch('/api/users/activity', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({
+              action: 'spotEdit',
+              details: `스팟 "${formData.name[lang]}" 수정 - ${Object.keys(payload).join(', ')}`,
+              userId: user.uid,
+              userEmail: user.email
+            })
+          });
+        }
+      } catch (error) {
+        console.error('활동 기록 실패:', error);
+      }
+      
+      // 5. Storage에서 삭제할 이미지들 처리 (DB 업데이트 성공 후)
       if (imagesToDelete.length > 0) {
         console.log('삭제할 이미지들 처리 중...', imagesToDelete);
         const uniqueImagesToDelete = Array.from(new Set(imagesToDelete));

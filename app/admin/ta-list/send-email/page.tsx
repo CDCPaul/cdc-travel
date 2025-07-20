@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useLanguage } from "../../../../components/LanguageContext";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { auth } from "../../../../lib/firebase";
+import Image from "next/image";
 
 // 다국어 텍스트
 const TEXT = {
@@ -25,10 +27,25 @@ const TEXT = {
   sendError: { ko: "이메일 발송에 실패했습니다", en: "Failed to send email" },
   loading: { ko: "로딩 중...", en: "Loading..." },
   error: { ko: "데이터를 불러오는데 실패했습니다", en: "Failed to load data" },
+  sendingEmail: { ko: "이메일 발송 중...", en: "Sending email..." },
+  sendTime: { ko: "발송 시간", en: "Send Time" },
+  progress: { ko: "진행 상황", en: "Progress" },
+  sendingTo: { ko: "발송 중", en: "Sending to" },
+  completed: { ko: "완료", en: "Completed" },
+  remaining: { ko: "남은 시간", en: "Remaining" },
   includeLogo: { ko: "TA 로고 삽입", en: "Include TA Logo" },
   includeLogoDesc: { ko: "선택된 각 TA의 로고를 첨부파일 상단에 합성하여 발송", en: "Composite TA logos on top of attachment for each selected agent" },
   originalFile: { ko: "원본 파일", en: "Original File" },
-  originalFileDesc: { ko: "첨부파일을 그대로 발송", en: "Send attachment as is" }
+  originalFileDesc: { ko: "첨부파일을 그대로 발송", en: "Send attachment as is" },
+  selectAttachment: { ko: "첨부파일 선택", en: "Select Attachment" },
+  searchPlaceholder: { ko: "파일명으로 검색...", en: "Search by filename..." },
+  posters: { ko: "전단지", en: "Posters" },
+  itineraries: { ko: "IT", en: "IT" },
+  letters: { ko: "레터", en: "Letters" },
+  preview: { ko: "미리보기", en: "Preview" },
+  noFiles: { ko: "파일이 없습니다", en: "No files found" },
+  selectFile: { ko: "파일 선택", en: "Select File" },
+  removeFile: { ko: "파일 제거", en: "Remove File" }
 };
 
 interface SelectedTA {
@@ -37,11 +54,32 @@ interface SelectedTA {
   taCode: string;
   email: string;
   logo: string;
+  overlayImage?: string; // 전처리된 오버레이 이미지 URL
+}
+
+interface Attachment {
+  id: string;
+  type: 'poster' | 'itinerary' | 'letter';
+  name: string;
+  fileName: string;
+  fileSize: number;
+  fileUrl: string;
+  createdAt: {
+    seconds: number;
+    nanoseconds: number;
+  };
+  createdBy: string;
+  updatedAt?: {
+    seconds: number;
+    nanoseconds: number;
+  };
+  updatedBy?: string;
 }
 
 export default function SendEmailPage() {
   const { lang } = useLanguage();
   const searchParams = useSearchParams();
+  const router = useRouter();
   
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -50,13 +88,32 @@ export default function SendEmailPage() {
   
   const [emailSubject, setEmailSubject] = useState("");
   const [emailContent, setEmailContent] = useState("");
-  const [attachments, setAttachments] = useState<File[]>([]);
+  const [selectedAttachments, setSelectedAttachments] = useState<Attachment[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [isDragOver, setIsDragOver] = useState(false);
   const [includeLogo, setIncludeLogo] = useState(true); // TA 로고 삽입 여부
+  
+  // 미리보기 관련 상태
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
+  const [isLoadingPreview, setIsLoadingPreview] = useState<Record<string, boolean>>({});
+  
+  // 첨부파일 선택 관련 상태
+  const [showAttachmentModal, setShowAttachmentModal] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedType, setSelectedType] = useState<'all' | 'poster' | 'itinerary' | 'letter'>('all');
+  const [isLoadingAttachments, setIsLoadingAttachments] = useState(false);
   
   // 파일 정리용 상태
   const [generatedSessionId, setGeneratedSessionId] = useState<string | null>(null);
+  
+  // 이메일 발송 진행 상황 상태
+  const [sendDuration, setSendDuration] = useState<number | null>(null);
+  const [sendProgress, setSendProgress] = useState<{
+    current: number;
+    total: number;
+    currentTA: string;
+    status: string;
+  } | null>(null);
 
   // 파일 정리 함수
   const cleanupGeneratedFiles = useCallback(async () => {
@@ -91,7 +148,7 @@ export default function SendEmailPage() {
   // 브라우저 이벤트 리스너 및 페이지 언마운트 시 파일 정리
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (isLoading || generatedSessionId) {
+      if (isLoading && generatedSessionId) {
         e.preventDefault();
         e.returnValue = '';
         cleanupGeneratedFiles();
@@ -99,7 +156,7 @@ export default function SendEmailPage() {
     };
 
     const handlePopState = () => {
-      if (isLoading || generatedSessionId) {
+      if (isLoading && generatedSessionId) {
         cleanupGeneratedFiles();
       }
     };
@@ -110,11 +167,18 @@ export default function SendEmailPage() {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('popstate', handlePopState);
-      if (isLoading || generatedSessionId) {
+      
+      // 로딩 중이거나 세션이 있을 때만 파일 정리 (성공 후에는 정리하지 않음)
+      if (isLoading && generatedSessionId) {
         cleanupGeneratedFiles();
       }
+      
+      // Blob URL 정리
+      Object.values(previewUrls).forEach(url => {
+        URL.revokeObjectURL(url);
+      });
     };
-  }, [isLoading, generatedSessionId, cleanupGeneratedFiles]);
+  }, [isLoading, generatedSessionId, cleanupGeneratedFiles, previewUrls]);
 
   // 선택된 TA 데이터 불러오기
   useEffect(() => {
@@ -149,67 +213,149 @@ export default function SendEmailPage() {
     fetchSelectedTAs();
   }, [searchParams]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    handleFileValidation(files);
+  // 첨부파일 목록 불러오기
+  const fetchAttachments = useCallback(async () => {
+    if (!showAttachmentModal) return;
+    
+    setIsLoadingAttachments(true);
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error("로그인이 필요합니다.");
+      }
+      
+      const idToken = await user.getIdToken();
+      
+      const params = new URLSearchParams();
+      if (searchTerm) params.append('search', searchTerm);
+      if (selectedType !== 'all') {
+        const typeMap = {
+          'poster': 'posters',
+          'itinerary': 'itineraries', 
+          'letter': 'letters'
+        };
+        params.append('type', typeMap[selectedType]);
+      }
+      
+      const response = await fetch(`/api/attachments?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${idToken}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('첨부파일 목록을 불러올 수 없습니다.');
+      }
+
+      const data = await response.json();
+      setAttachments(data);
+    } catch (error) {
+      console.error('첨부파일 목록 로드 실패:', error);
+    } finally {
+      setIsLoadingAttachments(false);
+    }
+  }, [showAttachmentModal, searchTerm, selectedType]);
+
+  // 첨부파일 선택 모달 열기
+  const openAttachmentModal = () => {
+    setShowAttachmentModal(true);
+    setSearchTerm('');
+    setSelectedType('all');
   };
 
-  const handleFileValidation = (files: File[]) => {
-    if (files.length === 0) return;
-    
-    const validFiles: File[] = [];
-    
-    for (const file of files) {
-      // 파일 크기 제한 (10MB)
-      const maxSize = 10 * 1024 * 1024; // 10MB
-      if (file.size > maxSize) {
-        alert(`파일 "${file.name}"의 크기는 10MB를 초과할 수 없습니다.`);
-        continue;
+  useEffect(() => {
+    if (showAttachmentModal) {
+      const timeoutId = setTimeout(() => {
+        fetchAttachments();
+      }, 300); // 300ms 디바운스
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [showAttachmentModal, fetchAttachments]);
+
+  // 첨부파일 선택
+  const handleSelectAttachment = (attachment: Attachment) => {
+    setSelectedAttachments(prev => {
+      // 이미 선택된 파일인지 확인
+      const isAlreadySelected = prev.some(selected => selected.id === attachment.id);
+      if (isAlreadySelected) {
+        return prev;
       }
+      const newAttachments = [...prev, attachment];
       
-      // 허용된 파일 타입 확인 (JPG, PDF만 허용)
-      const allowedTypes = [
-        'application/pdf',
-        'image/jpeg',
-        'image/jpg'
-      ];
+      // 미리보기 생성
+      setTimeout(() => {
+        generatePreview(attachment);
+      }, 100);
       
-      if (!allowedTypes.includes(file.type)) {
-        alert(`파일 "${file.name}"은 지원되지 않는 형식입니다. JPG와 PDF 파일만 업로드 가능합니다.`);
-        continue;
-      }
-      
-      validFiles.push(file);
+      return newAttachments;
+    });
+  };
+
+  // 첨부파일 제거
+  const handleRemoveAttachment = (attachmentId: string) => {
+    setSelectedAttachments(prev => prev.filter(att => att.id !== attachmentId));
+    // 미리보기 URL도 제거
+    setPreviewUrls(prev => {
+      const newUrls = { ...prev };
+      delete newUrls[attachmentId];
+      return newUrls;
+    });
+  };
+
+  // 미리보기 생성 (전단지만)
+  const generatePreview = async (attachment: Attachment) => {
+    // PDF 파일은 미리보기 하지 않음
+    if (attachment.type !== 'poster') {
+      return;
     }
     
-    if (validFiles.length > 0) {
-      setAttachments(prev => [...prev, ...validFiles]);
-      
-      // JPG 파일이 하나라도 있으면 TA 로고 삽입 옵션을 활성화
-      const hasImageFile = validFiles.some(file => file.type.startsWith('image/'));
-      if (hasImageFile) {
-        setIncludeLogo(true);
-      }
-    }
-  };
+    if (previewUrls[attachment.id]) return; // 이미 미리보기가 있는 경우
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
+    setIsLoadingPreview(prev => ({ ...prev, [attachment.id]: true }));
     
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      handleFileValidation(files);
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error("로그인이 필요합니다.");
+      }
+      
+      const idToken = await user.getIdToken();
+      
+      // 첫 번째 TA의 전처리된 오버레이 이미지 사용
+      const firstTA = selectedTAs.length > 0 ? selectedTAs[0] : null;
+      
+      if (!firstTA) {
+        console.warn('선택된 TA가 없습니다. 미리보기를 생성할 수 없습니다.');
+        return;
+      }
+      
+      const response = await fetch('/api/attachments/preview', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          attachmentUrl: attachment.fileUrl,
+          attachmentType: attachment.type,
+          taId: firstTA.id
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('미리보기를 생성할 수 없습니다.');
+      }
+
+      // Blob URL 생성
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      
+      setPreviewUrls(prev => ({ ...prev, [attachment.id]: url }));
+    } catch (error) {
+      console.error('미리보기 생성 실패:', error);
+    } finally {
+      setIsLoadingPreview(prev => ({ ...prev, [attachment.id]: false }));
     }
   };
 
@@ -230,65 +376,81 @@ export default function SendEmailPage() {
       return;
     }
 
+    // 발송 시작 시간 기록
+    const startTime = Date.now();
+    setSendDuration(null);
     setIsLoading(true);
     try {
       let imageUrls: string[] = [];
 
       // TA 로고 삽입이 선택된 경우에만 이미지 생성
-      if (includeLogo && attachments.length > 0) {
-        // JPG 파일들만 필터링
-        const imageFiles = attachments.filter(file => file.type.startsWith('image/'));
+      if (includeLogo && selectedAttachments.length > 0) {
+        // 전단지 파일들만 필터링 (이미지 파일)
+        const posterFiles = selectedAttachments.filter(att => att.type === 'poster');
         
-        if (imageFiles.length > 0) {
-          // 첫 번째 JPG 파일을 기준으로 이미지 생성
-          const firstImageFile = imageFiles[0];
-          
+        if (posterFiles.length > 0) {
           try {
-            const arrayBuffer = await firstImageFile.arrayBuffer();
-            const attachmentBase64 = Buffer.from(arrayBuffer).toString('base64');
-            const attachmentType = firstImageFile.type;
-            console.log('첨부파일 Base64 인코딩 완료');
+            // 각 TA에 대해 전처리된 오버레이 이미지를 사용하여 이미지 생성
+            const allImageUrls: string[] = [];
             
-            // 이미지 합성 API 호출
-            const imageResponse = await fetch('/api/generate-email-images', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                taIds: selectedTAs.map(ta => ta.id),
-                attachmentBase64,
-                attachmentType
-              })
-            });
+            for (let i = 0; i < selectedTAs.length; i++) {
+              const ta = selectedTAs[i];
+              
+              // 진행 상황 업데이트
+              setSendProgress({
+                current: i + 1,
+                total: selectedTAs.length,
+                currentTA: ta.companyName,
+                status: '이미지 생성 중...'
+              });
+              
+              if (!ta.overlayImage) {
+                console.warn(`TA ${ta.companyName}의 오버레이 이미지가 없습니다.`);
+                continue;
+              }
+              
+              // 각 TA별로 이미지 생성
+              const imageResponse = await fetch('/api/generate-email-images', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  taId: ta.id,
+                  imageUrls: posterFiles.map(file => file.fileUrl)
+                })
+              });
 
-            if (!imageResponse.ok) {
-              throw new Error('이미지 생성에 실패했습니다.');
+              if (!imageResponse.ok) {
+                throw new Error(`TA ${ta.companyName}의 이미지 생성에 실패했습니다.`);
+              }
+
+              const imageResult = await imageResponse.json();
+              allImageUrls.push(...imageResult.processedImages);
             }
-
-            const imageResult = await imageResponse.json();
-            imageUrls = imageResult.results.map((result: { imageUrl: string }) => result.imageUrl);
-            const sessionId = imageResult.sessionId;
             
-            // 생성된 파일 정보 저장 (실패 시 정리용)
-            setGeneratedSessionId(sessionId);
+            imageUrls = allImageUrls;
           } catch (error) {
-            console.error('첨부파일 인코딩 실패:', error);
-            throw error; // 에러를 다시 던져서 catch 블록에서 처리
+            console.error('이미지 생성 실패:', error);
+            throw error;
           }
         }
       }
       
       // 현재 로그인한 사용자의 ID 토큰 가져오기
-      const { auth } = await import('@/lib/firebase');
-      if (!auth) {
-        throw new Error('Firebase 인증이 초기화되지 않았습니다.');
-      }
       const user = auth.currentUser;
       if (!user) {
         throw new Error('로그인이 필요합니다.');
       }
       const idToken = await user.getIdToken();
+
+      // 진행 상황 업데이트 - 이메일 발송 시작
+      setSendProgress({
+        current: 0,
+        total: selectedTAs.length,
+        currentTA: '',
+        status: '이메일 발송 준비 중...'
+      });
 
       // 이메일 발송 API 호출
       const formData = new FormData();
@@ -297,12 +459,13 @@ export default function SendEmailPage() {
       formData.append('taIds', JSON.stringify(selectedTAs.map(ta => ta.id)));
       formData.append('imageUrls', JSON.stringify(imageUrls));
       formData.append('includeLogo', includeLogo.toString());
-      
-      // 모든 첨부파일 추가
-      attachments.forEach((attachment, index) => {
-        formData.append(`attachment_${index}`, attachment);
-      });
-      formData.append('attachmentCount', attachments.length.toString());
+      formData.append('attachments', JSON.stringify(selectedAttachments.map(att => ({
+        id: att.id,
+        type: att.type,
+        name: att.name,
+        fileName: att.fileName,
+        fileUrl: att.fileUrl
+      }))));
 
       const emailResponse = await fetch('/api/send-email', {
         method: 'POST',
@@ -318,18 +481,61 @@ export default function SendEmailPage() {
         throw new Error(result.error || '이메일 발송에 실패했습니다.');
       }
 
+      // 발송 완료 시간 계산
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      setSendDuration(duration);
+      
+      // 진행 상황 초기화
+      setSendProgress(null);
+      
       // 성공 시 생성된 파일 정보 초기화 (파일 유지)
       setGeneratedSessionId(null);
       
-      alert(TEXT.sendSuccess[lang]);
-      window.location.href = "/admin/ta-list";
+      // 활동 기록
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const idToken = await user.getIdToken();
+          await fetch('/api/users/activity', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({
+              action: 'emailSend',
+              details: `TA 이메일 발송 - ${selectedTAs.length}명에게 "${emailSubject}" 제목으로 발송, 첨부파일: ${selectedAttachments.map(att => att.name).join(', ')}, 발송시간: ${duration}ms`,
+              userId: user.uid,
+              userEmail: user.email
+            })
+          });
+        }
+      } catch (error) {
+        console.error('활동 기록 실패:', error);
+      }
+      
+      alert(`${TEXT.sendSuccess[lang]}\n발송 시간: ${duration}ms (${(duration / 1000).toFixed(2)}초)`);
+      
+      // 성공 후 페이지 이동 전에 잠시 대기 (파일 정리 방지)
+      setTimeout(() => {
+        router.push("/admin/ta-list");
+      }, 1000);
     } catch (error) {
       console.error("이메일 발송 실패:", error);
+      
+      // 실패 시에도 시간 계산
+      const endTime = Date.now();
+      const duration = startTime ? endTime - startTime : 0;
+      setSendDuration(duration);
+      
+      // 진행 상황 초기화
+      setSendProgress(null);
       
       // 실패 시 생성된 파일들 정리
       await cleanupGeneratedFiles();
       
-      alert(error instanceof Error ? error.message : TEXT.sendError[lang]);
+      alert(`${error instanceof Error ? error.message : TEXT.sendError[lang]}\n처리 시간: ${duration}ms (${(duration / 1000).toFixed(2)}초)`);
     } finally {
       setIsLoading(false);
     }
@@ -436,70 +642,29 @@ export default function SendEmailPage() {
             )}
           </div>
 
-          {/* 첨부 파일 */}
+          {/* 첨부 파일 선택 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               {TEXT.attachment[lang]}
             </label>
-            <div
-              className={`
-                relative border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 cursor-pointer
-                ${isDragOver 
-                  ? 'border-blue-500 bg-blue-50 scale-105 shadow-lg' 
-                  : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
-                }
-              `}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => document.getElementById('file-upload')?.click()}
+            <button
+              type="button"
+              onClick={openAttachmentModal}
+              className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-center hover:border-blue-400 hover:bg-blue-50 transition-colors"
             >
-              <input
-                type="file"
-                onChange={handleFileChange}
-                accept=".pdf,.jpg,.jpeg"
-                multiple
-                className="hidden"
-                id="file-upload"
-              />
-              
-              <div className="space-y-4">
-                {/* 드래그 아이콘 */}
-                <div className="flex justify-center">
-                  <div className={`
-                    p-4 rounded-full transition-colors
-                    ${isDragOver 
-                      ? 'bg-blue-100 text-blue-600' 
-                      : 'bg-gray-100 text-gray-400'
-                    }
-                  `}>
-                    <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <div className={`text-lg font-medium transition-colors ${
-                    isDragOver ? 'text-blue-600' : 'text-gray-700'
-                  }`}>
-                    {isDragOver 
-                      ? '여기에 파일을 놓으세요' 
-                      : '파일을 드래그하거나 클릭하여 업로드'
-                    }
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    JPG, PDF (최대 10MB)
-                  </div>
-                </div>
+              <div className="flex items-center justify-center space-x-2">
+                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                <span className="text-gray-600">{TEXT.selectAttachment[lang]}</span>
               </div>
-            </div>
+            </button>
             
-            {attachments.length > 0 && (
-              <div className="mt-4 space-y-2">
-                {attachments.map((attachment, index) => (
-                  <div key={index} className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <div className="flex items-center justify-between">
+            {selectedAttachments.length > 0 && (
+              <div className="mt-4 space-y-4">
+                {selectedAttachments.map((attachment) => (
+                  <div key={attachment.id} className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center space-x-3">
                         <svg className="h-6 w-6 text-green-500" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -509,21 +674,13 @@ export default function SendEmailPage() {
                             {attachment.name}
                           </span>
                           <p className="text-xs text-green-600">
-                            {(attachment.size / 1024 / 1024).toFixed(2)} MB
+                            {attachment.fileSize ? (attachment.fileSize / 1024 / 1024).toFixed(2) : '0.00'} MB
                           </p>
                         </div>
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          setAttachments(prev => prev.filter((_, i) => i !== index));
-                          // 모든 JPG 파일이 제거되면 TA 로고 삽입 옵션 비활성화
-                          const remainingFiles = attachments.filter((_, i) => i !== index);
-                          const hasImageFile = remainingFiles.some(file => file.type.startsWith('image/'));
-                          if (!hasImageFile) {
-                            setIncludeLogo(false);
-                          }
-                        }}
+                        onClick={() => handleRemoveAttachment(attachment.id)}
                         className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50"
                       >
                         <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
@@ -531,6 +688,32 @@ export default function SendEmailPage() {
                         </svg>
                       </button>
                     </div>
+                    
+                    {/* 미리보기 영역 (전단지만) */}
+                    {attachment.type === 'poster' && (
+                      <div className="mt-3">
+                        {isLoadingPreview[attachment.id] ? (
+                          <div className="flex items-center justify-center h-32 bg-gray-100 rounded">
+                            <div className="text-gray-500">미리보기 로딩 중...</div>
+                          </div>
+                        ) : previewUrls[attachment.id] ? (
+                          <div className="border border-gray-200 rounded overflow-hidden">
+                            <Image 
+                              src={previewUrls[attachment.id]} 
+                              alt={`${attachment.name} 미리보기`}
+                              width={600}
+                              height={400}
+                              className="w-full max-w-[600px] h-auto"
+                              style={{ maxHeight: '400px', objectFit: 'contain' }}
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center h-32 bg-gray-100 rounded">
+                            <div className="text-gray-500">미리보기를 불러올 수 없습니다</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -538,19 +721,19 @@ export default function SendEmailPage() {
           </div>
 
           {/* TA 로고 삽입 옵션 - 첨부파일이 있을 때만 표시 */}
-          {attachments.length > 0 && (
+          {selectedAttachments.length > 0 && (
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
               <h3 className="text-sm font-medium text-gray-700 mb-3">
                 첨부파일 처리 방식
               </h3>
               <div className="space-y-3">
-                <label className={`flex items-start space-x-3 ${attachments.some(file => file.type.startsWith('image/')) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
+                <label className={`flex items-start space-x-3 ${selectedAttachments.some(att => att.type === 'poster') ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
                   <input
                     type="radio"
                     name="attachmentType"
                     checked={includeLogo}
-                    onChange={() => attachments.some(file => file.type.startsWith('image/')) && setIncludeLogo(true)}
-                    disabled={!attachments.some(file => file.type.startsWith('image/'))}
+                    onChange={() => selectedAttachments.some(att => att.type === 'poster') && setIncludeLogo(true)}
+                    disabled={!selectedAttachments.some(att => att.type === 'poster')}
                     className="mt-1 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
                   />
                   <div className="flex-1">
@@ -558,9 +741,9 @@ export default function SendEmailPage() {
                       {TEXT.includeLogo[lang]}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      {attachments.some(file => file.type.startsWith('image/'))
-                        ? 'JPG 파일에만 TA 로고가 삽입됩니다. PDF 파일은 원본 그대로 발송됩니다.'
-                        : 'JPG 파일만 TA 로고 삽입이 가능합니다.'
+                      {selectedAttachments.some(att => att.type === 'poster')
+                        ? '전단지에만 TA 로고가 삽입됩니다. IT와 레터는 원본 그대로 발송됩니다.'
+                        : '전단지만 TA 로고 삽입이 가능합니다.'
                       }
                     </div>
                   </div>
@@ -589,17 +772,20 @@ export default function SendEmailPage() {
 
           {/* 안내 메시지 */}
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            {attachments.length > 0 ? (
+            {selectedAttachments.length > 0 ? (
               includeLogo ? (
                 <>
                   <p className="text-sm text-yellow-800">
-                    • JPG 파일에만 선택된 각 에이전트의 로고가 상단 260px 영역에 왼쪽 정렬로 합성되어 자동으로 첨부됩니다.
+                    • 전단지에만 선택된 각 에이전트의 로고와 회사 정보가 상단 250px 영역에 합성되어 자동으로 첨부됩니다.
                   </p>
                   <p className="text-sm text-yellow-800 mt-1">
-                    • PDF 파일은 원본 그대로 발송됩니다.
+                    • 회사 정보: 회사명, 전화번호, 이메일이 3줄로 표시됩니다.
                   </p>
                   <p className="text-sm text-yellow-800 mt-1">
-                    • 로고는 세로 250px 크기로 자동 조정되며, 가로 비율은 유지됩니다.
+                    • IT와 레터는 원본 그대로 발송됩니다.
+                  </p>
+                  <p className="text-sm text-yellow-800 mt-1">
+                    • 로고는 세로 200px 크기로 자동 조정되며, 가로 비율은 유지됩니다.
                   </p>
                 </>
               ) : (
@@ -618,6 +804,38 @@ export default function SendEmailPage() {
           </div>
         </div>
 
+        {/* 진행 상황 표시 */}
+        {sendProgress && (
+          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-sm font-medium text-blue-800">
+                {TEXT.progress[lang]}
+              </div>
+              <div className="text-sm text-blue-600">
+                {sendProgress.current}/{sendProgress.total}
+              </div>
+            </div>
+            
+            {/* 진행 바 */}
+            <div className="w-full bg-blue-200 rounded-full h-2 mb-2">
+              <div 
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${(sendProgress.current / sendProgress.total) * 100}%` }}
+              ></div>
+            </div>
+            
+            {/* 현재 상태 */}
+            <div className="text-sm text-blue-700">
+              {sendProgress.currentTA && (
+                <div className="mb-1">
+                  {TEXT.sendingTo[lang]}: <span className="font-medium">{sendProgress.currentTA}</span>
+                </div>
+              )}
+              <div>{sendProgress.status}</div>
+            </div>
+          </div>
+        )}
+
         {/* 버튼 */}
         <div className="flex justify-end gap-4 mt-6">
           <button
@@ -632,15 +850,157 @@ export default function SendEmailPage() {
           >
             {TEXT.cancel[lang]}
           </button>
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading ? TEXT.sending[lang] : TEXT.send[lang]}
-          </button>
+          <div className="flex items-center gap-4">
+            {/* 발송 시간 표시 */}
+            {sendDuration !== null && (
+              <div className="text-sm text-gray-600">
+                {TEXT.sendTime[lang]}: {sendDuration}ms ({(sendDuration / 1000).toFixed(2)}초)
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? TEXT.sendingEmail[lang] : TEXT.send[lang]}
+            </button>
+          </div>
         </div>
       </form>
+
+      {/* 첨부파일 선택 모달 */}
+      {showAttachmentModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
+            {/* 모달 헤더 */}
+            <div className="flex justify-between items-center p-6 border-b">
+              <h2 className="text-xl font-semibold">{TEXT.selectAttachment[lang]}</h2>
+              <button
+                onClick={() => setShowAttachmentModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* 검색 및 필터 */}
+            <div className="p-6 border-b bg-gray-50">
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    placeholder={TEXT.searchPlaceholder[lang]}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <select
+                  value={selectedType}
+                  onChange={(e) => setSelectedType(e.target.value as 'all' | 'poster' | 'itinerary' | 'letter')}
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">전체</option>
+                  <option value="poster">{TEXT.posters[lang]}</option>
+                  <option value="itinerary">{TEXT.itineraries[lang]}</option>
+                  <option value="letter">{TEXT.letters[lang]}</option>
+                </select>
+              </div>
+              {isLoadingAttachments && (
+                <div className="mt-2 text-sm text-gray-600">
+                  검색 중...
+                </div>
+              )}
+            </div>
+
+            {/* 파일 목록 */}
+            <div className="overflow-y-auto max-h-96">
+              {isLoadingAttachments ? (
+                <div className="p-6 text-center">
+                  <div className="text-gray-500">로딩 중...</div>
+                </div>
+              ) : attachments.length === 0 ? (
+                <div className="p-6 text-center">
+                  <div className="text-gray-500">{TEXT.noFiles[lang]}</div>
+                </div>
+              ) : (
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {attachments.map((attachment) => {
+                      const isSelected = selectedAttachments.some(selected => selected.id === attachment.id);
+                      const typeLabels = {
+                        poster: TEXT.posters[lang],
+                        itinerary: TEXT.itineraries[lang],
+                        letter: TEXT.letters[lang]
+                      };
+                      
+                      return (
+                        <div
+                          key={attachment.id}
+                          className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                            isSelected 
+                              ? 'border-blue-500 bg-blue-50' 
+                              : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                          }`}
+                          onClick={() => handleSelectAttachment(attachment)}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-2">
+                                <span className={`px-2 py-1 text-xs rounded-full ${
+                                  attachment.type === 'poster' ? 'bg-red-100 text-red-800' :
+                                  attachment.type === 'itinerary' ? 'bg-blue-100 text-blue-800' :
+                                  'bg-green-100 text-green-800'
+                                }`}>
+                                  {typeLabels[attachment.type]}
+                                </span>
+                              </div>
+                              <h3 className="font-medium text-gray-900 mb-1">{attachment.name}</h3>
+                              <p className="text-sm text-gray-500 mb-2">{attachment.fileName}</p>
+                              <p className="text-xs text-gray-400">
+                                {attachment.fileSize ? (attachment.fileSize / 1024 / 1024).toFixed(2) : '0.00'} MB
+                              </p>
+                            </div>
+                            <div className="ml-2">
+                              {isSelected ? (
+                                <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                              ) : (
+                                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 모달 푸터 */}
+            <div className="flex justify-end gap-4 p-6 border-t">
+              <button
+                onClick={() => setShowAttachmentModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                닫기
+              </button>
+              <button
+                onClick={() => setShowAttachmentModal(false)}
+                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+              >
+                선택 완료
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 

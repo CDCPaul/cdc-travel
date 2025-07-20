@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { collection, getDocs, query, orderBy, writeBatch, doc, deleteDoc } from "firebase/firestore";
 import { ref, deleteObject } from "firebase/storage";
-import { db, storage } from "@/lib/firebase";
+import { db, storage, auth } from "@/lib/firebase";
 import { Banner } from "@/types/banner";
 import Link from "next/link";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
@@ -60,6 +60,30 @@ export default function AdminBannerListPage() {
         batch.update(docRef, { order: idx + 1 });
       });
       await batch.commit();
+      
+      // 활동 기록
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const idToken = await user.getIdToken();
+          await fetch('/api/users/activity', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({
+              action: 'bannerOrderChange',
+              details: `배너 순서 변경 - ${banners.length}개 배너`,
+              userId: user.uid,
+              userEmail: user.email
+            })
+          });
+        }
+      } catch (error) {
+        console.error('활동 기록 실패:', error);
+      }
+      
       setOrderChanged(false);
     } finally {
       setSavingOrder(false);
@@ -98,6 +122,29 @@ export default function AdminBannerListPage() {
           console.warn('Storage 파일 삭제 실패 (무시됨):', storageError);
           // Storage 파일 삭제 실패는 무시하고 계속 진행
         }
+      }
+      
+      // 활동 기록
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const idToken = await user.getIdToken();
+          await fetch('/api/users/activity', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({
+              action: 'bannerDelete',
+              details: `배너 "${banner?.title_ko || '제목 없음'}" 삭제`,
+              userId: user.uid,
+              userEmail: user.email
+            })
+          });
+        }
+      } catch (error) {
+        console.error('활동 기록 실패:', error);
       }
       
       // 로컬 상태에서도 제거

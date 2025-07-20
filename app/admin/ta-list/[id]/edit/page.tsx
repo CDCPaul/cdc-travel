@@ -6,6 +6,7 @@ import Link from "next/link";
 import ImageUploader, { LocalImage } from "../../../../../components/ui/ImageUploader";
 import Image from "next/image";
 import { useParams } from "next/navigation";
+import { auth } from "../../../../../lib/firebase";
 
 // 다국어 텍스트
 const TEXT = {
@@ -219,6 +220,29 @@ export default function EditTAPage() {
         throw new Error(result.error || '수정에 실패했습니다.');
       }
 
+      // 활동 기록
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const idToken = await user.getIdToken();
+          await fetch('/api/users/activity', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({
+              action: 'taEdit',
+              details: `TA "${companyName}" 수정 - ${Object.keys(taData).join(', ')}`,
+              userId: user.uid,
+              userEmail: user.email
+            })
+          });
+        }
+      } catch (error) {
+        console.error('활동 기록 실패:', error);
+      }
+      
       alert(result.message || TEXT.saveSuccess[lang]);
       window.location.href = "/admin/ta-list";
     } catch (error) {

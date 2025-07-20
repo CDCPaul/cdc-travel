@@ -15,7 +15,6 @@ const MAIN_MENU = {
     { label: "대시보드", href: "/admin/dashboard" },
     { label: "배너 관리", href: "/admin/banners" },
     { label: "상품 관리", href: "/admin/products" },
-    { label: "TA 관리", href: "/admin/ta-list" },
     { label: "회사소개 관리", href: "/admin/about-us" },
     { label: "사이트 설정", href: "/admin/settings" },
     { label: "사용자 마이그레이션", href: "/admin/migrate-users" },
@@ -24,7 +23,6 @@ const MAIN_MENU = {
     { label: "Dashboard", href: "/admin/dashboard" },
     { label: "Banner Management", href: "/admin/banners" },
     { label: "Product Management", href: "/admin/products" },
-    { label: "TA Management", href: "/admin/ta-list" },
     { label: "About Us Management", href: "/admin/about-us" },
     { label: "Site Settings", href: "/admin/settings" },
     { label: "User Migration", href: "/admin/migrate-users" },
@@ -37,6 +35,21 @@ const ABOUT_US_MENU = {
   ],
   en: [
     { label: "Ebook Management", href: "/admin/about-us/ebooks" },
+  ]
+};
+
+const TA_MENU = {
+  ko: [
+    { label: "TA 목록", href: "/admin/ta-list" },
+    { label: "전단지 관리", href: "/admin/posters" },
+    { label: "IT 관리", href: "/admin/itineraries" },
+    { label: "레터 관리", href: "/admin/letters" },
+  ],
+  en: [
+    { label: "TA List", href: "/admin/ta-list" },
+    { label: "Poster Management", href: "/admin/posters" },
+    { label: "IT Management", href: "/admin/itineraries" },
+    { label: "Letter Management", href: "/admin/letters" },
   ]
 };
 
@@ -55,10 +68,23 @@ const DB_MENU = {
   ]
 };
 
+const USER_MENU = {
+  ko: [
+    { label: "사용자 목록", href: "/admin/users" },
+    { label: "사용자 활동", href: "/admin/users/activity" },
+  ],
+  en: [
+    { label: "User List", href: "/admin/users" },
+    { label: "User Activity", href: "/admin/users/activity" },
+  ]
+};
+
 export default function AdminSidebar() {
   const pathname = usePathname();
   const [dbOpen, setDbOpen] = useState(pathname.startsWith("/admin/spots") || pathname.startsWith("/admin/include-items") || pathname.startsWith("/admin/not-include-items") || pathname.startsWith("/admin/files") || pathname.startsWith("/admin/db"));
+  const [taOpen, setTaOpen] = useState(pathname.startsWith("/admin/ta-list") || pathname.startsWith("/admin/posters") || pathname.startsWith("/admin/itineraries") || pathname.startsWith("/admin/letters"));
   const [aboutUsOpen, setAboutUsOpen] = useState(pathname.startsWith("/admin/about-us"));
+  const [userOpen, setUserOpen] = useState(pathname.startsWith("/admin/users"));
   const { lang, setLang } = useLanguage();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const router = useRouter();
@@ -82,8 +108,10 @@ export default function AdminSidebar() {
   };
 
   const currentMainMenu = MAIN_MENU[lang];
+  const currentTaMenu = TA_MENU[lang];
   const currentDbMenu = DB_MENU[lang];
   const currentAboutUsMenu = ABOUT_US_MENU[lang];
+  const currentUserMenu = USER_MENU[lang];
 
   return (
     <aside className="h-screen w-64 bg-gradient-to-b from-[#1A3A3A] to-[#2C6E6F] text-white flex flex-col fixed left-0 top-0 z-40 shadow-2xl">
@@ -185,6 +213,55 @@ export default function AdminSidebar() {
           )
         ))}
         
+        {/* TA 관리 아코디언 */}
+        <motion.div 
+          className="pt-4 mt-4 border-t border-[#3A8A8B]/30"
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.5 }}
+        >
+          <button
+            className={`w-full flex items-center justify-between px-4 py-3 rounded-lg font-medium transition-all duration-300 group whitespace-nowrap text-base ${
+              taOpen 
+                ? 'bg-white/20 text-white shadow-lg' 
+                : 'hover:bg-white/10 text-white/90 hover:text-white'
+            }`}
+            onClick={() => setTaOpen(open => !open)}
+            aria-expanded={taOpen}
+          >
+            <span className="whitespace-nowrap">{lang === 'ko' ? 'TA 관리' : 'TA Management'}</span>
+            <motion.span 
+              animate={{ rotate: taOpen ? 180 : 0 }}
+              transition={{ duration: 0.3 }}
+              className="text-sm"
+            >
+              ▼
+            </motion.span>
+          </button>
+          {taOpen && (
+            <motion.div 
+              className="ml-4 mt-2 space-y-1"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              transition={{ duration: 0.3 }}
+            >
+              {currentTaMenu.map(item => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`block px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 whitespace-nowrap ${
+                    pathname.startsWith(item.href) 
+                      ? 'bg-white/20 text-white shadow-md' 
+                      : 'hover:bg-white/10 text-white/80 hover:text-white'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </motion.div>
+          )}
+        </motion.div>
+        
         {/* DB 관리 아코디언 */}
         <motion.div 
           className="pt-4 mt-4 border-t border-[#3A8A8B]/30"
@@ -228,6 +305,55 @@ export default function AdminSidebar() {
                 {lang === 'ko' ? 'DB 관리 대시보드' : 'DB Management Dashboard'}
               </Link>
               {currentDbMenu.map(item => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`block px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 whitespace-nowrap ${
+                    pathname.startsWith(item.href) 
+                      ? 'bg-white/20 text-white shadow-md' 
+                      : 'hover:bg-white/10 text-white/80 hover:text-white'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </motion.div>
+          )}
+        </motion.div>
+        
+        {/* 사용자 관리 아코디언 */}
+        <motion.div 
+          className="pt-4 mt-4 border-t border-[#3A8A8B]/30"
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.7 }}
+        >
+          <button
+            className={`w-full flex items-center justify-between px-4 py-3 rounded-lg font-medium transition-all duration-300 group whitespace-nowrap text-base ${
+              userOpen 
+                ? 'bg-white/20 text-white shadow-lg' 
+                : 'hover:bg-white/10 text-white/90 hover:text-white'
+            }`}
+            onClick={() => setUserOpen(open => !open)}
+            aria-expanded={userOpen}
+          >
+            <span className="whitespace-nowrap">{lang === 'ko' ? '사용자 관리' : 'User Management'}</span>
+            <motion.span 
+              animate={{ rotate: userOpen ? 180 : 0 }}
+              transition={{ duration: 0.3 }}
+              className="text-sm"
+            >
+              ▼
+            </motion.span>
+          </button>
+          {userOpen && (
+            <motion.div 
+              className="ml-4 mt-2 space-y-1"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              transition={{ duration: 0.3 }}
+            >
+              {currentUserMenu.map(item => (
                 <Link
                   key={item.href}
                   href={item.href}

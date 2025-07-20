@@ -2,7 +2,7 @@
 import AdminLayout from "../../components/AdminLayout";
 import { useEffect, useState } from "react";
 import { Ebook } from "@/lib/types";
-import { db, storage } from "@/lib/firebase";
+import { db, storage, auth } from "@/lib/firebase";
 import { formatDate } from "@/lib/utils";
 import { collection, getDocs, query, orderBy, updateDoc, deleteDoc, doc as firestoreDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
@@ -103,6 +103,29 @@ export default function AdminEbookManagementPage() {
         createdAt: Date.now(),
         updatedAt: Date.now(),
       });
+      
+      // 활동 기록
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const idToken = await user.getIdToken();
+          await fetch('/api/users/activity', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({
+              action: 'ebookCreate',
+              details: `eBook "${titleKo}" 등록`,
+              userId: user.uid,
+              userEmail: user.email
+            })
+          });
+        }
+      } catch (error) {
+        console.error('활동 기록 실패:', error);
+      }
       // 4. 목록 갱신
       const q = query(collection(db, "ebooks"), orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
@@ -149,6 +172,30 @@ export default function AdminEbookManagementPage() {
         const thumbPath = decodeURIComponent(ebook.thumbUrl.split("/o/")[1]?.split("?")[0] || "");
         if (thumbPath) await deleteObject(ref(storage, thumbPath));
       }
+      
+      // 활동 기록
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const idToken = await user.getIdToken();
+          await fetch('/api/users/activity', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({
+              action: 'ebookDelete',
+              details: `eBook "${ebook.title?.ko || '제목 없음'}" 삭제`,
+              userId: user.uid,
+              userEmail: user.email
+            })
+          });
+        }
+      } catch (error) {
+        console.error('활동 기록 실패:', error);
+      }
+      
       // 목록 갱신
       const q = query(collection(db, "ebooks"), orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);

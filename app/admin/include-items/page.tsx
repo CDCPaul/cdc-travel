@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import {
   collection,
   getDocs,
@@ -55,6 +55,30 @@ export default function AdminIncludeItemsPage() {
       en: newEn.trim(),
       createdAt: Timestamp.now(),
     });
+    
+    // 활동 기록
+    try {
+      const user = auth.currentUser;
+      if (user) {
+        const idToken = await user.getIdToken();
+        await fetch('/api/users/activity', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
+          body: JSON.stringify({
+            action: 'includeItemCreate',
+            details: `포함사항 "${newKo.trim()}" 등록`,
+            userId: user.uid,
+            userEmail: user.email
+          })
+        });
+      }
+    } catch (error) {
+      console.error('활동 기록 실패:', error);
+    }
+    
     setNewKo("");
     setNewEn("");
     fetchItems();
@@ -63,7 +87,35 @@ export default function AdminIncludeItemsPage() {
   // 삭제
   const handleDelete = async (id: string) => {
     if (!window.confirm("정말 삭제하시겠습니까?")) return;
+    
+    // 삭제할 항목 정보 가져오기
+    const itemToDelete = items.find(item => item.id === id);
+    
     await deleteDoc(doc(db, "includeItems", id));
+    
+    // 활동 기록
+    try {
+      const user = auth.currentUser;
+      if (user) {
+        const idToken = await user.getIdToken();
+        await fetch('/api/users/activity', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
+          body: JSON.stringify({
+            action: 'includeItemDelete',
+            details: `포함사항 "${itemToDelete?.ko || '제목 없음'}" 삭제`,
+            userId: user.uid,
+            userEmail: user.email
+          })
+        });
+      }
+    } catch (error) {
+      console.error('활동 기록 실패:', error);
+    }
+    
     fetchItems();
   };
 
@@ -82,6 +134,30 @@ export default function AdminIncludeItemsPage() {
       en: editEn.trim(),
       updatedAt: Timestamp.now(),
     });
+    
+    // 활동 기록
+    try {
+      const user = auth.currentUser;
+      if (user) {
+        const idToken = await user.getIdToken();
+        await fetch('/api/users/activity', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
+          body: JSON.stringify({
+            action: 'includeItemEdit',
+            details: `포함사항 "${editKo.trim()}" 수정`,
+            userId: user.uid,
+            userEmail: user.email
+          })
+        });
+      }
+    } catch (error) {
+      console.error('활동 기록 실패:', error);
+    }
+    
     setEditingId(null);
     setEditKo("");
     setEditEn("");

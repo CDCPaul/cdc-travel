@@ -11,20 +11,17 @@ export async function POST(request: NextRequest) {
     const taIds = JSON.parse(formData.get('taIds') as string) as string[];
     const imageUrls = JSON.parse(formData.get('imageUrls') as string) as string[];
     const includeLogo = formData.get('includeLogo') === 'true';
-    const attachmentCount = parseInt(formData.get('attachmentCount') as string) || 0;
-    
-    // 모든 첨부파일 수집
-    const attachments: File[] = [];
-    for (let i = 0; i < attachmentCount; i++) {
-      const attachment = formData.get(`attachment_${i}`) as File;
-      if (attachment) {
-        attachments.push(attachment);
-      }
-    }
+    const attachmentsData = JSON.parse(formData.get('attachments') as string) as Array<{
+      id: string;
+      type: 'poster' | 'itinerary' | 'letter';
+      name: string;
+      fileName: string;
+      fileUrl: string;
+    }>;
     
     console.log('이미지 URLs:', imageUrls);
-    console.log('첨부파일 개수:', attachments.length);
-    console.log('첨부파일들:', attachments.map(f => f.name));
+    console.log('첨부파일 개수:', attachmentsData.length);
+    console.log('첨부파일들:', attachmentsData.map(f => f.name));
     console.log('로고 포함 여부:', includeLogo);
 
     if (!subject || !content || !taIds || taIds.length === 0) {
@@ -136,18 +133,18 @@ export async function POST(request: NextRequest) {
         ].join('\r\n');
 
         // 첨부파일 처리
-        if (attachments.length > 0) {
-          for (const attachment of attachments) {
+        if (attachmentsData.length > 0) {
+          for (const attachmentData of attachmentsData) {
             try {
               let attachmentBuffer: Buffer;
               let attachmentName: string;
               let attachmentType: string;
 
-              // JPG 파일이고 TA 로고 삽입이 선택된 경우에만 로고 오버레이 처리
+              // 전단지이고 TA 로고 삽입이 선택된 경우에만 로고 오버레이 처리
               const taIndex = tas.findIndex(t => t.id === ta.id);
               const imageUrl = imageUrls[taIndex];
               
-              if (includeLogo && attachment.type.startsWith('image/') && imageUrl && imageUrl !== '') {
+              if (includeLogo && attachmentData.type === 'poster' && imageUrl && imageUrl !== '') {
                 // TA 로고가 포함된 이미지 첨부
                 console.log(`TA ${ta.companyName}의 로고 포함 이미지 첨부: ${imageUrl}`);
                 
@@ -158,13 +155,18 @@ export async function POST(request: NextRequest) {
                 }
                 
                 attachmentBuffer = Buffer.from(await imageResponse.arrayBuffer());
-                attachmentName = `${ta.companyName}_${attachment.name}`;
+                attachmentName = `${ta.companyName}_${attachmentData.fileName}`;
                 attachmentType = 'image/png';
               } else {
-                // 원본 파일 첨부 (PDF 또는 로고 삽입 비활성화된 경우)
-                attachmentBuffer = Buffer.from(await attachment.arrayBuffer());
-                attachmentName = attachment.name;
-                attachmentType = attachment.type;
+                // 원본 파일 첨부 (IT, 레터 또는 로고 삽입 비활성화된 경우)
+                const fileResponse = await fetch(attachmentData.fileUrl);
+                if (!fileResponse.ok) {
+                  throw new Error(`파일 다운로드 실패: ${fileResponse.status}`);
+                }
+                
+                attachmentBuffer = Buffer.from(await fileResponse.arrayBuffer());
+                attachmentName = attachmentData.fileName || attachmentData.name || 'attachment';
+                attachmentType = attachmentData.type === 'poster' ? 'image/jpeg' : 'application/pdf';
               }
               
               const attachmentBase64 = attachmentBuffer.toString('base64');
@@ -225,6 +227,30 @@ export async function POST(request: NextRequest) {
             success: true,
             messageId: result.id
           });
+          
+          // 이메일 발송 기록 저장
+          try {
+            await db.collection('email_history').add({
+              taId: ta.id,
+              taName: ta.companyName,
+              taEmail: ta.email,
+              subject: subject,
+              content: content,
+              sentBy: decodedToken.name || decodedToken.email,
+              sentByEmail: decodedToken.email,
+              sentAt: new Date(),
+              attachments: attachmentsData.map(att => ({
+                name: att.name,
+                type: att.type
+              })),
+              includeLogo: includeLogo,
+              messageId: result.id,
+              success: true
+            });
+          } catch (historyError) {
+            console.error('이메일 기록 저장 실패:', historyError);
+            // 기록 저장 실패해도 이메일 발송은 성공으로 처리
+          }
         }
       } catch (error) {
         console.error(`TA ${ta.companyName}에게 이메일 발송 실패:`, error);

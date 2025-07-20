@@ -424,6 +424,30 @@ export default function NewProductPage() {
       };
 
       await addDoc(collection(db, 'products'), productData);
+      
+      // 활동 기록
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const idToken = await user.getIdToken();
+          await fetch('/api/users/activity', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({
+              action: 'productCreate',
+              details: `새 상품 "${formData.title[lang]}" 등록 - ${Object.keys(productData).join(', ')}`,
+              userId: user.uid,
+              userEmail: user.email
+            })
+          });
+        }
+      } catch (error) {
+        console.error('활동 기록 실패:', error);
+      }
+      
       alert(texts.saveSuccess);
       // router.push('/admin/products'); // Removed as per edit hint
     } catch (error) {

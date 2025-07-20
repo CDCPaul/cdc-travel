@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useLanguage } from "../../../components/LanguageContext";
 import { collection, getDocs, query, orderBy, deleteDoc, doc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import Image from 'next/image';
 import { useRouter } from "next/navigation";
 import Select, { StylesConfig, CSSObjectWithLabel } from 'react-select';
@@ -339,6 +339,29 @@ export default function SpotsPage() {
         
         // Firestore에서 문서 삭제
         await deleteDoc(doc(db, 'spots', id));
+        
+        // 활동 기록
+        try {
+          const user = auth.currentUser;
+          if (user) {
+            const idToken = await user.getIdToken();
+            await fetch('/api/users/activity', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`
+              },
+              body: JSON.stringify({
+                action: 'spotDelete',
+                details: `스팟 "${typeof spotToDelete?.name === 'object' ? spotToDelete.name[lang] : spotToDelete?.name || '제목 없음'}" 삭제`,
+                userId: user.uid,
+                userEmail: user.email
+              })
+            });
+          }
+        } catch (error) {
+          console.error('활동 기록 실패:', error);
+        }
         
         alert(TEXT.deleted[lang]);
         fetchSpots();

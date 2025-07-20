@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { collection, addDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "@/lib/firebase";
+import { db, storage, auth } from "@/lib/firebase";
 import { BannerType } from "@/types/banner";
 
 export default function AdminBannerNewPage() {
@@ -54,6 +54,30 @@ export default function AdminBannerNewPage() {
         createdAt: Date.now(),
       };
       await addDoc(bannersCol, docData);
+      
+      // 활동 기록
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const idToken = await user.getIdToken();
+          await fetch('/api/users/activity', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({
+              action: 'bannerCreate',
+              details: `배너 "${titleKo}" 등록`,
+              userId: user.uid,
+              userEmail: user.email
+            })
+          });
+        }
+      } catch (error) {
+        console.error('활동 기록 실패:', error);
+      }
+      
       // router.push("/admin/banners"); // Removed as per edit hint
     } catch (e) {
       if (e instanceof Error) setError(e.message);

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { doc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "@/lib/firebase";
+import { db, storage, auth } from "@/lib/firebase";
 import { Banner, BannerType } from "@/types/banner";
 
 export default function AdminBannerEditPage() {
@@ -79,6 +79,30 @@ export default function AdminBannerEditPage() {
         title_ko: titleKo,
         title_en: titleEn,
       });
+      
+      // 활동 기록
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const idToken = await user.getIdToken();
+          await fetch('/api/users/activity', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({
+              action: 'bannerEdit',
+              details: `배너 "${titleKo}" 수정`,
+              userId: user.uid,
+              userEmail: user.email
+            })
+          });
+        }
+      } catch (error) {
+        console.error('활동 기록 실패:', error);
+      }
+      
       // router.push("/admin/banners"); // Removed as per edit hint
     } catch (e) {
       if (e instanceof Error) setError(e.message);
@@ -94,6 +118,30 @@ export default function AdminBannerEditPage() {
     try {
       const docRef = doc(db, "settings/banners/items", id);
       await deleteDoc(docRef);
+      
+      // 활동 기록
+      try {
+        const user = auth.currentUser;
+        if (user) {
+          const idToken = await user.getIdToken();
+          await fetch('/api/users/activity', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`
+            },
+            body: JSON.stringify({
+              action: 'bannerDelete',
+              details: `배너 "${titleKo}" 삭제`,
+              userId: user.uid,
+              userEmail: user.email
+            })
+          });
+        }
+      } catch (error) {
+        console.error('활동 기록 실패:', error);
+      }
+      
       // router.push("/admin/banners"); // Removed as per edit hint
     } catch (e) {
       if (e instanceof Error) setError(e.message);

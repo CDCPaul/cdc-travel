@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { collection, getDocs, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { useLanguage } from '../../../components/LanguageContext';
 import Link from 'next/link';
 import Image from "next/image";
@@ -96,7 +96,34 @@ export default function AdminProducts() {
   const handleDelete = async (productId: string) => {
     if (window.confirm(texts.confirmDelete)) {
       try {
+        // 삭제할 상품 정보 가져오기
+        const productToDelete = products.find(p => p.id === productId);
+        
         await deleteDoc(doc(db, 'products', productId));
+        
+        // 활동 기록
+        try {
+          const user = auth.currentUser;
+          if (user) {
+            const idToken = await user.getIdToken();
+            await fetch('/api/users/activity', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`
+              },
+              body: JSON.stringify({
+                action: 'productDelete',
+                details: `상품 "${productToDelete?.title?.[lang] || '제목 없음'}" 삭제`,
+                userId: user.uid,
+                userEmail: user.email
+              })
+            });
+          }
+        } catch (error) {
+          console.error('활동 기록 실패:', error);
+        }
+        
         alert(texts.deleted);
         const fetchProducts = async () => {
           try {
