@@ -1,29 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminDb } from '@/lib/firebase-admin';
 import sharp from 'sharp';
 import { getStorage } from 'firebase-admin/storage';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { db } from '@/lib/firebase';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('이미지 생성 API 호출됨');
     const body = await request.json();
     const { taIds, attachmentBase64, attachmentType } = body;
+    
+    console.log('받은 데이터:', {
+      taIds: taIds,
+      hasAttachmentBase64: !!attachmentBase64,
+      attachmentType: attachmentType
+    });
 
     if (!taIds || !Array.isArray(taIds) || taIds.length === 0) {
-      return NextResponse.json(
-        { error: 'TA ID 목록이 필요합니다.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ 
+        success: false, 
+        error: 'TA ID가 필요합니다.' 
+      }, { status: 400 });
     }
 
-    // Firebase Admin Firestore 사용
-    const db = getAdminDb();
-    
-    // 선택된 TA들의 데이터 가져오기
-    const tasRef = db.collection('tas');
-    const querySnapshot = await tasRef.where('__name__', 'in', taIds).get();
+    if (!attachmentBase64 || !attachmentType) {
+      return NextResponse.json({ 
+        success: false, 
+        error: '첨부파일이 필요합니다.' 
+      }, { status: 400 });
+    }
 
-    const tas = querySnapshot.docs.map((doc) => ({
+    // TA 정보 가져오기
+    const tasRef = collection(db, 'tas');
+    const tasQuery = query(tasRef, where('__name__', 'in', taIds));
+    const tasSnapshot = await getDocs(tasQuery);
+    const tas = tasSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     })) as Array<{
@@ -34,159 +46,170 @@ export async function POST(request: NextRequest) {
     }>;
 
     if (tas.length === 0) {
-      return NextResponse.json(
-        { error: '선택된 TA를 찾을 수 없습니다.' },
-        { status: 404 }
-      );
+      return NextResponse.json({ 
+        success: false, 
+        error: 'TA 정보를 찾을 수 없습니다.' 
+      }, { status: 404 });
     }
 
-    // Firebase Admin Storage 초기화
+    console.log('TA 개수:', tas.length);
+    console.log('TA 목록:', tas.map(t => ({ id: t.id, name: t.companyName, hasLogo: !!t.logo })));
+
     const storage = getStorage(initializeFirebaseAdmin());
     const bucket = storage.bucket();
+    const results: Array<{
+      taId: string;
+      taName: string;
+      imageUrl: string;
+      thumbnailUrl: string;
+      fileName: string;
+      thumbnailFileName: string;
+      error?: string;
+    }> = [];
 
-    // 첨부파일 이미지 처리 (JPG 파일만 지원)
-    let baseImage: sharp.Sharp;
-    let imageWidth = 2480;
-    let imageHeight = 3508;
+    // 1단계: 원본 이미지를 WebP로 변환하여 스토리지에 저장
+    console.log('1단계: 원본 이미지 처리 시작');
+    const attachmentBuffer = Buffer.from(attachmentBase64, 'base64');
+    const originalImage = sharp(attachmentBuffer);
+    const webpBuffer = await originalImage.webp({ quality: 85 }).toBuffer();
+    
+    const timestamp = Date.now();
+    const sessionId = `session_${timestamp}_${Math.random().toString(36).substr(2, 9)}`;
+    const originalFileName = `email-images/${sessionId}/original.webp`;
+    const originalFile = bucket.file(originalFileName);
+    
+    console.log('원본 WebP 파일 저장:', originalFileName);
+    await originalFile.save(webpBuffer, {
+      metadata: { contentType: 'image/webp' }
+    });
+    await originalFile.makePublic();
+    const originalUrl = `https://storage.googleapis.com/${bucket.name}/${originalFileName}`;
 
-    if (attachmentBase64 && attachmentType && attachmentType.startsWith('image/')) {
-      try {
-        // Base64 디코딩
-        const attachmentBuffer = Buffer.from(attachmentBase64, 'base64');
-        
-        // 첨부파일을 기본 이미지로 사용
-        baseImage = sharp(attachmentBuffer);
-        
-        // 이미지 크기 정보 가져오기
-        const metadata = await baseImage.metadata();
-        imageWidth = metadata.width || 2480;
-        imageHeight = metadata.height || 3508;
-        
-        console.log(`첨부파일 이미지 크기: ${imageWidth}x${imageHeight}`);
-      } catch (error) {
-        console.error('첨부파일 처리 실패:', error);
-        // 첨부파일 처리 실패 시 기본 흰색 배경 사용
-        baseImage = sharp({
-          create: {
-            width: 2480,
-            height: 3508,
-            channels: 4,
-            background: { r: 255, g: 255, b: 255, alpha: 1 }
-          }
-        });
-      }
-    } else {
-      // 첨부파일이 없거나 이미지가 아닌 경우 기본 흰색 배경 사용
-      baseImage = sharp({
-        create: {
-          width: 2480,
-          height: 3508,
-          channels: 4,
-          background: { r: 255, g: 255, b: 255, alpha: 1 }
-        }
-      });
-    }
-
-    const imageUrls: string[] = [];
-
-    // 각 TA에 대해 로고가 합성된 이미지 생성
+    // 2단계: 각 TA에 대해 로고 오버레이 처리
     for (const ta of tas) {
+      console.log(`TA ${ta.companyName} 처리 시작`);
       try {
-        let finalImage = baseImage;
+        let finalImage = originalImage.clone();
 
         if (ta.logo) {
+          console.log(`TA ${ta.companyName} 로고 처리 시작: ${ta.logo}`);
           try {
             // 로고 이미지 다운로드 및 처리
             const logoResponse = await fetch(ta.logo);
+            console.log(`로고 다운로드 응답: ${logoResponse.status} ${logoResponse.statusText}`);
             if (!logoResponse.ok) {
               throw new Error(`로고 다운로드 실패: ${logoResponse.status}`);
             }
-            
-            const logoBuffer = await logoResponse.arrayBuffer();
-            
-            // 로고 크기 조정 (세로 250px, 가로는 비율에 맞게 자동 조정)
-            const logoHeight = 250;
-            
-            const processedLogo = await sharp(Buffer.from(logoBuffer))
-              .resize(null, logoHeight, { 
-                fit: 'inside',
-                withoutEnlargement: true 
-              })
-              .png()
-              .toBuffer();
 
-            // 로고 정보 가져오기 (실제 크기 확인)
-            const logoInfo = await sharp(processedLogo).metadata();
-            const actualLogoWidth = logoInfo.width || 0;
-            const actualLogoHeight = logoInfo.height || logoHeight;
-
-            // 로고를 상단 260px 영역 내에 왼쪽 정렬로 배치
-            const logoAreaTop = 50; // 상단 여백
-            const logoAreaHeight = 260 - logoAreaTop; // 로고 영역 높이 (210px)
-            const logoY = logoAreaTop + (logoAreaHeight - actualLogoHeight) / 2; // 세로 중앙 정렬
+            const logoBuffer = Buffer.from(await logoResponse.arrayBuffer());
+            const logoImage = sharp(logoBuffer);
             
-            // 왼쪽 정렬 (왼쪽 여백 100px)
-            const logoX = 100;
-
-            console.log(`로고 배치 정보: ${ta.companyName}`);
-            console.log(`- 로고 크기: ${actualLogoWidth}x${actualLogoHeight}`);
-            console.log(`- 배치 위치: (${Math.round(logoX)}, ${Math.round(logoY)})`);
-            console.log(`- 이미지 크기: ${imageWidth}x${imageHeight}`);
-
-            // 합성된 이미지 생성
-            finalImage = baseImage.composite([{
-              input: processedLogo,
-              top: Math.round(logoY),
-              left: Math.round(logoX)
+            // 로고 크기 조정 (예: 200x200)
+            const resizedLogo = await logoImage.resize(200, 200, { fit: 'inside' }).png().toBuffer();
+            
+            // 로고를 이미지 우상단에 합성
+            finalImage = finalImage.composite([{
+              input: resizedLogo,
+              top: 50,
+              left: 50
             }]);
-
-            console.log(`로고 합성 완료: ${ta.companyName}`);
-
-          } catch (logoError) {
-            console.error(`로고 처리 실패 (TA: ${ta.companyName}):`, logoError);
-            // 로고 처리 실패 시 기본 이미지 사용
-            finalImage = baseImage;
+            
+            console.log(`TA ${ta.companyName} 로고 오버레이 완료`);
+          } catch (error) {
+            console.error(`TA ${ta.companyName} 로고 처리 실패:`, error);
+            // 로고 처리 실패 시 원본 이미지 사용
           }
         }
 
-        // 최종 이미지를 PNG로 변환
-        const finalBuffer = await finalImage.png().toBuffer();
+        // 3단계: 최종 이미지를 WebP로 변환
+        console.log(`TA ${ta.companyName} 최종 이미지 생성 시작`);
+        const finalBuffer = await finalImage.webp({ 
+          quality: 85,
+          effort: 6
+        }).toBuffer();
 
-        // Firebase Storage에 직접 업로드
-        const fileName = `email-images/${ta.id}_${Date.now()}.png`;
-        const file = bucket.file(fileName);
+        console.log(`TA ${ta.companyName} WebP 변환 완료, 버퍼 크기: ${finalBuffer.length}`);
+
+        // 4단계: 최종 이미지 저장
+        const finalFileName = `email-images/${sessionId}/${ta.id}.webp`;
+        const finalFile = bucket.file(finalFileName);
         
-        await file.save(finalBuffer, {
-          metadata: {
-            contentType: 'image/png',
-          },
+        console.log(`TA ${ta.companyName} 최종 이미지 저장: ${finalFileName}`);
+        await finalFile.save(finalBuffer, {
+          metadata: { contentType: 'image/webp' }
+        });
+        await finalFile.makePublic();
+        const finalUrl = `https://storage.googleapis.com/${bucket.name}/${finalFileName}`;
+
+                 // 5단계: 썸네일 생성 (미리보기용)
+         // 저장된 최종 이미지를 불러와서 썸네일 생성
+         console.log(`TA ${ta.companyName} 썸네일 생성 시작: ${finalUrl}`);
+         
+         // 저장된 최종 이미지 다운로드
+         const finalImageResponse = await fetch(finalUrl);
+         if (!finalImageResponse.ok) {
+           throw new Error(`최종 이미지 다운로드 실패: ${finalImageResponse.status}`);
+         }
+         
+         const finalImageBuffer = Buffer.from(await finalImageResponse.arrayBuffer());
+         const thumbnailBuffer = await sharp(finalImageBuffer)
+           .resize(400, 300, { fit: 'inside' })
+           .webp({ quality: 70 })
+           .toBuffer();
+         const thumbnailFileName = `email-images/${sessionId}/thumb_${ta.id}.webp`;
+         const thumbnailFile = bucket.file(thumbnailFileName);
+        
+        console.log(`TA ${ta.companyName} 썸네일 생성: ${thumbnailFileName}`);
+        await thumbnailFile.save(thumbnailBuffer, {
+          metadata: { contentType: 'image/webp' }
+        });
+        await thumbnailFile.makePublic();
+        const thumbnailUrl = `https://storage.googleapis.com/${bucket.name}/${thumbnailFileName}`;
+
+        results.push({
+          taId: ta.id,
+          taName: ta.companyName,
+          imageUrl: finalUrl, // 발송용 원본
+          thumbnailUrl: thumbnailUrl, // 미리보기용 썸네일
+          fileName: finalFileName,
+          thumbnailFileName: thumbnailFileName
         });
 
-        // 공개 URL 생성
-        await file.makePublic();
-        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
-
-        imageUrls.push(publicUrl);
-        console.log(`이미지 업로드 완료: ${ta.companyName} -> ${publicUrl}`);
-
+        console.log(`TA ${ta.companyName} 처리 완료`);
       } catch (error) {
-        console.error(`이미지 생성 실패 (TA: ${ta.companyName}):`, error);
-        // 개별 TA 이미지 생성 실패 시 빈 문자열 추가
-        imageUrls.push('');
+        console.error(`TA ${ta.companyName} 처리 실패:`, error);
+        results.push({
+          taId: ta.id,
+          taName: ta.companyName,
+          imageUrl: originalUrl, // 실패 시 원본 사용
+          thumbnailUrl: originalUrl,
+          fileName: originalFileName,
+          thumbnailFileName: originalFileName,
+          error: error instanceof Error ? error.message : '처리 실패'
+        });
       }
     }
 
+    // 6단계: 원본 파일 삭제 (로고 오버레이된 파일만 남김)
+    console.log('원본 파일 삭제:', originalFileName);
+    await originalFile.delete().catch(error => {
+      console.error('원본 파일 삭제 실패:', error);
+    });
+
+    console.log('모든 처리 완료, 결과:', results.length);
+
     return NextResponse.json({
       success: true,
-      imageUrls,
-      message: `${tas.length}개의 이미지가 생성되었습니다.`
+      results: results,
+      timestamp: timestamp, // 타임스탬프 반환 (파일 정리용)
+      sessionId: sessionId // 세션 ID 반환 (파일 정리용)
     });
 
   } catch (error) {
-    console.error('이미지 생성 실패:', error);
-    return NextResponse.json(
-      { error: '이미지 생성에 실패했습니다.' },
-      { status: 500 }
-    );
+    console.error('이미지 생성 API 오류:', error);
+    return NextResponse.json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : '이미지 처리 중 오류가 발생했습니다.' 
+    }, { status: 500 });
   }
 } 

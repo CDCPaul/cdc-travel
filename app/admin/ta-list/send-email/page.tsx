@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLanguage } from "../../../../components/LanguageContext";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -54,6 +54,67 @@ export default function SendEmailPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isDragOver, setIsDragOver] = useState(false);
   const [includeLogo, setIncludeLogo] = useState(true); // TA 로고 삽입 여부
+  
+  // 파일 정리용 상태
+  const [generatedSessionId, setGeneratedSessionId] = useState<string | null>(null);
+
+  // 파일 정리 함수
+  const cleanupGeneratedFiles = useCallback(async () => {
+    if (generatedSessionId) {
+      try {
+        console.log('생성된 파일들 정리 시작:', {
+          sessionId: generatedSessionId
+        });
+        
+        const response = await fetch('/api/cleanup-email-images', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sessionId: generatedSessionId
+          })
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log('파일 정리 완료:', result.message);
+        } else {
+          console.error('파일 정리 실패:', response.status);
+        }
+      } catch (error) {
+        console.error('파일 정리 중 오류:', error);
+      }
+    }
+  }, [generatedSessionId]);
+
+  // 브라우저 이벤트 리스너 및 페이지 언마운트 시 파일 정리
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isLoading || generatedSessionId) {
+        e.preventDefault();
+        e.returnValue = '';
+        cleanupGeneratedFiles();
+      }
+    };
+
+    const handlePopState = () => {
+      if (isLoading || generatedSessionId) {
+        cleanupGeneratedFiles();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('popstate', handlePopState);
+      if (isLoading || generatedSessionId) {
+        cleanupGeneratedFiles();
+      }
+    };
+  }, [isLoading, generatedSessionId, cleanupGeneratedFiles]);
 
   // 선택된 TA 데이터 불러오기
   useEffect(() => {
@@ -206,9 +267,14 @@ export default function SendEmailPage() {
             }
 
             const imageResult = await imageResponse.json();
-            imageUrls = imageResult.imageUrls;
+            imageUrls = imageResult.results.map((result: { imageUrl: string }) => result.imageUrl);
+            const sessionId = imageResult.sessionId;
+            
+            // 생성된 파일 정보 저장 (실패 시 정리용)
+            setGeneratedSessionId(sessionId);
           } catch (error) {
             console.error('첨부파일 인코딩 실패:', error);
+            throw error; // 에러를 다시 던져서 catch 블록에서 처리
           }
         }
       }
@@ -252,10 +318,17 @@ export default function SendEmailPage() {
         throw new Error(result.error || '이메일 발송에 실패했습니다.');
       }
 
+      // 성공 시 생성된 파일 정보 초기화 (파일 유지)
+      setGeneratedSessionId(null);
+      
       alert(TEXT.sendSuccess[lang]);
       window.location.href = "/admin/ta-list";
     } catch (error) {
       console.error("이메일 발송 실패:", error);
+      
+      // 실패 시 생성된 파일들 정리
+      await cleanupGeneratedFiles();
+      
       alert(error instanceof Error ? error.message : TEXT.sendError[lang]);
     } finally {
       setIsLoading(false);
@@ -547,12 +620,18 @@ export default function SendEmailPage() {
 
         {/* 버튼 */}
         <div className="flex justify-end gap-4 mt-6">
-          <Link
-            href="/admin/ta-list"
-            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+          <button
+            type="button"
+            onClick={async () => {
+              // 취소 시 생성된 파일들 정리
+              await cleanupGeneratedFiles();
+              window.location.href = "/admin/ta-list";
+            }}
+            disabled={isLoading}
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {TEXT.cancel[lang]}
-          </Link>
+          </button>
           <button
             type="submit"
             disabled={isLoading}

@@ -102,18 +102,33 @@ export async function POST(request: NextRequest) {
         // 이메일 메시지 구성 (MIME 형식)
         const boundary = `boundary_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
+        // HTML 콘텐츠인지 확인 (현재는 항상 HTML로 처리)
+        // const isHtmlContent = content.includes('<') && content.includes('>');
+        
         let emailMessage = [
           `From: ${decodedToken.email}`,
           `To: ${ta.email}`,
-          `Subject: ${subject}`,
+          `Subject: =?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`,
           `MIME-Version: 1.0`,
           `Content-Type: multipart/mixed; boundary="${boundary}"`,
           '',
           `--${boundary}`,
+          `Content-Type: multipart/alternative; boundary="alt_${boundary}"`,
+          '',
+          `--alt_${boundary}`,
           `Content-Type: text/plain; charset=UTF-8`,
           `Content-Transfer-Encoding: 7bit`,
           '',
+          // HTML 태그 제거한 텍스트 버전
+          content.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' '),
+          '',
+          `--alt_${boundary}`,
+          `Content-Type: text/html; charset=UTF-8`,
+          `Content-Transfer-Encoding: 7bit`,
+          '',
           content,
+          '',
+          `--alt_${boundary}--`,
           '',
           '---',
           `발송자: ${decodedToken.email}`,
@@ -129,12 +144,15 @@ export async function POST(request: NextRequest) {
               let attachmentType: string;
 
               // JPG 파일이고 TA 로고 삽입이 선택된 경우에만 로고 오버레이 처리
-              if (includeLogo && attachment.type.startsWith('image/') && imageUrls[i] && imageUrls[i] !== '') {
+              const taIndex = tas.findIndex(t => t.id === ta.id);
+              const imageUrl = imageUrls[taIndex];
+              
+              if (includeLogo && attachment.type.startsWith('image/') && imageUrl && imageUrl !== '') {
                 // TA 로고가 포함된 이미지 첨부
-                console.log(`TA ${ta.companyName}의 로고 포함 이미지 첨부: ${imageUrls[i]}`);
+                console.log(`TA ${ta.companyName}의 로고 포함 이미지 첨부: ${imageUrl}`);
                 
                 // 이미지 URL에서 파일 다운로드
-                const imageResponse = await fetch(imageUrls[i]);
+                const imageResponse = await fetch(imageUrl);
                 if (!imageResponse.ok) {
                   throw new Error(`이미지 다운로드 실패: ${imageResponse.status}`);
                 }
