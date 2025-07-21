@@ -61,7 +61,11 @@ export async function GET(request: NextRequest) {
           sentByEmail: data.sentByEmail || '',
           sentAt: data.sentAt,
           attachments: data.attachments || [],
-          includeLogo: data.includeLogo || false
+          includeLogo: data.includeLogo || false,
+          messageId: data.messageId || null,
+          taEmail: data.taEmail || '', // 수신자 이메일
+          deliveryStatus: data.deliveryStatus || null,
+          readStatus: data.readStatus || null
         };
       });
 

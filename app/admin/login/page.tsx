@@ -57,6 +57,10 @@ export default function AdminLogin() {
       
       console.log("Google access token 획득 성공");
       
+      // 토큰 만료 시간 설정
+      const { TokenManager } = await import('../../../lib/token-manager');
+      TokenManager.setTokenExpiry();
+      
       // 서버에 로그인 정보 전송
       const idToken = await user.getIdToken();
       console.log('Google Access Token:', accessToken);

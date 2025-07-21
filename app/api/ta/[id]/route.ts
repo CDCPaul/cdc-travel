@@ -78,8 +78,8 @@ async function createTAOverlayImage(ta: {
       const logoBuffer = Buffer.from(await logoResponse.arrayBuffer());
       
       const resizedLogo = await sharp(logoBuffer)
-        .resize(200, 200, { 
-          fit: 'contain',
+        .resize(null, 250, { 
+          fit: 'inside',
           background: { r: 255, g: 255, b: 255, alpha: 0 }
         })
         .png()
@@ -88,7 +88,7 @@ async function createTAOverlayImage(ta: {
       // 로고를 왼쪽에 배치 (여백 50px)
       composites.push({
         input: resizedLogo,
-        top: Math.floor((height - 200) / 2), // 세로 중앙 정렬
+        top: 0, // 상단 정렬 (250px 높이에 맞춤)
         left: 50
       });
       
@@ -108,19 +108,19 @@ async function createTAOverlayImage(ta: {
       </defs>
       
       <!-- 회사명 (오른쪽 정렬) -->
-      <text x="${width - 100}" y="80" font-family="Arial, sans-serif" font-size="70" font-weight="bold" 
+      <text x="${width - 100}" y="100" font-family="Arial, sans-serif" font-size="120" font-weight="bold" 
             fill="#333333" filter="url(#shadow)" text-anchor="end">
         ${ta.companyName}
       </text>
       
       <!-- 전화번호 (오른쪽 정렬) -->
-      <text x="${width - 100}" y="140" font-family="Arial, sans-serif" font-size="32" 
+      <text x="${width - 100}" y="160" font-family="Arial, sans-serif" font-size="40" 
             fill="#666666" filter="url(#shadow)" text-anchor="end">
         📞 ${ta.phone}
       </text>
       
       <!-- 이메일 (오른쪽 정렬) -->
-      <text x="${width - 100}" y="200" font-family="Arial, sans-serif" font-size="32" 
+      <text x="${width - 100}" y="220" font-family="Arial, sans-serif" font-size="40" 
             fill="#666666" filter="url(#shadow)" text-anchor="end">
         ✉️ ${ta.email}
       </text>

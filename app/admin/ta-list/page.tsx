@@ -282,60 +282,57 @@ export default function TAListPage() {
           <tbody className="bg-white divide-y divide-gray-200">
             {filteredTAs.length > 0 ? (
               filteredTAs.map((ta) => (
-                <tr key={ta.id} className="hover:bg-gray-50">
+                <tr key={ta.id} className="hover:bg-gray-50 cursor-pointer">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <input
                       type="checkbox"
                       checked={selectedTAs.includes(ta.id)}
-                      onChange={() => handleSelectTA(ta.id)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handleSelectTA(ta.id);
+                      }}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <Link href={`/admin/ta-list/${ta.id}`} className="block">
-                      <div className="relative w-12 h-12">
-                        {ta.logo ? (
-                          <Image
-                            src={ta.logo}
-                            alt={`${ta.companyName} 로고`}
-                            width={48}
-                            height={48}
-                            className="object-contain rounded hover:opacity-80 transition-opacity"
-                          />
-                        ) : (
-                          <div className="w-12 h-12 bg-gray-200 rounded flex items-center justify-center hover:bg-gray-300 transition-colors">
-                            <span className="text-gray-500 text-xs">No Logo</span>
-                          </div>
-                        )}
-                      </div>
-                    </Link>
+                  <td className="px-6 py-4 whitespace-nowrap" onClick={() => window.location.href = `/admin/ta-list/${ta.id}`}>
+                    <div className="relative w-12 h-12">
+                      {ta.logo ? (
+                        <Image
+                          src={ta.logo}
+                          alt={`${ta.companyName} 로고`}
+                          width={48}
+                          height={48}
+                          className="object-contain rounded hover:opacity-80 transition-opacity"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 bg-gray-200 rounded flex items-center justify-center hover:bg-gray-300 transition-colors">
+                          <span className="text-gray-500 text-xs">No Logo</span>
+                        </div>
+                      )}
+                    </div>
                   </td>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                    <Link href={`/admin/ta-list/${ta.id}`} className="block">
-                      <div className="max-w-xs truncate hover:text-blue-600 transition-colors" title={ta.companyName}>
-                        {ta.companyName}
-                      </div>
-                    </Link>
+                  <td className="px-6 py-4 text-sm font-medium text-gray-900" onClick={() => window.location.href = `/admin/ta-list/${ta.id}`}>
+                    <div className="max-w-xs truncate hover:text-blue-600 transition-colors" title={ta.companyName}>
+                      {ta.companyName}
+                    </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" onClick={() => window.location.href = `/admin/ta-list/${ta.id}`}>
                     {ta.taCode}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" onClick={() => window.location.href = `/admin/ta-list/${ta.id}`}>
                     {ta.phone}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
+                  <td className="px-6 py-4 text-sm text-gray-500" onClick={() => window.location.href = `/admin/ta-list/${ta.id}`}>
                     <div className="max-w-xs truncate" title={ta.address}>
                       {ta.address}
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
-                    <Link href={`/admin/ta-list/${ta.id}`} className="block">
-                      <div className="max-w-xs truncate hover:text-blue-600 transition-colors" title={ta.email}>
-                        {ta.email}
-                      </div>
-                    </Link>
+                  <td className="px-6 py-4 text-sm text-gray-500" onClick={() => window.location.href = `/admin/ta-list/${ta.id}`}>
+                    <div className="max-w-xs truncate hover:text-blue-600 transition-colors" title={ta.email}>
+                      {ta.email}
+                    </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" onClick={() => window.location.href = `/admin/ta-list/${ta.id}`}>
                     {ta.contactPersons.length > 0 ? (
                       <div>
                         <div className="font-medium">{ta.contactPersons[0].name}</div>
@@ -347,12 +344,16 @@ export default function TAListPage() {
                     <div className="flex gap-2">
                       <Link
                         href={`/admin/ta-list/${ta.id}/edit`}
+                        onClick={(e) => e.stopPropagation()}
                         className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors"
                       >
                         {TEXT.edit[lang]}
                       </Link>
                       <button 
-                        onClick={() => handleDelete(ta.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(ta.id);
+                        }}
                         disabled={isLoading}
                         className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >

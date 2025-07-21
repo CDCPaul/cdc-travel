@@ -36,6 +36,8 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
 // Gmail API 권한 추가
+googleProvider.addScope('https://www.googleapis.com/auth/gmail.compose');
 googleProvider.addScope('https://www.googleapis.com/auth/gmail.send');
+googleProvider.addScope('https://www.googleapis.com/auth/gmail.modify');
 
 export { app, analytics }; 

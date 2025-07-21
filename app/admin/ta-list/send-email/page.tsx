@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { auth } from "../../../../lib/firebase";
 import Image from "next/image";
+import TiptapEditor from "../../../../components/ui/TiptapEditor";
 
 // 다국어 텍스트
 const TEXT = {
@@ -23,7 +24,7 @@ const TEXT = {
   agentCount: { ko: "명의 에이전트에게 발송됩니다", en: "agents will receive this email" },
   required: { ko: "필수 입력 항목입니다", en: "This field is required" },
   sending: { ko: "이메일 발송 중...", en: "Sending email..." },
-  sendSuccess: { ko: "이메일이 성공적으로 발송되었습니다", en: "Email sent successfully" },
+  sendSuccess: { ko: "이메일이 성공적으로 발송되었습니다", en: "Emails sent successfully" },
   sendError: { ko: "이메일 발송에 실패했습니다", en: "Failed to send email" },
   loading: { ko: "로딩 중...", en: "Loading..." },
   error: { ko: "데이터를 불러오는데 실패했습니다", en: "Failed to load data" },
@@ -45,7 +46,17 @@ const TEXT = {
   preview: { ko: "미리보기", en: "Preview" },
   noFiles: { ko: "파일이 없습니다", en: "No files found" },
   selectFile: { ko: "파일 선택", en: "Select File" },
-  removeFile: { ko: "파일 제거", en: "Remove File" }
+  removeFile: { ko: "파일 제거", en: "Remove File" },
+  attachmentProcessing: { ko: "첨부파일 처리 방식", en: "Attachment Processing Method" },
+  logoInsertNote: { ko: "전단지에만 TA 로고가 삽입됩니다. IT와 레터는 원본 그대로 발송됩니다.", en: "TA logos are only inserted on posters. IT and letters are sent as original." },
+  logoInsertNoteDisabled: { ko: "전단지만 TA 로고 삽입이 가능합니다.", en: "TA logo insertion is only available for posters." },
+  originalFileNote: { ko: "모든 첨부파일이 원본 그대로 발송됩니다.", en: "All attachments are sent as original." },
+  attachmentNote: { ko: "첨부파일이 원본 그대로 발송됩니다.", en: "Attachments are sent as original." },
+  emailSenderNote: { ko: "이메일은 로그인한 사용자의 계정으로 발송됩니다.", en: "Emails are sent from the logged-in user's account." },
+  logoInsertInfo: { ko: "• 전단지에만 선택된 각 에이전트의 로고와 회사 정보가 상단 250px 영역에 합성되어 자동으로 첨부됩니다.", en: "• TA logos and company information are automatically composited in the top 250px area of posters only." },
+  companyInfoNote: { ko: "• 회사 정보: 회사명, 전화번호, 이메일이 3줄로 표시됩니다.", en: "• Company information: Company name, phone number, and email are displayed in 3 lines." },
+  itLetterNote: { ko: "• IT와 레터는 원본 그대로 발송됩니다.", en: "• IT and letters are sent as original." },
+  logoSizeNote: { ko: "• 로고는 세로 250px 크기로 자동 조정되며, 가로 비율은 유지됩니다.", en: "• Logos are automatically resized to 250px height while maintaining aspect ratio." }
 };
 
 interface SelectedTA {
@@ -376,6 +387,15 @@ export default function SendEmailPage() {
       return;
     }
 
+    // 토큰 갱신 시도
+    const { TokenManager } = await import('../../../../lib/token-manager');
+    if (TokenManager.isTokenExpiringSoon()) {
+      const newToken = await TokenManager.refreshToken();
+      if (newToken) {
+        console.log('토큰이 자동으로 갱신되었습니다.');
+      }
+    }
+
     // 발송 시작 시간 기록
     const startTime = Date.now();
     setSendDuration(null);
@@ -478,6 +498,25 @@ export default function SendEmailPage() {
       const result = await emailResponse.json();
 
       if (!emailResponse.ok) {
+        // 토큰 만료로 인한 실패인 경우 갱신 시도
+        if (result.requiresReauth) {
+          const { TokenManager } = await import('../../../../lib/token-manager');
+          const newToken = await TokenManager.refreshToken();
+          
+          if (newToken) {
+            console.log('토큰이 갱신되었습니다. 다시 시도합니다.');
+            // 토큰 갱신 후 다시 발송 시도
+            setTimeout(() => {
+              handleSubmit(e);
+            }, 1000);
+            return;
+          } else {
+            alert('토큰 갱신에 실패했습니다. 다시 로그인해주세요.');
+            window.location.href = '/admin/login';
+            return;
+          }
+        }
+        
         throw new Error(result.error || '이메일 발송에 실패했습니다.');
       }
 
@@ -515,7 +554,9 @@ export default function SendEmailPage() {
         console.error('활동 기록 실패:', error);
       }
       
-      alert(`${TEXT.sendSuccess[lang]}\n발송 시간: ${duration}ms (${(duration / 1000).toFixed(2)}초)`);
+              const successCount = result.results?.filter((r: { success: boolean }) => r.success).length || 0;
+      const totalCount = result.results?.length || 0;
+      alert(`${TEXT.sendSuccess[lang]}\n발송된 이메일: ${successCount}개 / ${totalCount}개\n발송 시간: ${duration}ms (${(duration / 1000).toFixed(2)}초)`);
       
       // 성공 후 페이지 이동 전에 잠시 대기 (파일 정리 방지)
       setTimeout(() => {
@@ -623,19 +664,19 @@ export default function SendEmailPage() {
             <label className="block text-sm font-medium text-gray-700 mb-2">
               {TEXT.emailContent[lang]} *
             </label>
-            <textarea
+            <TiptapEditor
               value={emailContent}
-              onChange={(e) => {
-                setEmailContent(e.target.value);
+              onChange={(value: string) => {
+                setEmailContent(value);
                 if (errors.emailContent) {
                   setErrors(prev => ({ ...prev, emailContent: "" }));
                 }
               }}
               placeholder={TEXT.emailContentPlaceholder[lang]}
-              rows={8}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              className={`${
                 errors.emailContent ? "border-red-500" : "border-gray-300"
               }`}
+              lang={lang}
             />
             {errors.emailContent && (
               <p className="mt-1 text-sm text-red-600">{errors.emailContent}</p>
@@ -724,7 +765,7 @@ export default function SendEmailPage() {
           {selectedAttachments.length > 0 && (
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
               <h3 className="text-sm font-medium text-gray-700 mb-3">
-                첨부파일 처리 방식
+                {TEXT.attachmentProcessing[lang]}
               </h3>
               <div className="space-y-3">
                 <label className={`flex items-start space-x-3 ${selectedAttachments.some(att => att.type === 'poster') ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}>
@@ -742,8 +783,8 @@ export default function SendEmailPage() {
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
                       {selectedAttachments.some(att => att.type === 'poster')
-                        ? '전단지에만 TA 로고가 삽입됩니다. IT와 레터는 원본 그대로 발송됩니다.'
-                        : '전단지만 TA 로고 삽입이 가능합니다.'
+                        ? TEXT.logoInsertNote[lang]
+                        : TEXT.logoInsertNoteDisabled[lang]
                       }
                     </div>
                   </div>
@@ -776,30 +817,30 @@ export default function SendEmailPage() {
               includeLogo ? (
                 <>
                   <p className="text-sm text-yellow-800">
-                    • 전단지에만 선택된 각 에이전트의 로고와 회사 정보가 상단 250px 영역에 합성되어 자동으로 첨부됩니다.
+                    {TEXT.logoInsertInfo[lang]}
                   </p>
                   <p className="text-sm text-yellow-800 mt-1">
-                    • 회사 정보: 회사명, 전화번호, 이메일이 3줄로 표시됩니다.
+                    {TEXT.companyInfoNote[lang]}
                   </p>
                   <p className="text-sm text-yellow-800 mt-1">
-                    • IT와 레터는 원본 그대로 발송됩니다.
+                    {TEXT.itLetterNote[lang]}
                   </p>
                   <p className="text-sm text-yellow-800 mt-1">
-                    • 로고는 세로 200px 크기로 자동 조정되며, 가로 비율은 유지됩니다.
+                    {TEXT.logoSizeNote[lang]}
                   </p>
                 </>
               ) : (
                 <p className="text-sm text-yellow-800">
-                  • 모든 첨부파일이 원본 그대로 발송됩니다.
+                  {TEXT.originalFileNote[lang]}
                 </p>
               )
             ) : (
               <p className="text-sm text-yellow-800">
-                • 첨부파일이 원본 그대로 발송됩니다.
+                {TEXT.attachmentNote[lang]}
               </p>
             )}
             <p className="text-sm text-yellow-800 mt-1">
-              • 이메일은 로그인한 사용자의 계정으로 발송됩니다.
+              {TEXT.emailSenderNote[lang]}
             </p>
           </div>
         </div>

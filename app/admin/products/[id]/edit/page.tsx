@@ -138,38 +138,81 @@ const PRODUCTS_TEXTS = {
 };
 
 // 국가 옵션
-const COUNTRY_OPTIONS = [
-  { en: 'KR', ko: '대한민국' },
-  { en: 'PH', ko: '필리핀' },
-  { en: 'JP', ko: '일본' },
-  { en: 'TW', ko: '대만' },
+interface CountryOption {
+  ko: string;
+  en: string;
+  code: string; // DB 저장용
+}
+
+const COUNTRY_OPTIONS: CountryOption[] = [
+  { ko: '대한민국', en: 'Korea', code: 'KR' },
+  { ko: '필리핀', en: 'Philippines', code: 'PH' },
+  { ko: '일본', en: 'Japan', code: 'JP' },
+  { ko: '베트남', en: 'Vietnam', code: 'VN' },
+  { ko: '대만', en: 'Taiwan', code: 'TW' },
 ];
 
-// 지역 옵션 (국가별)
-const REGION_OPTIONS = {
+// 국가별 지역 옵션
+const REGION_OPTIONS_BY_COUNTRY = {
   KR: [
     { ko: '서울', en: 'Seoul' },
     { ko: '부산', en: 'Busan' },
     { ko: '제주', en: 'Jeju' },
     { ko: '경주', en: 'Gyeongju' },
+    { ko: '전남', en: 'Jeonnam' },
+    { ko: '경기도', en: 'Gyeonggi' },
+    { ko: '강원도', en: 'Gangwon' },
+    { ko: '인천', en: 'Incheon' },
+    { ko: '대구', en: 'Daegu' },
+    { ko: '광주', en: 'Gwangju' },
   ],
   PH: [
     { ko: '마닐라', en: 'Manila' },
     { ko: '세부', en: 'Cebu' },
-    { ko: '보라카이', en: 'Boracay' },
+    { ko: '보홀', en: 'Bohol' },
     { ko: '팔라완', en: 'Palawan' },
+    { ko: '다바오', en: 'Davao' },
+    { ko: '바기오', en: 'Baguio' },
+    { ko: '푸에르토프린세사', en: 'Puerto Princesa' },
+    { ko: '엘니도', en: 'El Nido' },
+    { ko: '보라카이', en: 'Boracay' },
+    { ko: '시아르가오', en: 'Siargao' },
   ],
   JP: [
     { ko: '도쿄', en: 'Tokyo' },
     { ko: '오사카', en: 'Osaka' },
     { ko: '교토', en: 'Kyoto' },
+    { ko: '요코하마', en: 'Yokohama' },
+    { ko: '나고야', en: 'Nagoya' },
+    { ko: '삿포로', en: 'Sapporo' },
     { ko: '후쿠오카', en: 'Fukuoka' },
+    { ko: '고베', en: 'Kobe' },
+    { ko: '가와사키', en: 'Kawasaki' },
+    { ko: '히로시마', en: 'Hiroshima' },
+  ],
+  VN: [
+    { ko: '호치민', en: 'Ho Chi Minh City' },
+    { ko: '하노이', en: 'Hanoi' },
+    { ko: '다낭', en: 'Da Nang' },
+    { ko: '하이퐁', en: 'Hai Phong' },
+    { ko: '푸꾸옥', en: 'Phu Quoc' },
+    { ko: '나트랑', en: 'Nha Trang' },
+    { ko: '호이안', en: 'Hoi An' },
+    { ko: '달랏', en: 'Da Lat' },
+    { ko: '사파', en: 'Sapa' },
+    { ko: '하롱베이', en: 'Ha Long Bay' },
   ],
   TW: [
     { ko: '타이페이', en: 'Taipei' },
     { ko: '가오슝', en: 'Kaohsiung' },
     { ko: '타이중', en: 'Taichung' },
+    { ko: '타이난', en: 'Tainan' },
+    { ko: '지룽', en: 'Keelung' },
+    { ko: '신주', en: 'Hsinchu' },
+    { ko: '자이', en: 'Chiayi' },
     { ko: '화롄', en: 'Hualien' },
+    { ko: '타이둥', en: 'Taitung' },
+    { ko: '핑둥', en: 'Pingtung' },
   ],
 };
 
@@ -398,13 +441,14 @@ export default function EditProductPage() {
 
   // 선택된 국가의 지역 옵션 가져오기
   const getRegionOptions = () => {
-    return REGION_OPTIONS[formData.country.en as keyof typeof REGION_OPTIONS] || [];
+    const countryCode = COUNTRY_OPTIONS.find(c => c.ko === formData.country.ko)?.code || 'KR';
+    return REGION_OPTIONS_BY_COUNTRY[countryCode as keyof typeof REGION_OPTIONS_BY_COUNTRY] || [];
   };
 
   // 선택된 지역의 스팟들 가져오기
   const getSpotsInRegion = () => {
     return spots.filter(spot => 
-      spot.country.en === formData.country.en && 
+      spot.country.ko === formData.country.ko && 
       spot.region.ko === formData.region.ko
     );
   };
@@ -666,12 +710,12 @@ export default function EditProductPage() {
             <div>
               <label className="block text-sm font-medium mb-2">{texts.formCountry}</label>
               <select
-                value={formData.country.en}
+                value={formData.country.ko}
                 onChange={(e) => {
-                  const country = COUNTRY_OPTIONS.find(c => c.en === e.target.value);
+                  const country = COUNTRY_OPTIONS.find(c => c.ko === e.target.value);
                   setFormData(prev => ({ 
                     ...prev, 
-                    country: country || { en: 'KR', ko: '대한민국' },
+                    country: country || { en: 'Korea', ko: '대한민국' },
                     region: { ko: '', en: '' }
                   }));
                 }}
@@ -679,9 +723,9 @@ export default function EditProductPage() {
                 required
               >
                 <option value="">{texts.selectCountry}</option>
-                {COUNTRY_OPTIONS.map(country => (
-                  <option key={country.en} value={country.en}>
-                    {country.ko}
+                {COUNTRY_OPTIONS.map((country: CountryOption) => (
+                  <option key={country.code} value={country.ko}>
+                    {lang === 'ko' ? country.ko : country.en}
                   </option>
                 ))}
               </select>
@@ -701,9 +745,9 @@ export default function EditProductPage() {
                 required
               >
                 <option value="">{texts.selectRegion}</option>
-                {getRegionOptions().map(region => (
+                {getRegionOptions().map((region: { ko: string; en: string }) => (
                   <option key={region.ko} value={region.ko}>
-                    {region.ko}
+                    {lang === 'ko' ? region.ko : region.en}
                   </option>
                 ))}
               </select>

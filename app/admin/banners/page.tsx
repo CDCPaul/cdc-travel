@@ -8,8 +8,30 @@ import { Banner } from "@/types/banner";
 import Link from "next/link";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { getAuth } from "firebase/auth";
+import { useLanguage } from "../../../components/LanguageContext";
+
+// 다국어 텍스트
+const TEXT = {
+  title: { ko: "배너 관리", en: "Banner Management" },
+  addNew: { ko: "새 배너 추가", en: "Add New Banner" },
+  backToAdmin: { ko: "관리자로 돌아가기", en: "Back to Admin" },
+  noData: { ko: "등록된 배너가 없습니다.", en: "No banners found." },
+  loading: { ko: "로딩 중...", en: "Loading..." },
+  error: { ko: "데이터를 불러오는데 실패했습니다.", en: "Failed to load data." },
+  deleteConfirm: { ko: "정말로 이 배너를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없으며, 관련된 모든 파일이 삭제됩니다.", en: "Are you sure you want to delete this banner?\n\nThis action cannot be undone and all related files will be deleted." },
+  deleteSuccess: { ko: "배너가 성공적으로 삭제되었습니다.", en: "Banner deleted successfully." },
+  deleteError: { ko: "배너 삭제에 실패했습니다.", en: "Failed to delete banner." },
+  saveOrder: { ko: "순서 저장", en: "Save Order" },
+  savingOrder: { ko: "저장 중...", en: "Saving..." },
+  orderSaved: { ko: "순서가 저장되었습니다.", en: "Order saved successfully." },
+  orderSaveError: { ko: "순서 저장에 실패했습니다.", en: "Failed to save order." },
+  edit: { ko: "편집", en: "Edit" },
+  delete: { ko: "삭제", en: "Delete" },
+  deleting: { ko: "삭제 중...", en: "Deleting..." }
+};
 
 export default function AdminBannerListPage() {
+  const { lang } = useLanguage();
   const [banners, setBanners] = useState<Banner[]>([]);
   const [loading, setLoading] = useState(true);
   const [orderChanged, setOrderChanged] = useState(false);
@@ -91,7 +113,7 @@ export default function AdminBannerListPage() {
   };
 
   const handleDeleteBanner = async (bannerId: string) => {
-    if (!confirm('정말로 이 배너를 삭제하시겠습니까?\n\n이 작업은 되돌릴 수 없으며, 관련된 모든 파일이 삭제됩니다.')) {
+    if (!confirm(TEXT.deleteConfirm[lang])) {
       return;
     }
 
@@ -150,10 +172,10 @@ export default function AdminBannerListPage() {
       // 로컬 상태에서도 제거
       setBanners(prev => prev.filter(banner => banner.id !== bannerId));
       
-      alert('배너와 관련 파일이 모두 삭제되었습니다.');
+      alert(TEXT.deleteSuccess[lang]);
     } catch (error) {
       console.error('배너 삭제 실패:', error);
-      alert('배너 삭제에 실패했습니다.');
+      alert(TEXT.deleteError[lang]);
     } finally {
       setDeletingBanner(null);
     }
@@ -162,24 +184,24 @@ export default function AdminBannerListPage() {
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">배너 관리</h1>
+        <h1 className="text-2xl font-bold">{TEXT.title[lang]}</h1>
         <Link href="/admin/banners/new">
           <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-semibold disabled:opacity-50" disabled={banners.length >= 10}>
-            + 새 배너 등록
+            + {TEXT.addNew[lang]}
           </button>
         </Link>
       </div>
       {orderChanged && (
         <div className="mb-4 flex justify-end">
           <button className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md font-semibold" onClick={handleSaveOrder} disabled={savingOrder}>
-            {savingOrder ? "저장 중..." : "순서 저장"}
+            {savingOrder ? TEXT.savingOrder[lang] : TEXT.saveOrder[lang]}
           </button>
         </div>
       )}
       {loading ? (
-        <div className="text-center py-12 text-gray-500">로딩 중...</div>
+        <div className="text-center py-12 text-gray-500">{TEXT.loading[lang]}</div>
       ) : banners.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">등록된 배너가 없습니다.</div>
+        <div className="text-center py-12 text-gray-400">{TEXT.noData[lang]}</div>
       ) : (
         <DragDropContext onDragEnd={onDragEnd}>
           <Droppable droppableId="banner-list">
@@ -199,13 +221,13 @@ export default function AdminBannerListPage() {
                           <div className="text-sm text-gray-500">{banner.type.toUpperCase()} | 순서: {idx + 1} | 링크: {banner.link}</div>
                         </div>
                         <div className="flex gap-2">
-                          <Link href={`/admin/banners/${banner.id}/edit`}><button className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">수정</button></Link>
+                          <Link href={`/admin/banners/${banner.id}/edit`}><button className="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300 text-gray-700">{TEXT.edit[lang]}</button></Link>
                           <button 
                             className="px-3 py-1 rounded bg-red-500 hover:bg-red-600 text-white disabled:opacity-50" 
                             onClick={() => handleDeleteBanner(banner.id)}
                             disabled={deletingBanner === banner.id}
                           >
-                            {deletingBanner === banner.id ? '삭제 중...' : '삭제'}
+                            {deletingBanner === banner.id ? TEXT.deleting[lang] : TEXT.delete[lang]}
                           </button>
                         </div>
                       </li>

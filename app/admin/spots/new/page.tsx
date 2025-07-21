@@ -637,7 +637,7 @@ export default function NewSpotPage() {
         ...formData,
         imageUrl: mainImageUrl,
         extraImages: extraImageUrls,
-        country: country ? { ko: country.ko, en: COUNTRY_OPTIONS.find(opt => opt.ko === country.ko)?.code || '' } : { ko: '', en: '' },
+        country: country ? { ko: country.ko, en: COUNTRY_OPTIONS.find(opt => opt.ko === country.ko)?.en || '' } : { ko: '', en: '' },
         coordinates: formData.coordinates, // 좌표 정보 포함
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),

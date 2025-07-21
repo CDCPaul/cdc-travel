@@ -17,7 +17,6 @@ const MAIN_MENU = {
     { label: "상품 관리", href: "/admin/products" },
     { label: "회사소개 관리", href: "/admin/about-us" },
     { label: "사이트 설정", href: "/admin/settings" },
-    { label: "사용자 마이그레이션", href: "/admin/migrate-users" },
   ],
   en: [
     { label: "Dashboard", href: "/admin/dashboard" },
@@ -25,7 +24,6 @@ const MAIN_MENU = {
     { label: "Product Management", href: "/admin/products" },
     { label: "About Us Management", href: "/admin/about-us" },
     { label: "Site Settings", href: "/admin/settings" },
-    { label: "User Migration", href: "/admin/migrate-users" },
   ]
 };
 
@@ -72,10 +70,12 @@ const USER_MENU = {
   ko: [
     { label: "사용자 목록", href: "/admin/users" },
     { label: "사용자 활동", href: "/admin/users/activity" },
+    { label: "사용자 마이그레이션", href: "/admin/migrate-users" },
   ],
   en: [
     { label: "User List", href: "/admin/users" },
     { label: "User Activity", href: "/admin/users/activity" },
+    { label: "User Migration", href: "/admin/migrate-users" },
   ]
 };
 
@@ -84,7 +84,7 @@ export default function AdminSidebar() {
   const [dbOpen, setDbOpen] = useState(pathname.startsWith("/admin/spots") || pathname.startsWith("/admin/include-items") || pathname.startsWith("/admin/not-include-items") || pathname.startsWith("/admin/files") || pathname.startsWith("/admin/db"));
   const [taOpen, setTaOpen] = useState(pathname.startsWith("/admin/ta-list") || pathname.startsWith("/admin/posters") || pathname.startsWith("/admin/itineraries") || pathname.startsWith("/admin/letters"));
   const [aboutUsOpen, setAboutUsOpen] = useState(pathname.startsWith("/admin/about-us"));
-  const [userOpen, setUserOpen] = useState(pathname.startsWith("/admin/users"));
+  const [userOpen, setUserOpen] = useState(pathname.startsWith("/admin/users") || pathname.startsWith("/admin/migrate-users"));
   const { lang, setLang } = useLanguage();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const router = useRouter();

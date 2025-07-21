@@ -67,7 +67,15 @@ export function formatTimestamp(
     date = new Date(timestamp);
   } else {
     // Firestore 타임스탬프
+    if (!timestamp.seconds || isNaN(timestamp.seconds)) {
+      return '-';
+    }
     date = new Date(timestamp.seconds * 1000);
+  }
+  
+  // 유효하지 않은 날짜인지 확인
+  if (isNaN(date.getTime())) {
+    return '-';
   }
   
   return formatDate(date, format);
