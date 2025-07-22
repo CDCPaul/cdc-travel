@@ -4,6 +4,7 @@
  */
 
 import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 import { initializeFirebaseAdmin } from './firebase-admin';
 
 export interface DecodedToken {
@@ -22,20 +23,18 @@ export interface DecodedToken {
  */
 export async function verifyIdToken(idToken: string): Promise<DecodedToken | null> {
   try {
-    const response = await fetch('/api/auth/verify-token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ idToken }),
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const data = await response.json();
-    return data.decodedToken;
+    // 서버 사이드에서는 Firebase Admin SDK를 직접 사용
+    const auth = getAuth(initializeFirebaseAdmin());
+    const decodedToken = await auth.verifyIdToken(idToken);
+    
+    return {
+      email: decodedToken.email || null,
+      uid: decodedToken.uid,
+      email_verified: decodedToken.email_verified || false,
+      auth_time: decodedToken.auth_time,
+      iat: decodedToken.iat,
+      exp: decodedToken.exp
+    };
   } catch (error) {
     console.error('Token verification failed:', error);
     return null;

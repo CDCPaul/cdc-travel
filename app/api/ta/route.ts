@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import sharp from 'sharp';
 
+// HTML 엔티티 이스케이프 함수
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // TA 정보와 로고를 합성한 오버레이 이미지 생성 함수
 async function createTAOverlayImage(ta: {
   companyName: string;
@@ -68,19 +78,19 @@ async function createTAOverlayImage(ta: {
       <!-- 회사명 (오른쪽 정렬) -->
       <text x="${width - 100}" y="100" font-family="Arial, sans-serif" font-size="120" font-weight="bold" 
             fill="#333333" filter="url(#shadow)" text-anchor="end">
-        ${ta.companyName}
+        ${escapeHtml(ta.companyName)}
       </text>
       
       <!-- 전화번호 (오른쪽 정렬) -->
       <text x="${width - 100}" y="160" font-family="Arial, sans-serif" font-size="40" 
             fill="#666666" filter="url(#shadow)" text-anchor="end">
-        📞 ${ta.phone}
+        📞 ${escapeHtml(ta.phone)}
       </text>
       
       <!-- 이메일 (오른쪽 정렬) -->
       <text x="${width - 100}" y="220" font-family="Arial, sans-serif" font-size="40" 
             fill="#666666" filter="url(#shadow)" text-anchor="end">
-        ✉️ ${ta.email}
+        ✉️ ${escapeHtml(ta.email)}
       </text>
     </svg>
   `;
