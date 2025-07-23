@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { collection, addDoc } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage, auth } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import { BannerType } from "@/types/banner";
 
 export default function AdminBannerNewPage() {
@@ -24,10 +23,25 @@ export default function AdminBannerNewPage() {
 
   const handleUpload = async (): Promise<string> => {
     if (!file) throw new Error("파일을 선택하세요.");
-    const ext = file.name.split('.').pop();
-    const storageRef = ref(storage, `banners/${Date.now()}.${ext}`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('folder', 'banners');
+    formData.append('optimize', 'true');
+    formData.append('usage', 'banner');
+
+    const response = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || '업로드 실패');
+    }
+
+    const result = await response.json();
+    return result.url;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -43,6 +57,7 @@ export default function AdminBannerNewPage() {
       if (!titleKo || !titleEn) throw new Error("제목을 입력하세요.");
       if (!link) throw new Error("링크를 입력하세요.");
       const bannersCol = collection(db, "settings/banners/items");
+      const user = auth.currentUser;
       const docData = {
         type,
         url: fileUrl,
@@ -52,6 +67,7 @@ export default function AdminBannerNewPage() {
         order: 999, // 임시, 목록에서 정렬 시 재조정
         active: true,
         createdAt: Date.now(),
+        createdBy: user?.uid || '',
       };
       await addDoc(bannersCol, docData);
       
@@ -90,6 +106,18 @@ export default function AdminBannerNewPage() {
   return (
     <div className="max-w-xl mx-auto py-8 px-4">
       <h1 className="text-2xl font-bold mb-6">새 배너 등록</h1>
+      
+      {/* 레이아웃 안내 */}
+      <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <h3 className="font-semibold text-blue-800 mb-2">📐 배너 레이아웃 안내</h3>
+        <div className="text-sm text-blue-700 space-y-1">
+          <p>• <strong>전체 크기:</strong> 1920px × 800px</p>
+          <p>• <strong>왼쪽 영역:</strong> 720px (텍스트 + 배경)</p>
+          <p>• <strong>오른쪽 영역:</strong> 1200px (이미지/영상)</p>
+          <p>• <strong>권장 이미지 크기:</strong> 1200px × 800px</p>
+        </div>
+      </div>
+      
       <form onSubmit={handleSubmit} className="space-y-6 bg-white shadow rounded-lg p-6">
         <div>
           <label className="block font-medium mb-1">타입</label>

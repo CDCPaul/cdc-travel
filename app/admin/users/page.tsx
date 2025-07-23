@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, getDocs, query, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useLanguage } from '../../../components/LanguageContext';
 import Link from 'next/link';
@@ -152,29 +152,26 @@ export default function UserManagementPage() {
       try {
         setLoading(true);
         
-        // Firestore에서 사용자 정보 가져오기
-        const usersQuery = query(
-          collection(db, 'users'),
-          orderBy('createdAt', 'desc')
-        );
-        const usersSnapshot = await getDocs(usersQuery);
+        // 새로운 API에서 사용자 정보 가져오기
+        const response = await fetch('/api/users/list');
+        if (!response.ok) {
+          throw new Error('Failed to fetch users');
+        }
         
-        const usersData: User[] = usersSnapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            email: data.email || '',
-            displayName: data.displayName || '',
-            photoURL: data.photoURL || '',
-            emailVerified: data.emailVerified || false,
-            disabled: data.disabled || false,
-            createdAt: data.createdAt?.toDate() || new Date(),
-            lastSignInAt: data.lastSignInAt?.toDate(),
-            lastActivityAt: data.lastActivityAt?.toDate(),
-            role: data.role || 'user',
-            workspace: data.workspace || 'default'
-          };
-        });
+        const result = await response.json();
+        const usersData: User[] = result.data.map((user: Record<string, unknown>) => ({
+          id: user.id as string,
+          email: (user.email as string) || '',
+          displayName: (user.displayName as string) || '',
+          photoURL: (user.photoURL as string) || '',
+          emailVerified: (user.emailVerified as boolean) || false,
+          disabled: (user.disabled as boolean) || false,
+          createdAt: new Date(user.createdAt as string | number | Date),
+          lastSignInAt: user.lastSignInAt ? new Date(user.lastSignInAt as string | number | Date) : null,
+          lastActivityAt: user.lastActivityAt ? new Date(user.lastActivityAt as string | number | Date) : null,
+          role: (user.role as 'admin' | 'user') || 'user',
+          workspace: (user.workspace as string) || 'default'
+        }));
 
         setUsers(usersData);
       } catch (err) {
@@ -411,7 +408,7 @@ export default function UserManagementPage() {
                     {texts.lastActivity}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.actions}
+                    관리
                   </th>
                 </tr>
               </thead>
@@ -422,11 +419,12 @@ export default function UserManagementPage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
-                    className="hover:bg-gray-50"
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() => window.location.href = `/admin/users/${user.id}`}
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        {user.photoURL && (
+                        {user.photoURL ? (
                           <Image 
                             className="h-8 w-8 rounded-full mr-3" 
                             src={user.photoURL} 
@@ -434,6 +432,12 @@ export default function UserManagementPage() {
                             width={32}
                             height={32}
                           />
+                        ) : (
+                          <div className="h-8 w-8 rounded-full mr-3 bg-gray-300 flex items-center justify-center">
+                            <span className="text-xs text-gray-600 font-medium">
+                              {user.displayName ? user.displayName.charAt(0).toUpperCase() : user.email.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
                         )}
                         <div>
                           <div className="text-sm font-medium text-gray-900">{user.email}</div>
@@ -463,28 +467,34 @@ export default function UserManagementPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {user.lastSignInAt 
-                        ? new Date(user.lastSignInAt).toLocaleDateString(lang === 'ko' ? 'ko-KR' : 'en-US')
+                        ? new Date(user.lastSignInAt).toLocaleString(lang === 'ko' ? 'ko-KR' : 'en-US', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })
                         : '-'
                       }
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {user.lastActivityAt 
-                        ? new Date(user.lastActivityAt).toLocaleDateString(lang === 'ko' ? 'ko-KR' : 'en-US')
+                        ? new Date(user.lastActivityAt).toLocaleString(lang === 'ko' ? 'ko-KR' : 'en-US', {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })
                         : '-'
                       }
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
-                        <Link
-                          href={`/admin/users/activity/${user.id}`}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          {texts.viewActivity}
-                        </Link>
-                        
                         {user.disabled ? (
                           <button
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               if (confirm(texts.enableConfirm)) {
                                 toggleUserStatus(user.id, false);
                               }
@@ -495,7 +505,8 @@ export default function UserManagementPage() {
                           </button>
                         ) : (
                           <button
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               if (confirm(texts.disableConfirm)) {
                                 toggleUserStatus(user.id, true);
                               }
@@ -507,7 +518,8 @@ export default function UserManagementPage() {
                         )}
                         
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             const newRole = user.role === 'admin' ? 'user' : 'admin';
                             if (confirm(texts.roleChangeConfirm)) {
                               changeUserRole(user.id, newRole);

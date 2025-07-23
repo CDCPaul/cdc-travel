@@ -1,4 +1,4 @@
-import { onAuthStateChanged, User } from 'firebase/auth';
+import { onAuthStateChanged, User, getIdToken, onIdTokenChanged } from 'firebase/auth';
 import { auth } from './firebase';
 import { isAdmin as checkIsAdmin, checkAdminRole } from './admin-config';
 
@@ -27,6 +27,48 @@ export const setAuthCookie = (idToken: string) => {
   expires.setDate(expires.getDate() + 7);
   
   document.cookie = `idToken=${idToken}; expires=${expires.toUTCString()}; path=/; secure; samesite=strict`;
+};
+
+/**
+ * 토큰을 갱신하고 쿠키에 저장하는 함수
+ * @param forceRefresh - 강제로 새 토큰을 가져올지 여부
+ * @returns Promise<string | null> - 갱신된 토큰 또는 null
+ */
+export const refreshToken = async (forceRefresh: boolean = false): Promise<string | null> => {
+  try {
+    const user = auth.currentUser;
+    if (!user) {
+      console.warn('사용자가 로그인되어 있지 않습니다.');
+      return null;
+    }
+
+    const idToken = await getIdToken(user, forceRefresh);
+    setAuthCookie(idToken);
+    return idToken;
+  } catch (error) {
+    console.error('토큰 갱신 실패:', error);
+    return null;
+  }
+};
+
+/**
+ * 토큰 자동 갱신을 설정하는 함수
+ */
+export const setupTokenRefresh = () => {
+  return onIdTokenChanged(auth, async (user) => {
+    if (user) {
+      try {
+        const idToken = await getIdToken(user);
+        setAuthCookie(idToken);
+        console.log('토큰이 자동으로 갱신되었습니다.');
+      } catch (error) {
+        console.error('토큰 자동 갱신 실패:', error);
+      }
+    } else {
+      // 사용자가 로그아웃된 경우 쿠키 제거
+      removeAuthCookie();
+    }
+  });
 };
 
 /**

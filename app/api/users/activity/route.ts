@@ -47,10 +47,26 @@ export async function POST(request: NextRequest) {
 
     await activityRef.add(activityData);
 
+    // 사용자의 lastActivityAt 업데이트
+    const userRef = db.collection('users').doc(activityData.userId);
+    await userRef.set({
+      lastActivityAt: new Date(),
+      updatedAt: new Date()
+    }, { merge: true });
+
     return NextResponse.json({ success: true });
 
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('사용자 활동 기록 실패:', error);
+    
+    // 토큰 만료 에러인 경우 특별 처리
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'auth/id-token-expired') {
+      return NextResponse.json(
+        { error: '토큰이 만료되었습니다. 다시 로그인해주세요.' },
+        { status: 401 }
+      );
+    }
+    
     return NextResponse.json(
       { error: '활동을 기록할 수 없습니다.' },
       { status: 500 }
@@ -73,7 +89,17 @@ export async function GET(request: NextRequest) {
     }
 
     const idToken = authHeader.substring(7);
-    await auth.verifyIdToken(idToken);
+    try {
+      await auth.verifyIdToken(idToken);
+    } catch (tokenError: unknown) {
+      if (tokenError && typeof tokenError === 'object' && 'code' in tokenError && tokenError.code === 'auth/id-token-expired') {
+        return NextResponse.json(
+          { error: '토큰이 만료되었습니다. 다시 로그인해주세요.' },
+          { status: 401 }
+        );
+      }
+      throw tokenError;
+    }
 
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, orderBy, writeBatch, doc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, writeBatch, doc, deleteDoc, updateDoc } from "firebase/firestore";
 import { ref, deleteObject } from "firebase/storage";
 import { db, storage, auth } from "@/lib/firebase";
 import { Banner } from "@/types/banner";
@@ -125,8 +125,13 @@ export default function AdminBannerListPage() {
         throw new Error('배너를 찾을 수 없습니다.');
       }
 
-      // Firestore 문서 삭제
+      // 삭제 정보를 기록하고 Firestore 문서 삭제
       const docRef = doc(db, "settings/banners/items", bannerId);
+      const user = auth.currentUser;
+      await updateDoc(docRef, {
+        deletedAt: new Date(),
+        deletedBy: user?.uid || ''
+      });
       await deleteDoc(docRef);
       
       // Firebase Storage 파일 삭제 (URL이 Firebase Storage URL인 경우에만)

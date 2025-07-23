@@ -218,6 +218,86 @@ export const logSpotClick = async (
   await logEvent('spot_click', eventParams);
 };
 
+// 스팟 클릭수 증가 함수
+export const incrementSpotClick = async (spotId: string): Promise<void> => {
+  try {
+    const { doc, increment, serverTimestamp, setDoc } = await import('firebase/firestore');
+    const { db } = await import('./firebase');
+    
+    const clickRef = doc(db, 'spot_clicks', spotId);
+    
+    // 문서가 없으면 생성, 있으면 업데이트
+    await setDoc(clickRef, {
+      clickCount: increment(1),
+      lastClickedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  } catch (error) {
+    console.error('Failed to increment spot click:', error);
+  }
+};
+
+// 스팟 클릭수 조회 함수
+export const getSpotClicks = async (): Promise<{ [spotId: string]: number }> => {
+  try {
+    const { collection, getDocs } = await import('firebase/firestore');
+    const { db } = await import('./firebase');
+    
+    const clicksSnapshot = await getDocs(collection(db, 'spot_clicks'));
+    const clicksMap: { [spotId: string]: number } = {};
+    
+    clicksSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      clicksMap[doc.id] = data.clickCount || 0;
+    });
+    
+    return clicksMap;
+  } catch (error) {
+    console.error('Failed to get spot clicks:', error);
+    return {};
+  }
+};
+
+// 투어 클릭수 증가 함수
+export const incrementTourClick = async (tourId: string): Promise<void> => {
+  try {
+    const { doc, increment, serverTimestamp, setDoc } = await import('firebase/firestore');
+    const { db } = await import('./firebase');
+    
+    const clickRef = doc(db, 'tour_clicks', tourId);
+    
+    // 문서가 없으면 생성, 있으면 업데이트
+    await setDoc(clickRef, {
+      clickCount: increment(1),
+      lastClickedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  } catch (error) {
+    console.error('Failed to increment tour click:', error);
+  }
+};
+
+// 투어 클릭수 조회 함수
+export const getTourClicks = async (): Promise<{ [tourId: string]: number }> => {
+  try {
+    const { collection, getDocs } = await import('firebase/firestore');
+    const { db } = await import('./firebase');
+    
+    const clicksSnapshot = await getDocs(collection(db, 'tour_clicks'));
+    const clicksMap: { [tourId: string]: number } = {};
+    
+    clicksSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      clicksMap[doc.id] = data.clickCount || 0;
+    });
+    
+    return clicksMap;
+  } catch (error) {
+    console.error('Failed to get tour clicks:', error);
+    return {};
+  }
+};
+
 // 스케줄 탭 클릭 이벤트
 export const logScheduleTabClick = async (
   tourId: string,

@@ -12,6 +12,13 @@ import { safeLang } from "@/lib/types";
 import { getPHPPrice } from "@/lib/types";
 import { AnimatePresence } from "framer-motion";
 import { loadGoogleMapsAPI } from "@/lib/google-maps";
+import { Swiper, SwiperSlide } from "swiper/react";
+import { Navigation as SwiperNavigation, Pagination } from "swiper/modules";
+import "swiper/css";
+import "swiper/css/navigation";
+import "swiper/css/pagination";
+import { incrementSpotClick, incrementTourClick } from "@/lib/analytics";
+import { PageLoading } from "@/components/ui/LoadingSpinner";
 
 // Spot 타입을 명확히 선언
 interface Spot {
@@ -1024,6 +1031,13 @@ export default function TourDetailPage() {
           const data = docSnap.data() as Product;
           setProduct({ ...data, id: docSnap.id });
           
+          // 투어 클릭수 증가
+          try {
+            await incrementTourClick(params.id as string);
+          } catch (error) {
+            console.error('Failed to increment tour click:', error);
+          }
+          
           // 스팟 좌표 데이터 가져오기
           if (data.schedule) {
             await fetchSpotsWithCoordinates(data.schedule);
@@ -1046,7 +1060,9 @@ export default function TourDetailPage() {
     return (
       <div className="min-h-screen">
         <Navigation />
-        <div className="pt-32 text-center">{texts.loading}</div>
+        <div className="pt-32 flex items-center justify-center">
+          <PageLoading lang={lang} />
+        </div>
       </div>
     );
   }
@@ -1067,9 +1083,9 @@ export default function TourDetailPage() {
   return (
     <div className="min-h-screen">
       <Navigation />
-      <main className="bg-gray-50 flex flex-col items-center pt-28 px-4">
+      <main className="bg-gray-50 flex flex-col items-center pt-20 px-4">
         {/* Breadcrumbs */}
-        <nav className="mb-6 w-full max-w-4xl text-sm text-gray-500 flex gap-2 items-center">
+        <nav className="mb-6 w-full max-w-7xl text-sm text-gray-500 flex gap-2 items-center">
           <Link href="/" className="hover:underline">Home</Link>
           <span>&gt;</span>
           <Link href="/tours" className="hover:underline">Tours</Link>
@@ -1078,7 +1094,7 @@ export default function TourDetailPage() {
         </nav>
 
         <motion.section
-          className="bg-white rounded-xl shadow p-6 w-full max-w-4xl flex flex-col gap-6"
+          className="bg-white rounded-xl shadow p-6 w-full max-w-7xl flex flex-col gap-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
@@ -1088,19 +1104,45 @@ export default function TourDetailPage() {
             <h1 className="text-4xl font-bold mb-2">{safeLang(product.title, lang)}</h1>
           </div>
 
-          {/* Product Image (A4 비율) */}
+          {/* Product Image Slider (3:2 비율 - 1200x800) */}
           {product.imageUrls && product.imageUrls.length > 0 ? (
-            <div className="relative w-full" style={{ aspectRatio: '1 / 1.414', maxWidth: '100%' }}>
-              <Image
-                src={product.imageUrls[0]}
-                alt={safeLang(product.title, lang)}
-                fill
-                className="object-cover rounded-lg"
-                priority
-              />
+            <div className="relative w-full" style={{ aspectRatio: '3 / 2', maxWidth: '1200px', maxHeight: '800px' }}>
+              <Swiper
+                modules={[SwiperNavigation, Pagination]}
+                navigation={true}
+                pagination={{ clickable: true }}
+                loop={product.imageUrls.length > 1}
+                className="w-full h-full rounded-lg"
+              >
+                {product.imageUrls.map((imageUrl, index) => (
+                  <SwiperSlide key={index}>
+                    <div className="relative w-full h-full">
+                      <Image
+                        src={imageUrl}
+                        alt={`${safeLang(product.title, lang)} - 이미지 ${index + 1}`}
+                        fill
+                        className="object-cover"
+                        priority={index === 0}
+                        onError={(e) => {
+                          // 이미지 로딩 실패 시 fallback 표시
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const fallback = target.parentElement?.querySelector('.swiper-fallback') as HTMLElement;
+                          if (fallback) fallback.style.display = 'flex';
+                        }}
+                      />
+                      {/* Fallback 이미지 */}
+                      <div className="swiper-fallback absolute inset-0 flex items-center justify-center bg-gray-200" 
+                           style={{ display: 'none' }}>
+                        <span className="text-gray-500 text-2xl">🖼️</span>
+                      </div>
+                    </div>
+                  </SwiperSlide>
+                ))}
+              </Swiper>
             </div>
           ) : (
-            <div className="relative h-[calc(100vw/1.414)] max-h-[600px] rounded-lg overflow-hidden bg-gray-200 flex items-center justify-center">
+            <div className="relative w-full rounded-lg overflow-hidden bg-gray-200 flex items-center justify-center" style={{ aspectRatio: '3 / 2', maxWidth: '1200px', maxHeight: '800px' }}>
               <span className="text-gray-500">이미지 없음</span>
             </div>
           )}
@@ -1214,7 +1256,15 @@ export default function TourDetailPage() {
                       <div
                         key={index}
                         className="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer hover:bg-blue-50"
-                        onClick={() => setSelectedSpot(spot)}
+                        onClick={async () => {
+                          setSelectedSpot(spot);
+                          // 스팟 클릭수 증가
+                          try {
+                            await incrementSpotClick(spot.spotId);
+                          } catch (error) {
+                            console.error('Failed to increment spot click:', error);
+                          }
+                        }}
                       >
                         {spot.spotImage && (
                           <Image 

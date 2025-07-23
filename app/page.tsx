@@ -10,9 +10,9 @@ import MainLayout from '../components/MainLayout';
 import { Banner } from "@/types/banner";
 import { Swiper, SwiperSlide } from "swiper/react";
 import "swiper/css";
-import { Autoplay, Pagination } from "swiper/modules";
-import "swiper/css/pagination";
-import { logEvent, logScrollToBottom, logTimeOnPage, logViewAllToursClick } from "@/lib/analytics";
+import { Autoplay } from "swiper/modules";
+import { logEvent, logScrollToBottom, logTimeOnPage, logViewAllToursClick, incrementTourClick } from "@/lib/analytics";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useSiteSettings } from "@/lib/settings";
 import { safeLang } from "@/lib/types";
 
@@ -115,6 +115,15 @@ export default function HomePage() {
   const [activeIndex, setActiveIndex] = useState(0);
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
   const { settings } = useSiteSettings();
+
+  // 배너별 색상 배열
+  const bannerColors = [
+    "from-[#2C6E6F] via-[#3A8A8B] to-[#4A9D9E]", // 기본 색상
+    "from-[#1E4A4B] via-[#2A6A6B] to-[#3A7D7E]", // 어두운 톤
+    "from-[#3A8A8B] via-[#4A9D9E] to-[#5AB0B1]", // 밝은 톤
+    "from-[#2A6A6B] via-[#3A7D7E] to-[#4A9091]", // 중간 톤
+    "from-[#4A9D9E] via-[#5AB0B1] to-[#6AC3C4]", // 매우 밝은 톤
+  ];
 
   // 배너 이미지 순차적 프리로딩 함수
   const preloadBannerImages = async (bannerList: Banner[]) => {
@@ -264,7 +273,14 @@ export default function HomePage() {
   }, [activeIndex]);
 
   // 투어 클릭 이벤트 핸들러
-  const handleTourClick = (tourId: string, tourTitle: string) => {
+  const handleTourClick = async (tourId: string, tourTitle: string) => {
+    // 투어 클릭수 증가
+    try {
+      await incrementTourClick(tourId);
+    } catch (error) {
+      console.error('Failed to increment tour click:', error);
+    }
+    
     logEvent('tour_click', {
       tour_id: tourId,
       tour_title: tourTitle,
@@ -294,13 +310,13 @@ export default function HomePage() {
 
   return (
     <MainLayout>
-      {/* Hero Section - 초고속 로딩 최적화 */}
+      {/* Hero Section - 새로운 레이아웃 */}
       <section
-        className="relative w-full h-[40vw] min-h-[200px] max-h-[320px] md:h-[70vh] md:min-h-[400px] md:max-h-[700px] flex items-center justify-center overflow-hidden"
+        className="relative w-full h-[800px] flex items-center justify-center overflow-hidden"
       >
         {!hasInitialBanner && banners.length === 0 ? (
           // 즉시 표시되는 스켈레톤 (첫 번째 배너가 없을 때만)
-          <div className="w-full h-full bg-gradient-to-br from-[#2C6E6F] via-[#3A8A8B] to-[#4A9D9E] flex items-center justify-center relative">
+          <div className={`w-full h-full bg-gradient-to-br ${bannerColors[0]} flex items-center justify-center relative`}>
             <div className="absolute inset-0 bg-[url('/pattern.svg')] bg-repeat opacity-10" />
             <div className="text-center text-white">
               <div className="w-12 h-12 border-3 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -320,14 +336,11 @@ export default function HomePage() {
           </div>
         ) : banners.length > 0 ? (
           <Swiper
-            modules={[Autoplay, Pagination]}
-            spaceBetween={30}
+            modules={[Autoplay]}
+            spaceBetween={0}
             slidesPerView={1}
             loop={banners.length > 1}
             autoplay={{ delay: 10000, disableOnInteraction: false }}
-            pagination={{ 
-              clickable: true
-            }}
             className="w-full h-full rounded-none"
             onSlideChange={(swiper) => setActiveIndex(swiper.realIndex)}
           >
@@ -338,56 +351,67 @@ export default function HomePage() {
                   className="block group w-full h-full"
                   onClick={() => handleBannerClick(banner.id, banner[`title_${lang}`] || 'banner')}
                 >
-                  <div className="relative w-full h-full flex items-center justify-center bg-black overflow-hidden">
-                    {banner.type === "image" ? (
-                      <>
-                        {bannerLoadingStates[banner.id] && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
-                            <div className="text-center text-white">
-                              <div className="w-8 h-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                              <div className="text-xs opacity-80">이미지 로딩 중...</div>
+                  <div className="relative w-full h-full flex bg-black overflow-hidden">
+                    {/* 왼쪽 텍스트 영역 (720px) */}
+                    <div className="w-[720px] h-full flex items-center justify-center relative">
+                      <div className={`absolute inset-0 bg-gradient-to-br ${bannerColors[index % bannerColors.length]}`} />
+                      <div className="absolute inset-0 bg-[url('/pattern.svg')] bg-repeat opacity-10" />
+                      <div className="relative z-10 text-center text-white px-12">
+                        <h1 className="text-5xl font-bold mb-6 leading-tight">
+                          {TEXT.heroTitle[lang]}
+                        </h1>
+                        <p className="text-xl mb-8 opacity-90 leading-relaxed">
+                          {TEXT.heroSubtitle[lang]}
+                        </p>
+                        
+                      </div>
+                    </div>
+                    
+                    {/* 오른쪽 미디어 영역 (1200px) */}
+                    <div className="flex-1 h-full relative overflow-hidden">
+                      {banner.type === "image" ? (
+                        <>
+                          {bannerLoadingStates[banner.id] && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+                              <LoadingSpinner size="sm" text={lang === 'ko' ? "이미지 로딩 중..." : "Loading image..."} lang={lang} className="text-white" />
                             </div>
-                          </div>
-                        )}
-                      <Image
-                        src={banner.url}
-                        alt={banner[`title_${lang}`] || "banner"}
-                        fill
-                        className="object-cover w-full h-full mx-auto my-auto group-hover:opacity-90 transition"
-                        priority={index === 0}
-                        loading={index === 0 ? "eager" : "lazy"}
-                        sizes="100vw"
-                        quality={85}
-                        placeholder="blur"
-                        blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
-                      />
-                      </>
-                    ) : (
-                      <video
-                        ref={(el) => {
-                          videoRefs.current[index] = el;
-                        }}
-                        src={banner.url}
-                        controls={false}
-                        autoPlay={false}
-                        muted
-                        loop
-                        playsInline
-                        preload="metadata"
-                        className="object-cover w-full h-full mx-auto my-auto group-hover:opacity-90 transition"
-                      />
-                    )}
+                          )}
+                          <Image
+                            src={banner.url}
+                            alt={banner[`title_${lang}`] || "banner"}
+                            fill
+                            className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-700"
+                            priority={index === 0}
+                            loading={index === 0 ? "eager" : "lazy"}
+                            sizes="1200px"
+                            quality={85}
+                            placeholder="blur"
+                            blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
+                          />
+                        </>
+                      ) : (
+                        <video
+                          ref={(el) => {
+                            videoRefs.current[index] = el;
+                          }}
+                          src={banner.url}
+                          controls={false}
+                          autoPlay={false}
+                          muted
+                          loop
+                          playsInline
+                          preload="metadata"
+                          className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-700"
+                        />
+                      )}
+                    </div>
                   </div>
                 </Link>
               </SwiperSlide>
             ))}
-            {/* 페이지네이션 위치 커스텀 */}
-            <div className="absolute left-1/2 bottom-4 md:bottom-8 -translate-x-1/2 z-10 pointer-events-none">
-              {/* Swiper의 pagination이 자동으로 렌더링됨 */}
-            </div>
           </Swiper>
         ) : (
-          <div className="w-full h-full min-h-[200px] max-h-[320px] md:min-h-[400px] md:max-h-[700px] bg-gradient-to-br from-[#2C6E6F] via-[#3A8A8B] to-[#4A9D9E] flex items-center justify-center">
+          <div className={`w-full h-full bg-gradient-to-br ${bannerColors[0]} flex items-center justify-center`}>
             <div className="absolute inset-0 bg-[url('/pattern.svg')] bg-repeat opacity-10" />
           </div>
         )}

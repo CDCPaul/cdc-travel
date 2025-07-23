@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
       originalSize: file.size,
       originalName: file.name,
       createdAt: new Date(),
-      createdBy: decodedToken.email
+      createdBy: decodedToken.uid
     };
 
     const docRef = await db.collection('posters').add(posterData);

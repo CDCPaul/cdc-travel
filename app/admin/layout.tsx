@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { checkAuth } from "@/lib/auth";
+import { checkAuth, setupTokenRefresh } from "@/lib/auth";
 import { LanguageProvider } from "../../components/LanguageContext";
 import AdminSidebar from "./components/AdminSidebar";
 
@@ -17,11 +17,19 @@ export default function AdminUILayout({ children }: { children: React.ReactNode 
       setIsLoading(false);
       return;
     }
+    
     checkAuth().then(user => {
       if (!user) {
         router.replace("/admin/login");
       } else {
+        // 토큰 자동 갱신 설정
+        const unsubscribe = setupTokenRefresh();
         setIsLoading(false);
+        
+        // 컴포넌트 언마운트 시 구독 해제
+        return () => {
+          unsubscribe();
+        };
       }
     });
   }, [router, pathname]);

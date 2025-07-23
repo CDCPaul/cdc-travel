@@ -1,14 +1,15 @@
 "use client";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useLanguage } from "@/components/LanguageContext";
 import { safeLang } from "@/lib/types";
 import MainLayout from "@/components/MainLayout";
-import { logPageView } from "@/lib/analytics";
+import { logPageView, incrementTourClick } from "@/lib/analytics";
 import Image from "next/image";
 import { airlineLogoMap } from '@/lib/utils';
+import { GridSkeleton } from "@/components/ui/LoadingSpinner";
 
 interface Product {
   id: string;
@@ -121,8 +122,7 @@ function ToursPage() {
       try {
         setLoading(true);
         const productsRef = collection(db, "products");
-        const q = query(productsRef, orderBy("createdAt", "desc"));
-        const querySnapshot = await getDocs(q);
+        const querySnapshot = await getDocs(productsRef);
         const fetchedProducts: Product[] = querySnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
@@ -146,8 +146,10 @@ function ToursPage() {
   if (loading && products.length === 0) {
     return (
       <MainLayout>
-        <div className="text-center py-10">
-          <p>{TEXT.loading[lang]}</p>
+        <div className="container mx-auto p-4">
+          <h1 className="text-4xl font-bold mb-4">{TEXT.title[lang]}</h1>
+          <p className="text-lg mb-6">{TEXT.desc[lang]}</p>
+          <GridSkeleton count={6} lang={lang} />
         </div>
       </MainLayout>
     );
@@ -190,10 +192,28 @@ function ToursPage() {
                 animate="visible"
                 whileHover={{ scale: 1.025, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}
                 className="flex bg-white rounded-2xl shadow-lg overflow-hidden cursor-pointer transition-all border border-gray-100 hover:border-blue-400 group"
-                onClick={() => window.location.href = `/tours/${product.id}`}
+                onClick={async () => {
+                  // 투어 클릭수 증가
+                  try {
+                    await incrementTourClick(product.id);
+                  } catch (error) {
+                    console.error('Failed to increment tour click:', error);
+                  }
+                  window.location.href = `/tours/${product.id}`;
+                }}
                 tabIndex={0}
                 role="button"
-                onKeyDown={e => { if (e.key === 'Enter') window.location.href = `/tours/${product.id}`; }}
+                onKeyDown={async (e) => { 
+                  if (e.key === 'Enter') {
+                    // 투어 클릭수 증가
+                    try {
+                      await incrementTourClick(product.id);
+                    } catch (error) {
+                      console.error('Failed to increment tour click:', error);
+                    }
+                    window.location.href = `/tours/${product.id}`;
+                  }
+                }}
                 style={{ minHeight: 220 }}
               >
                 {/* 대표 이미지 (A4 비율) */}
@@ -269,9 +289,9 @@ function ToursPage() {
                     )}
                   </div>
                   {/* 항공사 간략 정보 */}
-                  {Array.isArray(product.flightCombos) && product.flightCombos.length > 0 && (
-                    <div className="flex items-center gap-3 mt-2">
-                      {product.flightCombos.slice(0,2).map((combo, idx) => {
+                  <div className="flex items-center gap-3 mt-2">
+                    {Array.isArray(product.flightCombos) && product.flightCombos.length > 0 ? (
+                      product.flightCombos.slice(0,2).map((combo, idx) => {
                         const airlineName = combo.departure.airline[lang];
                         const logo = airlineLogoMap[airlineName];
                         return (
@@ -282,9 +302,15 @@ function ToursPage() {
                             <span className="text-xs text-gray-700 font-medium whitespace-nowrap">{airlineName}</span>
                           </div>
                         );
-                      })}
-                    </div>
-                  )}
+                      })
+                    ) : (
+                      <div className="flex items-center gap-1 bg-gray-50 rounded px-2 py-1 border border-gray-200">
+                        <span className="text-xs text-gray-500 font-medium">
+                          {lang === 'ko' ? '항공편 정보 없음' : 'No flight info'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </motion.div>
             );

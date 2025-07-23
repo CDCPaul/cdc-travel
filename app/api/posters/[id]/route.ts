@@ -252,7 +252,7 @@ export async function DELETE(
     }
 
     const idToken = authHeader.substring(7);
-    await auth.verifyIdToken(idToken);
+    const decodedToken = await auth.verifyIdToken(idToken);
 
     const { id: posterId } = await params;
 
@@ -291,7 +291,13 @@ export async function DELETE(
       }
     }
 
-    // Firestore에서 전단지 삭제
+    // 삭제 정보를 기록하고 Firestore에서 전단지 삭제
+    await posterRef.set({
+      deletedAt: new Date(),
+      deletedBy: decodedToken.uid
+    }, { merge: true });
+    
+    // 실제 문서 삭제
     await posterRef.delete();
 
     return NextResponse.json({

@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   images: {
     domains: [
       'storage.googleapis.com',
+      'lh3.googleusercontent.com',
     ],
     remotePatterns: [
       {
@@ -28,6 +29,12 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'example.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'lh3.googleusercontent.com',
         port: '',
         pathname: '/**',
       },

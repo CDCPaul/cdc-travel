@@ -46,7 +46,7 @@ export default function Navigation() {
   return (
     <nav ref={navRef} className="bg-white shadow-lg fixed w-full z-50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center py-0.5">
+        <div className="flex justify-between items-center py-3" style={{ minHeight: '60px' }}>
           <div className="flex items-center">
             <Image
               src="/images/CDC_LOGO.webp"

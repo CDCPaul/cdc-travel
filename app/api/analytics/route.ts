@@ -200,22 +200,41 @@ async function fetchFirebaseAnalyticsData(timeRange: string): Promise<AnalyticsD
       .sort((a, b) => b.views - a.views)
       .slice(0, 5);
 
-    // 스팟별 클릭 수
-    const spotClicks = new Map<string, number>();
-    events.filter(e => e.event_name === 'spot_click').forEach(event => {
-      const spotId = event.spot_id || 'Unknown';
-      const spotName = event.spot_name || 'Unknown Spot';
-      const key = `${spotId}|${spotName}`;
-      spotClicks.set(key, (spotClicks.get(key) || 0) + 1);
-    });
+    // 스팟별 클릭 수 (실제 클릭수 데이터베이스에서 가져오기)
+    let topSpots: Array<{ spotId: string; spotName: string; views: number }> = [];
+    try {
+      const spotClicksSnapshot = await getAdminDb().collection('spot_clicks')
+        .orderBy('clickCount', 'desc')
+        .limit(5)
+        .get();
+      
+      topSpots = spotClicksSnapshot.docs.map((doc: FirebaseFirestore.DocumentSnapshot) => {
+        const data = doc.data();
+        return {
+          spotId: doc.id,
+          spotName: data?.spotName || 'Unknown Spot',
+          views: data?.clickCount || 0
+        };
+      });
+    } catch (error) {
+      console.error('Failed to fetch spot clicks from database:', error);
+      // 폴백: 이벤트 로그에서 계산
+      const spotClicks = new Map<string, number>();
+      events.filter(e => e.event_name === 'spot_click').forEach(event => {
+        const spotId = event.spot_id || 'Unknown';
+        const spotName = event.spot_name || 'Unknown Spot';
+        const key = `${spotId}|${spotName}`;
+        spotClicks.set(key, (spotClicks.get(key) || 0) + 1);
+      });
 
-    const topSpots = Array.from(spotClicks.entries())
-      .map(([key, views]) => {
-        const [spotId, spotName] = key.split('|');
-        return { spotId, spotName, views };
-      })
-      .sort((a, b) => b.views - a.views)
-      .slice(0, 5);
+      topSpots = Array.from(spotClicks.entries())
+        .map(([key, views]) => {
+          const [spotId, spotName] = key.split('|');
+          return { spotId, spotName, views };
+        })
+        .sort((a, b) => b.views - a.views)
+        .slice(0, 5);
+    }
 
     // 최근 이벤트
     const eventCounts = new Map<string, number>();

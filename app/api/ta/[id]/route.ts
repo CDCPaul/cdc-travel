@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { getStorage } from 'firebase-admin/storage';
-import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import sharp from 'sharp';
 
 // HTML 엔티티 이스케이프 함수
@@ -165,6 +164,24 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Firebase Admin SDK를 사용하여 토큰 검증
+    const { getAuth } = await import('firebase-admin/auth');
+    const { initializeFirebaseAdmin } = await import('@/lib/firebase-admin');
+    
+    const auth = getAuth(initializeFirebaseAdmin());
+    
+    // Authorization 헤더에서 ID 토큰 추출
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: '인증 토큰이 필요합니다.' },
+        { status: 401 }
+      );
+    }
+
+    const idToken = authHeader.substring(7);
+    const decodedToken = await auth.verifyIdToken(idToken);
+
     const { id } = await params;
     const body = await request.json();
     const { companyName, taCode, phone, address, email, logo, contactPersons } = body;
@@ -195,7 +212,7 @@ export async function PUT(
     const existingData = taDoc.data();
     if (existingData?.overlayImage && existingData.overlayImage.startsWith('https://storage.googleapis.com/')) {
       try {
-        const storage = getStorage(initializeFirebaseAdmin());
+        const storage = getStorage();
         const bucket = storage.bucket();
         
         const overlayUrl = new URL(existingData.overlayImage);
@@ -226,7 +243,7 @@ export async function PUT(
         });
         
         // Firebase Storage에 오버레이 이미지 저장
-        const storage = getStorage(initializeFirebaseAdmin());
+        const storage = getStorage();
         const bucket = storage.bucket();
         
         const overlayFileName = `ta-overlays/${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.png`;
@@ -259,7 +276,8 @@ export async function PUT(
       logo: logo || "",
       overlayImage: overlayImageUrl, // 새로 추가된 필드
       contactPersons: contactPersons || [],
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      updatedBy: decodedToken.uid
     };
 
     await taRef.update(updateData);
@@ -283,6 +301,24 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Firebase Admin SDK를 사용하여 토큰 검증
+    const { getAuth } = await import('firebase-admin/auth');
+    const { initializeFirebaseAdmin } = await import('@/lib/firebase-admin');
+    
+    const auth = getAuth(initializeFirebaseAdmin());
+    
+    // Authorization 헤더에서 ID 토큰 추출
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: '인증 토큰이 필요합니다.' },
+        { status: 401 }
+      );
+    }
+
+    const idToken = authHeader.substring(7);
+    const decodedToken = await auth.verifyIdToken(idToken);
+
     const { id } = await params;
     
     // Firebase Admin Firestore 사용
@@ -303,7 +339,7 @@ export async function DELETE(
     
     // 로고 파일과 오버레이 이미지가 있으면 Firebase Storage에서 삭제
     if (taData) {
-      const storage = getStorage(initializeFirebaseAdmin());
+      const storage = getStorage();
       const bucket = storage.bucket();
       
       // 로고 파일 삭제
@@ -341,7 +377,13 @@ export async function DELETE(
       }
     }
 
-    // Firestore에서 TA 문서 삭제
+    // 삭제 정보를 기록하고 Firestore에서 TA 문서 삭제
+    await taRef.set({
+      deletedAt: new Date(),
+      deletedBy: decodedToken.uid
+    }, { merge: true });
+    
+    // 실제 문서 삭제
     await taRef.delete();
 
     return NextResponse.json({

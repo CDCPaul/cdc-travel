@@ -16,7 +16,7 @@ export default function ContactPage() {
   const { lang } = useLanguage();
   return (
     <MainLayout>
-      <main className="bg-gray-50 flex flex-col items-center pt-28 px-4">
+      <main className="bg-gray-50 flex flex-col items-center pt-12 px-4">
         <h1 className="text-3xl font-bold mb-8 text-center">{TEXT.title[lang]}</h1>
         <section className="w-full max-w-2xl flex flex-col items-center">
           <p className="mb-4 text-gray-700 text-center">{TEXT.desc[lang]}</p>
@@ -60,7 +60,7 @@ export default function ContactPage() {
             <div className="w-full h-[350px] rounded overflow-hidden">
               <iframe
                 title="Google Map"
-                src="https://www.google.com/maps?q=GAISANO+MACTAN+ISLAND+MALL,+M.L.+QUEZON+NATIONAL+HIGHWAY,+PAJO,+LAPU+LAPU+CITY,+CEBU+6015&output=embed"
+                src="https://www.google.com/maps?q=Cebu+Direct+Club+Travel+and+Tours&output=embed"
                 width="100%"
                 height="350"
                 style={{ border: 0 }}

@@ -8,6 +8,8 @@ import MainLayout from '@/components/MainLayout';
 import Image from 'next/image';
 import Select, { SingleValue, StylesConfig, ControlProps, CSSObjectWithLabel } from 'react-select';
 import { XMarkIcon } from '@heroicons/react/24/solid';
+import { getSpotClicks, incrementSpotClick } from "@/lib/analytics";
+import { PageLoading } from "@/components/ui/LoadingSpinner";
 
 interface TravelInfo {
   id: string;
@@ -142,11 +144,24 @@ export default function TravelInfoPage() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [sortBy, setSortBy] = useState<'latest' | 'popular'>('latest');
+  const [spotClicks, setSpotClicks] = useState<{ [spotId: string]: number }>({});
   const itemsPerPage = 12;
   
   // 스와이프 관련 상태
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+  // 스팟 클릭수 가져오기
+  const fetchSpotClicks = async () => {
+    try {
+      const clicksMap = await getSpotClicks();
+      setSpotClicks(clicksMap);
+    } catch (error) {
+      console.error('Failed to fetch spot clicks:', error);
+      setSpotClicks({});
+    }
+  };
 
 
 
@@ -173,6 +188,7 @@ export default function TravelInfoPage() {
     };
 
     fetchTravelInfos();
+    fetchSpotClicks(); // 스팟 클릭수 가져오기
   }, []);
 
   // 공개된 스팟만 필터링
@@ -231,10 +247,39 @@ export default function TravelInfoPage() {
              description?.toLowerCase().includes(query);
     });
   }, [filteredByTag, searchQuery, lang]);
+
+  // 정렬된 스팟 목록
+  const sortedSpots = useMemo(() => {
+    const spots = [...filteredSpots];
+    
+    if (sortBy === 'popular') {
+      // 인기순 정렬 (클릭수 기준)
+      return spots.sort((a, b) => {
+        const clicksA = spotClicks[a.id] || 0;
+        const clicksB = spotClicks[b.id] || 0;
+        return clicksB - clicksA; // 내림차순
+      });
+    } else {
+      // 최신순 정렬 (생성일 기준)
+      return spots.sort((a, b) => {
+        const getDate = (createdAt: Date | string | { seconds: number; nanoseconds: number } | undefined) => {
+          if (!createdAt) return 0;
+          if (createdAt instanceof Date) return createdAt.getTime();
+          if (typeof createdAt === 'string') return new Date(createdAt).getTime();
+          if (createdAt.seconds) return createdAt.seconds * 1000;
+          return 0;
+        };
+        
+        const dateA = getDate(a.createdAt);
+        const dateB = getDate(b.createdAt);
+        return dateB - dateA; // 내림차순
+      });
+    }
+  }, [filteredSpots, sortBy, spotClicks]);
   
   // 페이지네이션 계산
-  const totalPages = Math.ceil(filteredSpots.length / itemsPerPage);
-  const paginatedSpots = filteredSpots.slice(
+  const totalPages = Math.ceil(sortedSpots.length / itemsPerPage);
+  const paginatedSpots = sortedSpots.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
@@ -320,6 +365,16 @@ export default function TravelInfoPage() {
     setSelectedSpot(spot);
     setCurrentImageIndex(0);
     
+    // 스팟 클릭수 증가
+    try {
+      await incrementSpotClick(spot.id);
+      // 클릭수 업데이트
+      const updatedClicks = await getSpotClicks();
+      setSpotClicks(updatedClicks);
+    } catch (error) {
+      console.error('Failed to increment spot click:', error);
+    }
+    
     // 모든 이미지 순차적 프리로드
     const images = getAllImages(spot);
     if (images.length > 0) {
@@ -368,8 +423,7 @@ export default function TravelInfoPage() {
         <div className="min-h-screen">
           <main className="bg-gray-50 flex flex-col items-center pt-28 px-4">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-lg text-gray-600">{TEXT.loading[lang]}</p>
+              <PageLoading lang={lang} />
             </div>
           </main>
         </div>
@@ -464,6 +518,31 @@ export default function TravelInfoPage() {
             />
           </div>
           
+          {/* 정렬 버튼 */}
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-sm">Sort:</span>
+            <button
+              className={`px-3 py-1 rounded-full font-semibold text-sm transition-colors ${
+                sortBy === 'latest' 
+                  ? 'bg-blue-500 text-white' 
+                  : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+              }`}
+              onClick={() => { setSortBy('latest'); setCurrentPage(1); }}
+            >
+              {lang === 'ko' ? '최신순' : 'Latest'}
+            </button>
+            <button
+              className={`px-3 py-1 rounded-full font-semibold text-sm transition-colors ${
+                sortBy === 'popular' 
+                  ? 'bg-blue-500 text-white' 
+                  : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+              }`}
+              onClick={() => { setSortBy('popular'); setCurrentPage(1); }}
+            >
+              {lang === 'ko' ? '인기순' : 'Popular'}
+            </button>
+          </div>
+          
           {/* 초기화 버튼 */}
           <button
             className="px-3 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-full font-semibold text-sm"
@@ -472,6 +551,7 @@ export default function TravelInfoPage() {
               setRegion('ALL'); 
               setTag('ALL'); 
               setSearchQuery('');
+              setSortBy('latest');
               setCurrentPage(1);
             }}
           >
@@ -479,7 +559,7 @@ export default function TravelInfoPage() {
           </button>
           
           {/* 결과 개수 */}
-          <span className="text-gray-500 text-sm">{filteredSpots.length} {TEXT.results[lang]}</span>
+          <span className="text-gray-500 text-sm">{sortedSpots.length} {TEXT.results[lang]}</span>
         </div>
       </div>
       {/* 본문: 필터 바와 겹치지 않게 padding-top 추가 */}
@@ -511,12 +591,20 @@ export default function TravelInfoPage() {
                             className="object-cover"
                             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                             priority={index === 0}
+                            onError={(e) => {
+                              // 이미지 로딩 실패 시 fallback 표시
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              const fallback = target.parentElement?.querySelector('.image-fallback') as HTMLElement;
+                              if (fallback) fallback.style.display = 'flex';
+                            }}
                           />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-gray-400">
-                            <span className="text-4xl">🖼️</span>
-                          </div>
-                        )}
+                        ) : null}
+                        {/* Fallback 이미지 */}
+                        <div className="image-fallback w-full h-full flex items-center justify-center text-gray-400" 
+                             style={{ display: !((spot.imageUrls && spot.imageUrls[0]) || spot.imageUrl) ? 'flex' : 'none' }}>
+                          <span className="text-4xl">🖼️</span>
+                        </div>
                       </div>
 
                       {/* 정보 */}

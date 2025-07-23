@@ -300,7 +300,7 @@ export async function POST(request: NextRequest) {
               taEmail: recipientEmail,
               subject: subject,
               content: content,
-              sentBy: decodedToken.name || decodedToken.email,
+              sentBy: decodedToken.uid,
               sentByEmail: decodedToken.email,
               sentAt: new Date(),
               attachments: attachmentsData.map(att => ({
