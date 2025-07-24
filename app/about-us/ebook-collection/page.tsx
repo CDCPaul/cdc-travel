@@ -26,8 +26,7 @@ const SIDEBAR = [
   { href: "/about-us/contact", label: { ko: "문의/상담", en: "Contact" } },
 ];
 
-const WOOD_BG = "linear-gradient(45deg, #e6c9a8, #d2b48c)"; // 나무색 그라데이션
-const BOOK_ICON = "📚"; // 책 이모지로 대체
+const MODERN_BG = "linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)"; // 차분한 그라데이션
 
 export default function EbookCollectionPage() {
   const { lang } = useLanguage();
@@ -42,16 +41,49 @@ export default function EbookCollectionPage() {
         return;
       }
       
-      const q = query(
-        collection(db, "ebooks"),
-        where("isPublic", "==", true),
-        orderBy(sort === "date" ? "createdAt" : "title.ko", "desc")
-      );
-      const snapshot = await getDocs(q);
-      setEbooks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ebook)));
+      try {
+        let q;
+        if (sort === "date") {
+          q = query(
+            collection(db, "ebooks"),
+            where("isPublic", "==", true),
+            orderBy("createdAt", "desc")
+          );
+        } else {
+          // 이름순 정렬은 클라이언트 사이드에서 처리
+          q = query(
+            collection(db, "ebooks"),
+            where("isPublic", "==", true)
+          );
+        }
+        
+        const snapshot = await getDocs(q);
+        const fetchedEbooks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ebook));
+        
+        // 이름순 정렬이면 클라이언트에서 정렬
+        if (sort === "name") {
+          fetchedEbooks.sort((a, b) => a.title[lang].localeCompare(b.title[lang]));
+        }
+        
+        setEbooks(fetchedEbooks);
+      } catch (error) {
+        console.error('eBook 데이터 로딩 실패:', error);
+        // 에러 발생 시 기본 쿼리로 재시도
+        try {
+          const q = query(
+            collection(db, "ebooks"),
+            where("isPublic", "==", true)
+          );
+          const snapshot = await getDocs(q);
+          const fetchedEbooks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ebook));
+          setEbooks(fetchedEbooks);
+        } catch (retryError) {
+          console.error('eBook 데이터 재시도 실패:', retryError);
+        }
+      }
     }
     fetchEbooks();
-  }, [sort]);
+  }, [sort, lang]);
 
   // 검색 필터링
   const filtered = ebooks.filter(e =>
@@ -59,70 +91,100 @@ export default function EbookCollectionPage() {
     e.description[lang].toLowerCase().includes(search.toLowerCase())
   );
 
-  // 책장 선반(한 줄에 5권씩)
-  const shelfRows = [];
-  for (let i = 0; i < filtered.length; i += 5) {
-    shelfRows.push(filtered.slice(i, i + 5));
-  }
-
   return (
     <MainLayout>
-      <div className="min-h-screen flex" style={{ background: WOOD_BG }}>
+      <div className="min-h-screen flex" style={{ background: MODERN_BG }}>
         {/* 사이드바 */}
-        <aside className="w-64 bg-white/80 border-r flex flex-col gap-2 py-12 px-6">
-          <h2 className="text-2xl font-bold mb-8 text-[#7b4a1e]">{TEXT.title[lang]}</h2>
+        <aside className="w-64 bg-white/90 backdrop-blur-sm border-r border-gray-200 flex flex-col gap-2 py-12 px-6">
+          <h2 className="text-2xl font-bold mb-8 text-gray-800">{TEXT.title[lang]}</h2>
           {SIDEBAR.map(item => (
-            <Link key={item.href} href={item.href} className={`block px-4 py-2 rounded hover:bg-blue-50 font-medium text-gray-700 ${item.href === "/about-us/ebook-collection" ? "bg-yellow-100" : ""}`}>
+            <Link key={item.href} href={item.href} className={`block px-4 py-2 rounded-lg hover:bg-blue-50 font-medium text-gray-700 transition-colors ${item.href === "/about-us/ebook-collection" ? "bg-blue-100 text-blue-700" : ""}`}>
               {item.label[lang]}
             </Link>
           ))}
         </aside>
         {/* 본문(책장) */}
-        <main className="flex-1 flex flex-col items-center py-8">
-          {/* 상단 바 */}
-          <div className="w-full max-w-4xl flex items-center gap-4 mb-8 px-2">
-            <input
-              type="text"
-              placeholder="검색 / Search"
-              className="flex-1 border rounded px-4 py-2 bg-[#f5e6d0] shadow-inner"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-            <span className="font-bold text-2xl flex items-center gap-2 text-[#7b4a1e] drop-shadow">
-              <span className="text-3xl">{BOOK_ICON}</span>
-              My Bookcase
-            </span>
-            <button
-              className={`px-3 py-1 rounded font-semibold border ${sort === "name" ? "bg-blue-600 text-white" : "bg-white text-gray-700"}`}
-              onClick={() => setSort("name")}
-            >Name</button>
-            <button
-              className={`px-3 py-1 rounded font-semibold border ${sort === "date" ? "bg-blue-600 text-white" : "bg-white text-gray-700"}`}
-              onClick={() => setSort("date")}
-            >Date</button>
+        <main className="flex-1 flex flex-col items-center py-8 px-4">
+          {/* 헤더 섹션 */}
+          <div className="w-full max-w-6xl mb-8">
+            <div className="text-center mb-8">
+              <h1 className="text-4xl md:text-5xl font-bold text-gray-800 mb-4 drop-shadow-lg">
+                {TEXT.title[lang]}
+              </h1>
+              <p className="text-gray-600 text-lg max-w-2xl mx-auto">
+                {TEXT.desc[lang]}
+              </p>
+            </div>
+            
+            {/* 검색 및 정렬 바 */}
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 mb-8 border border-gray-200 shadow-lg">
+              <div className="flex flex-col md:flex-row items-center gap-4">
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    placeholder={lang === 'ko' ? "eBook 검색..." : "Search eBooks..."}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-300 bg-white text-gray-800 placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition-all"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                  />
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                    🔍
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    className={`px-6 py-3 rounded-xl font-semibold transition-all ${
+                      sort === "name" 
+                        ? "bg-blue-600 text-white shadow-lg" 
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300"
+                    }`}
+                    onClick={() => setSort("name")}
+                  >
+                    {lang === 'ko' ? '이름순' : 'Name'}
+                  </button>
+                  <button
+                    className={`px-6 py-3 rounded-xl font-semibold transition-all ${
+                      sort === "date" 
+                        ? "bg-blue-600 text-white shadow-lg" 
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300"
+                    }`}
+                    onClick={() => setSort("date")}
+                  >
+                    {lang === 'ko' ? '날짜순' : 'Date'}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-          {/* 책장 프레임 */}
-          <div className="w-full max-w-4xl rounded-2xl shadow-2xl p-6 border-8 border-[#a97c50] bg-[#e6c9a8bb]" style={{ boxShadow: '0 4px 32px #b98c5a77' }}>
-            {shelfRows.length === 0 ? (
-              <div className="text-center text-gray-500 py-16">등록된 eBook이 없습니다.<br/>No eBooks found.</div>
+
+                    {/* 책장 그리드 */}
+          <div className="w-full max-w-6xl">
+            {filtered.length === 0 ? (
+              <div className="text-center text-gray-600 py-16">
+                <div className="text-6xl mb-4">📚</div>
+                <p className="text-xl">
+                  {lang === 'ko' ? '등록된 eBook이 없습니다.' : 'No eBooks found.'}
+                </p>
+              </div>
             ) : (
-              shelfRows.map((row, idx) => (
-                <div key={idx} className="relative flex items-end justify-between mb-12 pb-8 last:mb-0 last:pb-0">
-                  {row.map(ebook => (
-                    <div
-                      key={ebook.id}
-                      className="flex flex-col items-center w-1/5 px-2 group cursor-pointer"
-                      tabIndex={0}
-                      role="button"
-                      title={ebook.title[lang]}
-                      onClick={() => window.open(`/about-us/ebook-collection/${ebook.id}`, '_blank', 'noopener,noreferrer')}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          window.open(`/about-us/ebook-collection/${ebook.id}`, '_blank', 'noopener,noreferrer');
-                        }
-                      }}
-                    >
-                      <div className="w-full aspect-[3/4] bg-white rounded-lg shadow-xl overflow-hidden flex items-center justify-center mb-2 relative border-2 border-[#d2b48c] group-hover:scale-105 group-hover:shadow-2xl transition-transform">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                {filtered.map(ebook => (
+                  <div
+                    key={ebook.id}
+                    className="group cursor-pointer transform hover:scale-105 transition-all duration-300"
+                    tabIndex={0}
+                    role="button"
+                    title={ebook.title[lang]}
+                    onClick={() => window.open(`/about-us/ebook-collection/${ebook.id}`, '_blank', 'noopener,noreferrer')}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        window.open(`/about-us/ebook-collection/${ebook.id}`, '_blank', 'noopener,noreferrer');
+                      }
+                    }}
+                  >
+                    {/* 책 표지 */}
+                    <div className="relative mb-4">
+                      <div className="w-full aspect-[3/4] bg-gradient-to-br from-blue-50 to-indigo-100 rounded-xl shadow-lg overflow-hidden flex items-center justify-center relative border border-gray-200 group-hover:shadow-2xl transition-all duration-300">
                         {ebook.thumbUrl ? (
                           <Image
                             src={ebook.thumbUrl}
@@ -135,19 +197,29 @@ export default function EbookCollectionPage() {
                         ) : (
                           <div className="text-6xl text-gray-400">📄</div>
                         )}
+                        {/* 호버 오버레이 */}
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 flex items-center justify-center">
+                          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-white text-2xl">
+                            👁️
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-center font-semibold text-sm truncate w-full text-[#7b4a1e]" title={ebook.title[lang]}>{ebook.title[lang]}</div>
-                      <div className="text-xs text-gray-700 truncate w-full" title={ebook.description[lang]}>{ebook.description[lang]}</div>
+                      {/* 책장 그림자 효과 */}
+                      <div className="absolute -bottom-2 left-2 right-2 h-2 bg-black/10 rounded-full blur-sm"></div>
                     </div>
-                  ))}
-                  {/* 빈 공간 채우기 */}
-                  {row.length < 5 && Array.from({ length: 5 - row.length }).map((_, i) => (
-                    <div key={i} className="w-1/5 px-2" />
-                  ))}
-                  {/* 선반 bar (CSS로 대체) */}
-                  <div className="absolute left-0 bottom-0 w-full h-8 bg-gradient-to-t from-[#a97c50] to-[#8b6b3a] rounded-b pointer-events-none select-none" style={{ zIndex: 1 }} />
-                </div>
-              ))
+                    
+                    {/* 책 정보 */}
+                    <div className="text-center">
+                      <h3 className="font-semibold text-sm text-gray-800 mb-1 truncate" title={ebook.title[lang]}>
+                        {ebook.title[lang]}
+                      </h3>
+                      <p className="text-xs text-gray-600 truncate" title={ebook.description[lang]}>
+                        {ebook.description[lang]}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </main>

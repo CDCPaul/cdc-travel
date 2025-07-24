@@ -44,9 +44,14 @@ export class TokenManager {
    */
   static async refreshToken(): Promise<string | null> {
     try {
+      console.log('🔄 Google Access Token 갱신 시도...');
+      
       if (!auth.currentUser) {
+        console.log('❌ 사용자가 로그인되지 않았습니다.');
         throw new Error('사용자가 로그인되지 않았습니다.');
       }
+
+      console.log('✅ 현재 사용자 확인됨:', auth.currentUser.email);
 
       // 새로운 팝업으로 로그인하여 토큰 갱신
       const result = await signInWithPopup(auth, googleProvider);
@@ -54,13 +59,20 @@ export class TokenManager {
       const accessToken = credential?.accessToken;
 
       if (accessToken) {
+        console.log('✅ Google Access Token 갱신 성공');
         this.setTokenExpiry();
+        
+        // 갱신된 토큰을 쿠키에도 저장
+        const { setGoogleAccessTokenCookie } = await import('./auth');
+        setGoogleAccessTokenCookie(accessToken);
+        
         return accessToken;
+      } else {
+        console.log('❌ Google Access Token을 가져올 수 없습니다.');
+        return null;
       }
-
-      return null;
     } catch (error) {
-      console.error('토큰 갱신 실패:', error);
+      console.error('❌ Google Access Token 갱신 실패:', error);
       return null;
     }
   }
@@ -69,11 +81,17 @@ export class TokenManager {
    * 유효한 토큰 가져오기 (자동 갱신 포함)
    */
   static async getValidToken(): Promise<string | null> {
+    console.log('🔍 유효한 Google Access Token 확인 중...');
+    
     // 토큰이 곧 만료되면 갱신 시도
     if (this.isTokenExpiringSoon()) {
+      console.log('⚠️ 토큰이 곧 만료됩니다. 갱신을 시도합니다...');
       const newToken = await this.refreshToken();
       if (newToken) {
+        console.log('✅ 토큰 갱신 완료');
         return newToken;
+      } else {
+        console.log('❌ 토큰 갱신 실패');
       }
     }
 
@@ -85,9 +103,11 @@ export class TokenManager {
 
     if (googleTokenCookie) {
       const token = googleTokenCookie.split('=')[1];
+      console.log('✅ 쿠키에서 Google Access Token 발견');
       return decodeURIComponent(token);
     }
 
+    console.log('❌ 유효한 Google Access Token을 찾을 수 없습니다.');
     return null;
   }
 

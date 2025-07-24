@@ -354,14 +354,14 @@ export default function HomePage() {
                   <div className="relative w-full h-full flex bg-black overflow-hidden">
                     {/* 왼쪽 텍스트 영역 (720px) */}
                     <div className="w-[720px] h-full flex items-center justify-center relative">
-                      <div className={`absolute inset-0 bg-gradient-to-br ${bannerColors[index % bannerColors.length]}`} />
+                      <div className={`absolute inset-0 bg-gradient-to-br ${banner.leftBackgroundColor || bannerColors[index % bannerColors.length]}`} />
                       <div className="absolute inset-0 bg-[url('/pattern.svg')] bg-repeat opacity-10" />
-                      <div className="relative z-10 text-center text-white px-12">
+                      <div className={`relative z-10 text-center ${banner.leftTextColor || 'text-white'} px-12`}>
                         <h1 className="text-5xl font-bold mb-6 leading-tight">
-                          {TEXT.heroTitle[lang]}
+                          {banner[`leftTitle_${lang}`] || TEXT.heroTitle[lang]}
                         </h1>
                         <p className="text-xl mb-8 opacity-90 leading-relaxed">
-                          {TEXT.heroSubtitle[lang]}
+                          {banner[`leftSubtitle_${lang}`] || TEXT.heroSubtitle[lang]}
                         </p>
                         
                       </div>

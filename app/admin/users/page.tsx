@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useLanguage } from '../../../components/LanguageContext';
+import { getIdToken } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
@@ -153,25 +155,39 @@ export default function UserManagementPage() {
         setLoading(true);
         
         // 새로운 API에서 사용자 정보 가져오기
-        const response = await fetch('/api/users/list');
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+          throw new Error('User not authenticated');
+        }
+        
+        const response = await fetch('/api/users/list', {
+          headers: {
+            'Authorization': `Bearer ${await getIdToken(currentUser, true)}`
+          }
+        });
         if (!response.ok) {
           throw new Error('Failed to fetch users');
         }
         
         const result = await response.json();
-        const usersData: User[] = result.data.map((user: Record<string, unknown>) => ({
-          id: user.id as string,
-          email: (user.email as string) || '',
-          displayName: (user.displayName as string) || '',
-          photoURL: (user.photoURL as string) || '',
-          emailVerified: (user.emailVerified as boolean) || false,
-          disabled: (user.disabled as boolean) || false,
-          createdAt: new Date(user.createdAt as string | number | Date),
-          lastSignInAt: user.lastSignInAt ? new Date(user.lastSignInAt as string | number | Date) : null,
-          lastActivityAt: user.lastActivityAt ? new Date(user.lastActivityAt as string | number | Date) : null,
-          role: (user.role as 'admin' | 'user') || 'user',
-          workspace: (user.workspace as string) || 'default'
-        }));
+        console.log('Users API result:', result);
+        const usersData: User[] = result.data.map((user: Record<string, unknown>) => {
+          const userData = {
+            id: user.id as string,
+            email: (user.email as string) || '',
+            displayName: (user.displayName as string) || '',
+            photoURL: (user.photoURL as string) || '',
+            emailVerified: (user.emailVerified as boolean) || false,
+            disabled: (user.disabled as boolean) || false,
+            createdAt: new Date(user.createdAt as string | number | Date),
+            lastSignInAt: user.lastSignInAt ? new Date(user.lastSignInAt as string | number | Date) : null,
+            lastActivityAt: user.lastActivityAt ? new Date(user.lastActivityAt as string | number | Date) : null,
+            role: (user.role as 'admin' | 'user') || 'user',
+            workspace: (user.workspace as string) || 'default'
+          };
+          console.log('Processed user:', userData);
+          return userData;
+        });
 
         setUsers(usersData);
       } catch (err) {

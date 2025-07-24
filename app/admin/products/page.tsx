@@ -153,9 +153,6 @@ export default function AdminProducts() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
-      <Link href="/admin/dashboard" className="text-blue-600 hover:text-blue-800 mb-4 inline-block">
-        {texts.backToDashboard}
-      </Link>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">{texts.title}</h1>
         <Link

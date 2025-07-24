@@ -1,15 +1,16 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { checkAuth, setupTokenRefresh } from "@/lib/auth";
 import { LanguageProvider } from "../../components/LanguageContext";
-import AdminSidebar from "./components/AdminSidebar";
+import AdminNavbar from "./components/AdminNavbar";
+import TokenMonitor from "../../components/ui/TokenMonitor";
 
 export default function AdminUILayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isLoading, setIsLoading] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const tokenRefreshCleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     // 로그인 페이지는 인증 확인 제외
@@ -18,20 +19,37 @@ export default function AdminUILayout({ children }: { children: React.ReactNode 
       return;
     }
     
+    console.log('🔐 관리자 레이아웃에서 인증 확인 시작...');
+    
     checkAuth().then(user => {
       if (!user) {
+        console.log('❌ 인증되지 않은 사용자. 로그인 페이지로 리다이렉트...');
         router.replace("/admin/login");
       } else {
-        // 토큰 자동 갱신 설정
-        const unsubscribe = setupTokenRefresh();
-        setIsLoading(false);
+        console.log('✅ 인증된 사용자 확인됨:', user.email);
         
-        // 컴포넌트 언마운트 시 구독 해제
-        return () => {
-          unsubscribe();
-        };
+        // 이전 토큰 갱신 설정이 있다면 정리
+        if (tokenRefreshCleanupRef.current) {
+          console.log('🧹 이전 토큰 갱신 설정 정리...');
+          tokenRefreshCleanupRef.current();
+        }
+        
+        // 토큰 자동 갱신 설정
+        console.log('🔄 토큰 자동 갱신 설정 시작...');
+        const unsubscribe = setupTokenRefresh();
+        tokenRefreshCleanupRef.current = unsubscribe;
+        setIsLoading(false);
       }
     });
+
+    // 컴포넌트 언마운트 시 구독 해제
+    return () => {
+      if (tokenRefreshCleanupRef.current) {
+        console.log('🧹 관리자 레이아웃 언마운트. 토큰 갱신 구독 해제...');
+        tokenRefreshCleanupRef.current();
+        tokenRefreshCleanupRef.current = null;
+      }
+    };
   }, [router, pathname]);
 
   if (isLoading) {
@@ -49,45 +67,16 @@ export default function AdminUILayout({ children }: { children: React.ReactNode 
 
   return (
     <LanguageProvider>
-      {/* 모바일 햄버거 버튼 */}
-      {pathname !== "/admin/login" && (
-        <button
-          className="fixed top-4 left-4 z-50 block md:hidden bg-[#1A3A3A] border-2 border-[#7FC4C5] rounded-lg p-2 shadow hover:bg-[#2C6E6F] hover:border-white transition-colors"
-          onClick={() => setSidebarOpen(true)}
-        >
-          <span className="sr-only">메뉴 열기</span>
-          <svg width="28" height="28" fill="none" stroke="#7FC4C5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="2" width="24" height="24" rx="6" fill="none"/>
-            <line x1="8" y1="10" x2="20" y2="10" />
-            <line x1="8" y1="14" x2="20" y2="14" />
-            <line x1="8" y1="18" x2="20" y2="18" />
-          </svg>
-        </button>
-      )}
-      {/* 모바일 사이드바 오버레이 */}
-      {sidebarOpen && pathname !== "/admin/login" && (
-        <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setSidebarOpen(false)}>
-          <div className="absolute left-0 top-0 h-full w-64 bg-gradient-to-b from-[#1A3A3A] to-[#2C6E6F] shadow-2xl" onClick={e => e.stopPropagation()}>
-            <AdminSidebar />
-            <button
-              className="absolute top-4 right-4 text-white bg-black/30 rounded-full p-2 hover:bg-black/60 transition"
-              onClick={() => setSidebarOpen(false)}
-            >
-              <span className="sr-only">메뉴 닫기</span>
-              <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-            </button>
-          </div>
-        </div>
-      )}
-      {/* 데스크탑 사이드바 */}
-      {pathname !== "/admin/login" && (
-        <div className="hidden md:block">
-          <AdminSidebar />
-        </div>
-      )}
-      <div className={pathname !== "/admin/login" ? "md:ml-64" : ""}>
+      {/* 상단 네비게이션 바 */}
+      {pathname !== "/admin/login" && <AdminNavbar />}
+      
+      {/* 메인 콘텐츠 */}
+      <main className={pathname !== "/admin/login" ? "pt-0" : ""}>
         {children}
-      </div>
+      </main>
+      
+      {/* 토큰 모니터 (개발 환경에서만 표시) */}
+      {pathname !== "/admin/login" && <TokenMonitor />}
     </LanguageProvider>
   );
 } 

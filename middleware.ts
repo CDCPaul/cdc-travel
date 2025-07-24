@@ -9,7 +9,24 @@ export function middleware(request: NextRequest) {
     !/^\/admin\/login(\/|$)/.test(pathname)
   ) {
     const idToken = request.cookies.get('idToken')?.value;
+    
     if (!idToken) {
+      console.log('❌ 미들웨어: idToken 쿠키가 없습니다. 로그인 페이지로 리다이렉트');
+      return NextResponse.redirect(new URL('/admin/login', request.url));
+    }
+
+    // 토큰 유효성 검증 (비동기로 처리하되, 미들웨어에서는 동기적으로 처리)
+    try {
+      // 간단한 토큰 형식 검증 (JWT 형식인지 확인)
+      if (!idToken.includes('.') || idToken.split('.').length !== 3) {
+        console.log('❌ 미들웨어: 잘못된 토큰 형식. 로그인 페이지로 리다이렉트');
+        return NextResponse.redirect(new URL('/admin/login', request.url));
+      }
+
+      // 토큰 만료 시간 확인 (클라이언트 사이드에서 처리되므로 여기서는 기본 검증만)
+      console.log('✅ 미들웨어: 토큰 기본 검증 통과');
+    } catch (error) {
+      console.log('❌ 미들웨어: 토큰 검증 실패. 로그인 페이지로 리다이렉트');
       return NextResponse.redirect(new URL('/admin/login', request.url));
     }
   }

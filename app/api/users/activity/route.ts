@@ -78,6 +78,7 @@ export async function GET(request: NextRequest) {
   try {
     // Firebase Admin SDK를 사용하여 토큰 검증
     const auth = getAuth(initializeFirebaseAdmin());
+    const db = getAdminDb();
     
     // Authorization 헤더에서 ID 토큰 추출
     const authHeader = request.headers.get('authorization');
@@ -89,8 +90,9 @@ export async function GET(request: NextRequest) {
     }
 
     const idToken = authHeader.substring(7);
+    let decodedToken;
     try {
-      await auth.verifyIdToken(idToken);
+      decodedToken = await auth.verifyIdToken(idToken);
     } catch (tokenError: unknown) {
       if (tokenError && typeof tokenError === 'object' && 'code' in tokenError && tokenError.code === 'auth/id-token-expired') {
         return NextResponse.json(
@@ -100,41 +102,74 @@ export async function GET(request: NextRequest) {
       }
       throw tokenError;
     }
+    
+    // 관리자 권한 확인
+    const userDoc = await db.collection('users').doc(decodedToken.uid).get();
+    const userData = userDoc.data();
+    
+    if (!userData || userData.role !== 'admin') {
+      return NextResponse.json({ error: '관리자 권한이 필요합니다.' }, { status: 403 });
+    }
 
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     const limit = parseInt(searchParams.get('limit') || '100');
 
     // Firestore에서 활동 기록 가져오기 (조회 활동 제외)
-    const db = getAdminDb();
     const activityRef = db.collection('userActivities');
     
-    let query = activityRef
-      .orderBy('timestamp', 'desc')
-      .limit(limit);
-    
-    if (userId) {
-      query = query.where('userId', '==', userId);
+    try {
+      // 단순한 쿼리로 시작 (인덱스 문제 방지)
+      let snapshot;
+      
+      if (userId) {
+        // 특정 사용자의 활동만 가져오기
+        snapshot = await activityRef
+          .where('userId', '==', userId)
+          .limit(limit)
+          .get();
+      } else {
+        // 모든 활동 가져오기
+        snapshot = await activityRef
+          .limit(limit)
+          .get();
+      }
+      
+      console.log(`Query executed successfully. Found ${snapshot.docs.length} documents.`);
+      
+      // 클라이언트에서 정렬 (인덱스 문제 방지)
+      const activities = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          userId: data.userId,
+          userEmail: data.userEmail,
+          action: data.action,
+          details: data.details,
+          timestamp: data.timestamp.toDate(),
+          ipAddress: data.ipAddress,
+          userAgent: data.userAgent,
+          workspace: data.workspace
+        };
+      }).sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()); // 최신순 정렬
+
+      console.log(`Found ${activities.length} activities for user ${userId}`);
+      console.log('Activities:', activities);
+
+      return NextResponse.json({
+        success: true,
+        data: activities
+      });
+      
+    } catch (queryError) {
+      console.error('Firestore query error:', queryError);
+      
+      // 쿼리 실패 시 빈 배열 반환
+      return NextResponse.json({
+        success: true,
+        data: []
+      });
     }
-
-    const snapshot = await query.get();
-    
-    const activities = snapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        userId: data.userId,
-        userEmail: data.userEmail,
-        action: data.action,
-        details: data.details,
-        timestamp: data.timestamp.toDate(),
-        ipAddress: data.ipAddress,
-        userAgent: data.userAgent,
-        workspace: data.workspace
-      };
-    });
-
-    return NextResponse.json(activities);
 
   } catch (error) {
     console.error('사용자 활동 조회 실패:', error);

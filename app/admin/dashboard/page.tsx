@@ -9,6 +9,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
+import { testTokenRefresh } from '@/lib/auth';
 
 // 통계 데이터 타입 정의
 interface AnalyticsData {
@@ -104,6 +105,7 @@ export default function AdminDashboard() {
   const [timeRange, setTimeRange] = useState('30d');
   const { lang } = useLanguage();
   const texts = DASHBOARD_TEXTS[lang];
+  const [isTestLoading, setIsTestLoading] = useState(false);
 
   // Analytics API에서 데이터 가져오기
   const fetchAnalyticsData = useCallback(async () => {
@@ -139,6 +141,17 @@ export default function AdminDashboard() {
 
     return () => unsubscribe();
   }, [lang, fetchAnalyticsData]);
+
+  const handleTestTokenRefresh = async () => {
+    setIsTestLoading(true);
+    try {
+      await testTokenRefresh();
+    } catch (error) {
+      console.error('토큰 갱신 테스트 실패:', error);
+    } finally {
+      setIsTestLoading(false);
+    }
+  };
 
   const StatCard = ({ title, value, subtitle, icon }: { title: string; value: string | number; subtitle?: string; icon: string }) => (
     <div className="bg-white rounded-lg shadow-md p-6">
@@ -429,6 +442,24 @@ export default function AdminDashboard() {
         <div className="mt-8 text-center text-sm text-gray-500">
           {texts.lastUpdated}: {new Date().toLocaleString()}
         </div>
+
+        {/* 개발 환경에서만 토큰 테스트 버튼 표시 */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-8 text-center text-sm text-gray-500">
+            <h3 className="text-lg font-semibold text-yellow-800 mb-2">🔧 개발 도구</h3>
+            <p className="text-yellow-700 mb-3">토큰 갱신 시스템을 테스트할 수 있습니다.</p>
+            <button
+              onClick={handleTestTokenRefresh}
+              disabled={isTestLoading}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isTestLoading ? '테스트 중...' : '토큰 갱신 테스트'}
+            </button>
+            <p className="text-sm text-yellow-600 mt-2">
+              브라우저 콘솔에서 결과를 확인하세요.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,18 +1,27 @@
 "use client";
-import AdminLayout from "../../components/AdminLayout";
-import { useEffect, useState } from "react";
-import { Ebook } from "@/lib/types";
-import { db, storage, auth } from "@/lib/firebase";
-import { formatDate } from "@/lib/utils";
+import { useState, useEffect } from 'react';
+import { Ebook } from '@/lib/types';
+import { useDropzone } from 'react-dropzone';
+import { addDoc } from "firebase/firestore";
+import { db, storage, auth } from '@/lib/firebase';
+import { formatDate } from '@/lib/utils';
+import Image from 'next/image';
 import { collection, getDocs, query, orderBy, updateDoc, deleteDoc, doc as firestoreDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import { addDoc } from "firebase/firestore";
-import { useDropzone } from "react-dropzone";
-import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf";
 
-if (typeof window !== "undefined") {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.mjs";
-}
+// PDF.js를 동적으로 import
+let pdfjsLib: typeof import("pdfjs-dist/legacy/build/pdf") | null = null;
+
+const loadPdfJs = async () => {
+  if (!pdfjsLib) {
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf");
+    pdfjsLib = pdfjs;
+    if (typeof window !== "undefined") {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.mjs";
+    }
+  }
+  return pdfjsLib;
+};
 
 export default function AdminEbookManagementPage() {
   // eBook 목록 상태
@@ -26,7 +35,7 @@ export default function AdminEbookManagementPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-      // Firestore에서 eBook 목록 불러오기
+  // Firestore에서 eBook 목록 불러오기
   useEffect(() => {
     // Firestore에서 eBook 목록 불러오기
     async function fetchEbooks() {
@@ -56,9 +65,10 @@ export default function AdminEbookManagementPage() {
 
   // PDF → 썸네일 이미지 추출 함수
   async function extractPdfThumbnail(file: File): Promise<Blob> {
+    const pdfjs = await loadPdfJs();
     const arrayBuffer = await file.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
-    const pdf = await pdfjsLib.getDocument(uint8Array).promise;
+    const pdf = await pdfjs.getDocument(uint8Array).promise;
     const page = await pdf.getPage(1);
     const viewport = page.getViewport({ scale: 1.5 });
     const canvas = document.createElement("canvas");
@@ -77,8 +87,12 @@ export default function AdminEbookManagementPage() {
       setError("제목(한/영), 설명(한/영), PDF 파일을 모두 입력/선택해 주세요.");
       return;
     }
+    
     setLoading(true);
     try {
+      // PDF.js 로딩 확인
+      await loadPdfJs();
+      
       // 1. PDF 파일 Storage 업로드
       const fileExt = file.name.split('.').pop();
       const fileName = `ebook_${Date.now()}.${fileExt}`;
@@ -98,226 +112,264 @@ export default function AdminEbookManagementPage() {
         title: { ko: titleKo, en: titleEn },
         description: { ko: descKo, en: descEn },
         fileUrl,
-        thumbUrl,
-        isPublic: true,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        thumbUrl: thumbUrl,
+        isPublic: false,
+        createdAt: new Date(),
+        createdBy: auth.currentUser?.uid || "unknown"
       });
+
+      // 4. 폼 초기화
+      setTitleKo("");
+      setTitleEn("");
+      setDescKo("");
+      setDescEn("");
+      setFile(null);
       
-      // 활동 기록
-      try {
-        const user = auth.currentUser;
-        if (user) {
-          const idToken = await user.getIdToken();
-          await fetch('/api/users/activity', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${idToken}`
-            },
-            body: JSON.stringify({
-              action: 'ebookCreate',
-              details: `eBook "${titleKo}" 등록`,
-              userId: user.uid,
-              userEmail: user.email
-            })
-          });
-        }
-      } catch (error) {
-        console.error('활동 기록 실패:', error);
-      }
-      // 4. 목록 갱신
+      // 5. 목록 새로고침
       const q = query(collection(db, "ebooks"), orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
       const list: Ebook[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ebook));
       setEbooks(list);
-      // 5. 폼 초기화
-      setTitleKo(""); setTitleEn(""); setDescKo(""); setDescEn(""); setFile(null);
-    } catch (err) {
+      
+      alert("eBook이 성공적으로 등록되었습니다.");
+    } catch (error) {
+      console.error("eBook 등록 실패:", error);
       setError("eBook 등록 중 오류가 발생했습니다.");
-      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  // 공개여부 토글 핸들러
+  // 공개/비공개 토글 핸들러
   const handleTogglePublic = async (ebook: Ebook) => {
     try {
-      await updateDoc(firestoreDoc(db, "ebooks", ebook.id), { isPublic: !ebook.isPublic, updatedAt: Date.now() });
-      // 목록 갱신
-      const q = query(collection(db, "ebooks"), orderBy("createdAt", "desc"));
-      const snapshot = await getDocs(q);
-      const list: Ebook[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ebook));
-      setEbooks(list);
-    } catch (err) {
-      alert("공개여부 변경 중 오류가 발생했습니다.\nError occurred while toggling visibility.");
-      console.error(err);
+      const docRef = firestoreDoc(db, "ebooks", ebook.id);
+      await updateDoc(docRef, {
+        isPublic: !ebook.isPublic,
+        updatedAt: new Date(),
+        updatedBy: auth.currentUser?.uid || "unknown"
+      });
+      
+      // 목록 업데이트
+      setEbooks(ebooks.map(e => 
+        e.id === ebook.id ? { ...e, isPublic: !e.isPublic } : e
+      ));
+    } catch (error) {
+      console.error("상태 변경 실패:", error);
+      alert("상태 변경 중 오류가 발생했습니다.");
     }
   };
 
   // 삭제 핸들러
   const handleDelete = async (ebook: Ebook) => {
-    if (!window.confirm("정말 삭제하시겠습니까?")) return;
-    setLoading(true);
+    if (!confirm("정말 삭제하시겠습니까?")) return;
+    
     try {
-      // Firestore 문서 삭제
-      await deleteDoc(firestoreDoc(db, "ebooks", ebook.id));
-      // Storage PDF/썸네일 삭제
+      // 1. Firestore 문서 삭제
+      const docRef = firestoreDoc(db, "ebooks", ebook.id);
+      await deleteDoc(docRef);
+      
+      // 2. Storage 파일 삭제
       if (ebook.fileUrl) {
-        const filePath = decodeURIComponent(ebook.fileUrl.split("/o/")[1]?.split("?")[0] || "");
-        if (filePath) await deleteObject(ref(storage, filePath));
+        const fileRef = ref(storage, ebook.fileUrl);
+        await deleteObject(fileRef);
       }
+      
+      // 3. 썸네일 삭제
       if (ebook.thumbUrl) {
-        const thumbPath = decodeURIComponent(ebook.thumbUrl.split("/o/")[1]?.split("?")[0] || "");
-        if (thumbPath) await deleteObject(ref(storage, thumbPath));
+        const thumbRef = ref(storage, ebook.thumbUrl);
+        await deleteObject(thumbRef);
       }
       
-      // 활동 기록
-      try {
-        const user = auth.currentUser;
-        if (user) {
-          const idToken = await user.getIdToken();
-          await fetch('/api/users/activity', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${idToken}`
-            },
-            body: JSON.stringify({
-              action: 'ebookDelete',
-              details: `eBook "${ebook.title?.ko || '제목 없음'}" 삭제`,
-              userId: user.uid,
-              userEmail: user.email
-            })
-          });
-        }
-      } catch (error) {
-        console.error('활동 기록 실패:', error);
-      }
-      
-      // 목록 갱신
-      const q = query(collection(db, "ebooks"), orderBy("createdAt", "desc"));
-      const snapshot = await getDocs(q);
-      const list: Ebook[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Ebook));
-      setEbooks(list);
-    } catch (err) {
+      // 4. 목록에서 제거
+      setEbooks(ebooks.filter(e => e.id !== ebook.id));
+      alert("eBook이 삭제되었습니다.");
+    } catch (error) {
+      console.error("삭제 실패:", error);
       alert("삭제 중 오류가 발생했습니다.");
-      console.error(err);
-    } finally {
-      setLoading(false);
     }
   };
 
   return (
-    <AdminLayout>
-      <div className="p-8">
-        <h1 className="text-2xl font-bold mb-4">eBook 관리 / eBook Management</h1>
-        <p className="text-gray-700 mb-4">회사소개 eBook을 등록, 수정, 삭제, 공개여부를 설정할 수 있습니다.<br/>You can register, edit, delete, and set visibility for About Us eBooks.</p>
-
-        {/* eBook 등록 폼 */}
-        <div className="bg-white rounded shadow p-6 mb-8 max-w-xl">
-          <h2 className="text-lg font-semibold mb-4">새 eBook 등록 / Register New eBook</h2>
-          <div className="flex gap-4 mb-2">
-            <div className="flex-1">
-              <label className="block font-medium mb-1">제목 (한국어 / Korean)</label>
-              <input type="text" className="w-full border rounded px-3 py-2" value={titleKo} onChange={e => setTitleKo(e.target.value)} />
-            </div>
-            <div className="flex-1">
-              <label className="block font-medium mb-1">제목 (영어 / English)</label>
-              <input type="text" className="w-full border rounded px-3 py-2" value={titleEn} onChange={e => setTitleEn(e.target.value)} />
-            </div>
+    <div className="p-8">
+      <h1 className="text-2xl font-bold mb-6">eBook 관리</h1>
+      
+      {/* 등록 폼 */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+        <h2 className="text-xl font-semibold mb-4">새 eBook 등록</h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">제목 (한국어)</label>
+            <input
+              type="text"
+              value={titleKo}
+              onChange={(e) => setTitleKo(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="한국어 제목을 입력하세요"
+            />
           </div>
-          <div className="mb-2">
-            <label className="block font-medium mb-1">설명 (한국어 / Korean)</label>
-            <textarea className="w-full border rounded px-3 py-2" value={descKo} onChange={e => setDescKo(e.target.value)} />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">제목 (영어)</label>
+            <input
+              type="text"
+              value={titleEn}
+              onChange={(e) => setTitleEn(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="영어 제목을 입력하세요"
+            />
           </div>
-          <div className="mb-2">
-            <label className="block font-medium mb-1">설명 (영어 / English)</label>
-            <textarea className="w-full border rounded px-3 py-2" value={descEn} onChange={e => setDescEn(e.target.value)} />
-          </div>
-          <div className="mb-4">
-            <label className="block font-medium mb-1">PDF 파일 업로드</label>
-            <div {...getRootProps()} className={`border-2 border-dashed rounded px-4 py-8 text-center cursor-pointer transition-colors ${isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50'}`}>
-              <input {...getInputProps()} />
-              {isDragActive ? (
-                <p className="text-blue-600">여기에 PDF 파일을 놓으세요!</p>
-              ) : (
-                <p className="text-gray-600">여기에 PDF 파일을 드래그하거나 클릭해서 업로드하세요</p>
-              )}
-              {file && <div className="text-sm text-gray-700 mt-2">선택된 파일: {file.name}</div>}
-            </div>
-          </div>
-          <button className="bg-blue-600 text-white px-4 py-2 rounded font-semibold" onClick={handleRegister} disabled={loading}>
-            {loading ? "등록 중..." : "등록"}
-          </button>
-          {error && <div className="text-red-600 mt-2">{error}</div>}
         </div>
-
-        {/* eBook 목록 테이블 */}
-        <div className="bg-white rounded shadow p-6">
-          <h2 className="text-lg font-semibold mb-4">eBook 목록 / eBook List</h2>
-          <table className="w-full text-left border">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="p-2 border text-left w-64">제목(한/영) <br/> Title(KR/EN)</th>
-                <th className="p-2 border text-left w-64">설명(한/영) <br/> Description(KR/EN)</th>
-                <th className="p-2 border text-center w-32">공개여부 <br/> Visibility</th>
-                <th className="p-2 border text-center w-32">등록일 <br/> Created</th>
-                <th className="p-2 border text-center w-32">관리 <br/> Actions</th>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">설명 (한국어)</label>
+            <textarea
+              value={descKo}
+              onChange={(e) => setDescKo(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="한국어 설명을 입력하세요"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">설명 (영어)</label>
+            <textarea
+              value={descEn}
+              onChange={(e) => setDescEn(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="영어 설명을 입력하세요"
+            />
+          </div>
+        </div>
+        
+        {/* 파일 업로드 영역 */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">PDF 파일</label>
+          <div
+            {...getRootProps()}
+            className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+              isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
+            }`}
+          >
+            <input {...getInputProps()} />
+            {file ? (
+              <div>
+                <p className="text-green-600 font-medium">✓ {file.name}</p>
+                <p className="text-sm text-gray-500">클릭하여 다른 파일 선택</p>
+              </div>
+            ) : (
+              <div>
+                <p className="text-gray-600">PDF 파일을 드래그하거나 클릭하여 선택하세요</p>
+                <p className="text-sm text-gray-500">PDF 파일만 업로드 가능합니다</p>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+            {error}
+          </div>
+        )}
+        
+        <button
+          onClick={handleRegister}
+          disabled={loading}
+          className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {loading ? "등록 중..." : "eBook 등록"}
+        </button>
+      </div>
+      
+      {/* eBook 목록 */}
+      <div className="bg-white rounded-lg shadow-md">
+        <div className="p-6 border-b border-gray-200">
+          <h2 className="text-xl font-semibold">등록된 eBook 목록</h2>
+        </div>
+        
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">썸네일</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">제목</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">설명</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">상태</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">등록일</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">작업</th>
               </tr>
             </thead>
-            <tbody>
-              {ebooks.length === 0 ? (
-                <tr><td colSpan={5} className="text-center p-4 text-gray-400">등록된 eBook이 없습니다.</td></tr>
-              ) : (
-                ebooks.map(ebook => (
-                  <tr key={ebook.id} className="align-top">
-                    <td className="p-2 border text-left align-top w-64">
-                      <div>{ebook.title.ko}</div>
-                      <div className="text-xs text-gray-500">{ebook.title.en}</div>
-                    </td>
-                    <td className="p-2 border text-left align-top w-64">
-                      <div>{ebook.description.ko}</div>
-                      <div className="text-xs text-gray-500">{ebook.description.en}</div>
-                    </td>
-                    <td className="p-3 border">
-                      <div className="flex w-full justify-center items-center gap-2">
-                        <button
-                          className={`px-3 py-0.5 rounded font-semibold text-xs ${ebook.isPublic ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600'}`}
-                          disabled={ebook.isPublic || loading}
-                          onClick={() => !ebook.isPublic && handleTogglePublic(ebook)}
-                        >공개</button>
-                        <button
-                          className={`px-3 py-0.5 rounded font-semibold text-xs ${!ebook.isPublic ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-600'}`}
-                          disabled={!ebook.isPublic || loading}
-                          onClick={() => ebook.isPublic && handleTogglePublic(ebook)}
-                        >비공개</button>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {ebooks.map((ebook) => (
+                <tr key={ebook.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {ebook.thumbUrl ? (
+                      <Image
+                        src={ebook.thumbUrl}
+                        alt="썸네일"
+                        width={64}
+                        height={80}
+                        className="w-16 h-20 object-cover rounded"
+                      />
+                    ) : (
+                      <div className="w-16 h-20 bg-gray-200 rounded flex items-center justify-center">
+                        <span className="text-gray-400 text-xs">No Image</span>
                       </div>
-                    </td>
-                    <td className="p-3 border text-center align-top w-32">{formatDate(new Date(ebook.createdAt), 'YYYY-MM-DD')}</td>
-                    <td className="p-3 border">
-                      <div className="flex w-full justify-center items-center gap-2">
-                        <button
-                          className="px-3 py-0.5 rounded font-semibold text-xs bg-blue-600 text-white hover:bg-blue-700 transition"
-                          disabled={loading}
-                          title="수정"
-                        >수정</button>
-                        <button
-                          className="px-3 py-0.5 rounded font-semibold text-xs bg-red-600 text-white hover:bg-red-700 transition"
-                          onClick={() => handleDelete(ebook)}
-                          disabled={loading}
-                          title="삭제"
-                        >삭제</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
+                    )}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{ebook.title?.ko}</div>
+                      <div className="text-sm text-gray-500">{ebook.title?.en}</div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-sm text-gray-900 max-w-xs truncate">
+                      {ebook.description?.ko}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      ebook.isPublic 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {ebook.isPublic ? '공개' : '비공개'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {ebook.createdAt ? formatDate(ebook.createdAt) : 'N/A'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleTogglePublic(ebook)}
+                        className="text-blue-600 hover:text-blue-900"
+                      >
+                        {ebook.isPublic ? '비공개' : '공개'}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(ebook)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
+        
+        {ebooks.length === 0 && (
+          <div className="p-6 text-center text-gray-500">
+            등록된 eBook이 없습니다.
+          </div>
+        )}
       </div>
-    </AdminLayout>
+    </div>
   );
 } 

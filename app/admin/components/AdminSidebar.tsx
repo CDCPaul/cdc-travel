@@ -43,6 +43,17 @@ const MAIN_MENU = {
   ]
 };
 
+const BOOKING_MENU = {
+  ko: [
+    { label: "신규부킹목록", href: "/admin/bookings" },
+    { label: "확정예약목록", href: "/admin/bookings/confirmed" },
+  ],
+  en: [
+    { label: "New Booking List", href: "/admin/bookings" },
+    { label: "Confirmed Bookings", href: "/admin/bookings/confirmed" },
+  ]
+};
+
 const ABOUT_US_MENU = {
   ko: [
     { label: "eBook 관리", href: "/admin/about-us/ebooks" },
@@ -125,6 +136,38 @@ export default function AdminSidebar() {
   const [userOpen, setUserOpen] = useState(() => 
     ["/admin/users", "/admin/migrate-users"].some(path => pathname.startsWith(path))
   );
+  const [bookingOpen, setBookingOpen] = useState(() => 
+    ["/admin/bookings", "/admin/bookings/new", "/admin/bookings/confirmed"].some(path => pathname.startsWith(path))
+  );
+
+  // 현재 경로에 따라 아코디언 상태를 자동으로 업데이트
+  useEffect(() => {
+    const currentPath = pathname;
+    
+    // DB 관리 아코디언
+    const isDbPath = ["/admin/products", "/admin/spots", "/admin/include-items", "/admin/not-include-items", "/admin/files"].some(path => currentPath.startsWith(path));
+    setDbOpen(isDbPath);
+    
+    // TA 관리 아코디언
+    const isTaPath = ["/admin/ta-list", "/admin/posters", "/admin/itineraries", "/admin/letters"].some(path => currentPath.startsWith(path));
+    setTaOpen(isTaPath);
+    
+    // 회사소개 관리 아코디언
+    const isAboutUsPath = ["/admin/about-us", "/admin/about-us/ebooks"].some(path => currentPath.startsWith(path));
+    setAboutUsOpen(isAboutUsPath);
+    
+    // 사이트설정 아코디언
+    const isSiteSettingsPath = ["/admin/banners", "/admin/settings"].some(path => currentPath.startsWith(path));
+    setSiteSettingsOpen(isSiteSettingsPath);
+    
+    // 사용자 관리 아코디언
+    const isUserPath = ["/admin/users", "/admin/migrate-users"].some(path => currentPath.startsWith(path));
+    setUserOpen(isUserPath);
+    
+    // 예약 관리 아코디언 - 더 정확한 매칭
+    const isBookingPath = currentPath.startsWith("/admin/bookings");
+    setBookingOpen(isBookingPath);
+  }, [pathname]);
   const { lang, setLang } = useLanguage();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const router = useRouter();
@@ -153,6 +196,7 @@ export default function AdminSidebar() {
   const currentAboutUsMenu = ABOUT_US_MENU[lang];
   const currentSiteSettingsMenu = SITE_SETTINGS_MENU[lang];
   const currentUserMenu = USER_MENU[lang];
+  const currentBookingMenu = BOOKING_MENU[lang];
 
   return (
     <aside className="h-screen w-64 bg-gradient-to-b from-[#1A3A3A] to-[#2C6E6F] text-white flex flex-col fixed left-0 top-0 z-40 shadow-2xl">
@@ -248,6 +292,49 @@ export default function AdminSidebar() {
           )
         ))}
         
+        {/* 예약 관리 아코디언 */}
+        <motion.div 
+          className="pt-4 mt-4 border-t border-[#3A8A8B]/30 px-4"
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.4 }}
+        >
+          <button
+            className={`w-full flex items-center justify-between py-3 rounded-lg font-medium transition-all duration-300 group whitespace-nowrap text-base ${
+              bookingOpen 
+                ? 'bg-white/20 text-white shadow-lg' 
+                : 'hover:bg-white/10 text-white/90 hover:text-white'
+            }`}
+            onClick={() => setBookingOpen(open => !open)}
+            aria-expanded={bookingOpen}
+          >
+            <span className="whitespace-nowrap flex-1 text-left">{lang === 'ko' ? '예약 관리' : 'Booking Management'}</span>
+            <ArrowDownIcon rotated={bookingOpen} />
+          </button>
+          {bookingOpen && (
+            <motion.div 
+              className="ml-4 mt-2 space-y-1"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              transition={{ duration: 0.3 }}
+            >
+              {currentBookingMenu.map(item => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`block px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 whitespace-nowrap ${
+                    pathname === item.href || (item.href === "/admin/bookings" && pathname === "/admin/bookings") || (item.href === "/admin/bookings/confirmed" && pathname.startsWith("/admin/bookings/confirmed"))
+                      ? 'bg-white/20 text-white shadow-md' 
+                      : 'hover:bg-white/10 text-white/80 hover:text-white'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </motion.div>
+          )}
+        </motion.div>
+
         {/* DB 관리 아코디언 */}
         <motion.div 
           className="pt-4 mt-4 border-t border-[#3A8A8B]/30 px-4"

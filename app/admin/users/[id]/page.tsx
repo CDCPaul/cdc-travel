@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { useLanguage } from '../../../../components/LanguageContext';
+import { getIdToken } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
@@ -216,8 +218,19 @@ export default function UserDetailPage() {
       try {
         setLoading(true);
         
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+          throw new Error('User not authenticated');
+        }
+        
+        const token = await getIdToken(currentUser, true);
+        
         // 사용자 정보 가져오기
-        const userResponse = await fetch(`/api/users/list`);
+        const userResponse = await fetch(`/api/users/list`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
         if (!userResponse.ok) {
           throw new Error('Failed to fetch user data');
         }
@@ -233,14 +246,64 @@ export default function UserDetailPage() {
         setUser(foundUser);
         
         // 활동 로그 가져오기
-        const activityResponse = await fetch(`/api/users/activity?userId=${id}`);
-        if (activityResponse.ok) {
-          const activityResult = await activityResponse.json();
-          setActivities(activityResult.data || []);
+        try {
+          const activityResponse = await fetch(`/api/users/activity?userId=${id}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          console.log('Activity response status:', activityResponse.status);
+          
+          if (activityResponse.ok) {
+            const activityResult = await activityResponse.json();
+            console.log('Activity result:', activityResult);
+            let activities = [];
+            if (activityResult.success && activityResult.data) {
+              activities = activityResult.data;
+            } else if (Array.isArray(activityResult)) {
+              // 이전 형식 호환성
+              activities = activityResult;
+            }
+            
+            // 페이지 접근 기록 제외하고 실제 작업만 필터링
+            const filteredActivities = activities.filter((activity: ActivityLog) => {
+              // 로그인/로그아웃은 포함
+              if (activity.action === 'login' || activity.action === 'logout') {
+                return true;
+              }
+              // 실제 작업(create, update, delete, email)만 포함
+              if (['create', 'update', 'delete', 'email'].includes(activity.action)) {
+                return true;
+              }
+              // 상세 정보에 실제 작업 키워드가 포함된 경우
+              if (activity.details.includes('생성') || 
+                  activity.details.includes('수정') || 
+                  activity.details.includes('삭제') || 
+                  activity.details.includes('이메일')) {
+                return true;
+              }
+              return false;
+            });
+            
+            setActivities(filteredActivities);
+          } else {
+            const errorText = await activityResponse.text();
+            console.error('Activity response not ok:', activityResponse.status, activityResponse.statusText);
+            console.error('Activity error details:', errorText);
+            // 에러가 발생해도 빈 배열로 설정하여 UI가 깨지지 않도록 함
+            setActivities([]);
+          }
+        } catch (activityError) {
+          console.error('Activity fetch error:', activityError);
+          setActivities([]);
         }
         
         // 사용자 통계 가져오기
-        const statsResponse = await fetch(`/api/users/${id}/stats`);
+        const statsResponse = await fetch(`/api/users/${id}/stats`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
         if (statsResponse.ok) {
           const statsResult = await statsResponse.json();
           setStats(statsResult.data);
@@ -263,9 +326,19 @@ export default function UserDetailPage() {
     if (!user) return;
     
     try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+      
+      const token = await getIdToken(currentUser, true);
+      
       const response = await fetch(`/api/users/${user.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ disabled })
       });
 
@@ -285,9 +358,19 @@ export default function UserDetailPage() {
     if (!user) return;
     
     try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+      
+      const token = await getIdToken(currentUser, true);
+      
       const response = await fetch(`/api/users/${user.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ role: newRole })
       });
 
@@ -303,17 +386,35 @@ export default function UserDetailPage() {
     }
   };
 
-  const getActionText = (action: string) => {
+  const getActionText = (action: string, details: string) => {
+    // 기본 액션 텍스트
     const actionMap: Record<string, string> = {
       'login': texts.login,
       'logout': texts.logout,
       'create': texts.create,
       'update': texts.update,
       'delete': texts.delete,
-      'email': texts.emailSend,
-      'view': texts.view
+      'email': texts.emailSend
     };
-    return actionMap[action] || action;
+    
+    const baseAction = actionMap[action] || action;
+    
+    // 실제 작업과 로그인/로그아웃만 표시
+    if (action === 'login' || details.includes('로그인')) {
+      return '로그인';
+    } else if (action === 'logout' || details.includes('로그아웃')) {
+      return '로그아웃';
+    } else if (action === 'create' || details.includes('생성')) {
+      return '항목 생성';
+    } else if (action === 'update' || details.includes('수정')) {
+      return '항목 수정';
+    } else if (action === 'delete' || details.includes('삭제')) {
+      return '항목 삭제';
+    } else if (action === 'email' || details.includes('이메일')) {
+      return '이메일 전송';
+    }
+    
+    return baseAction;
   };
 
   if (loading) {
@@ -489,6 +590,45 @@ export default function UserDetailPage() {
                 >
                   {texts.changeRole}
                 </button>
+                
+                {/* 테스트 활동 로그 생성 버튼 */}
+                <button
+                  onClick={async () => {
+                    try {
+                      const currentUser = auth.currentUser;
+                      if (!currentUser) {
+                        throw new Error('User not authenticated');
+                      }
+                      
+                      const token = await getIdToken(currentUser, true);
+                      
+                      const response = await fetch('/api/users/activity/test', {
+                        method: 'POST',
+                        headers: { 
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ 
+                          userId: user.id, 
+                          userEmail: user.email 
+                        })
+                      });
+                      
+                      if (response.ok) {
+                        alert('테스트 활동 로그가 생성되었습니다. 페이지를 새로고침하세요.');
+                      } else {
+                        const errorText = await response.text();
+                        alert(`활동 로그 생성 실패: ${errorText}`);
+                      }
+                    } catch (err) {
+                      console.error('테스트 활동 로그 생성 실패:', err);
+                      alert('테스트 활동 로그 생성 중 오류가 발생했습니다.');
+                    }
+                  }}
+                  className="w-full bg-yellow-600 text-white px-4 py-2 rounded-md hover:bg-yellow-700 transition-colors"
+                >
+                  테스트 활동 로그 생성
+                </button>
               </div>
             </motion.div>
           </div>
@@ -612,7 +752,7 @@ export default function UserDetailPage() {
                 <h2 className="text-xl font-semibold text-gray-900">{texts.activityLog}</h2>
               </div>
               
-              <div className="max-h-96 overflow-y-auto">
+              <div className="max-h-[600px] overflow-y-auto">
                 {activities.length === 0 ? (
                   <div className="p-6 text-center text-gray-500">
                     {texts.noActivity}
@@ -625,35 +765,48 @@ export default function UserDetailPage() {
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.3, delay: index * 0.05 }}
-                        className="p-6 hover:bg-gray-50"
+                        className="p-6 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <div className="flex items-center space-x-3">
-                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                activity.action === 'login' ? 'bg-green-100 text-green-800' :
-                                activity.action === 'logout' ? 'bg-yellow-100 text-yellow-800' :
-                                activity.action === 'create' ? 'bg-blue-100 text-blue-800' :
-                                activity.action === 'update' ? 'bg-purple-100 text-purple-800' :
-                                activity.action === 'delete' ? 'bg-red-100 text-red-800' :
-                                activity.action === 'email' ? 'bg-indigo-100 text-indigo-800' :
-                                'bg-gray-100 text-gray-800'
-                              }`}>
-                                {getActionText(activity.action)}
-                              </span>
-                              <span className="text-sm text-gray-500">
-                                {new Date(activity.timestamp).toLocaleString(lang === 'ko' ? 'ko-KR' : 'en-US', {
-                                  year: 'numeric',
-                                  month: '2-digit',
-                                  day: '2-digit',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </span>
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center space-x-3">
+                                <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
+                                  activity.action === 'login' ? 'bg-green-100 text-green-800' :
+                                  activity.action === 'logout' ? 'bg-yellow-100 text-yellow-800' :
+                                  activity.action === 'create' ? 'bg-blue-100 text-blue-800' :
+                                  activity.action === 'update' ? 'bg-purple-100 text-purple-800' :
+                                  activity.action === 'delete' ? 'bg-red-100 text-red-800' :
+                                  activity.action === 'email' ? 'bg-indigo-100 text-indigo-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {getActionText(activity.action, activity.details)}
+                                </span>
+                                <span className="text-xs text-gray-400">
+                                  {new Date(activity.timestamp).toLocaleString(lang === 'ko' ? 'ko-KR' : 'en-US', {
+                                    year: 'numeric',
+                                    month: '2-digit',
+                                    day: '2-digit',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                  })}
+                                </span>
+                              </div>
                             </div>
-                            <p className="mt-2 text-sm text-gray-900">{activity.details}</p>
-                            <div className="mt-2 flex items-center space-x-4 text-xs text-gray-500">
-                              <span>{texts.ipAddress}: {activity.ipAddress}</span>
+                            <p className="text-sm text-gray-700 mb-2">
+                              {activity.action === 'login' || activity.action === 'logout' 
+                                ? activity.details
+                                : activity.details.includes('/admin/') 
+                                  ? activity.details.split('/admin/')[1]?.split('/')[0] 
+                                    ? `${activity.details.split('/admin/')[1]?.split('/')[0]} ${activity.action === 'create' ? '생성' : activity.action === 'update' ? '수정' : activity.action === 'delete' ? '삭제' : '관리'}`
+                                    : '관리 작업'
+                                  : activity.details
+                              }
+                            </p>
+                            <div className="flex items-center space-x-4 text-xs text-gray-400">
+                              <span>IP: {activity.ipAddress}</span>
+                              <span>•</span>
+                              <span>{activity.userEmail}</span>
                             </div>
                           </div>
                         </div>

@@ -61,6 +61,10 @@ export default function AdminLogin() {
       const { TokenManager } = await import('../../../lib/token-manager');
       TokenManager.setTokenExpiry();
       
+      // Google Access Token을 쿠키에 저장
+      const { setGoogleAccessTokenCookie } = await import('../../../lib/auth');
+      setGoogleAccessTokenCookie(accessToken);
+      
       // 서버에 로그인 정보 전송
       const idToken = await user.getIdToken();
       console.log('Google Access Token:', accessToken);

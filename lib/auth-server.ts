@@ -37,6 +37,18 @@ export async function verifyIdToken(idToken: string): Promise<DecodedToken | nul
     };
   } catch (error) {
     console.error('Token verification failed:', error);
+    
+    // 토큰 만료 오류를 특별히 처리
+    if (error instanceof Error) {
+      if (error.message.includes('auth/id-token-expired')) {
+        console.error('토큰이 만료되었습니다. 클라이언트에서 토큰 갱신이 필요합니다.');
+      } else if (error.message.includes('auth/id-token-revoked')) {
+        console.error('토큰이 취소되었습니다. 사용자가 다시 로그인해야 합니다.');
+      } else {
+        console.error('토큰 검증 실패:', error.message);
+      }
+    }
+    
     return null;
   }
 }
@@ -50,10 +62,29 @@ export async function verifyIdTokenFromCookies(cookies: { get: (name: string) =>
   const idToken = cookies.get('idToken')?.value;
   
   if (!idToken) {
+    console.error('쿠키에서 idToken을 찾을 수 없습니다.');
+    console.log('사용 가능한 쿠키:', Object.keys(cookies));
     return null;
   }
 
-  return await verifyIdToken(idToken);
+  console.log('토큰 검증 시도:', idToken.substring(0, 20) + '...');
+  console.log('토큰 길이:', idToken.length);
+  
+  try {
+    const result = await verifyIdToken(idToken);
+    if (result) {
+      console.log('토큰 검증 성공:', result.email);
+      console.log('토큰 만료 시간:', new Date(result.exp * 1000).toLocaleString());
+      console.log('현재 시간:', new Date().toLocaleString());
+      console.log('토큰 만료까지 남은 시간:', Math.round((result.exp * 1000 - Date.now()) / 1000 / 60), '분');
+    } else {
+      console.log('토큰 검증 실패');
+    }
+    return result;
+  } catch (error) {
+    console.error('토큰 검증 중 오류 발생:', error);
+    return null;
+  }
 }
 
 /**
