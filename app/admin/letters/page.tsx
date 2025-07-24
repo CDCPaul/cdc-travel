@@ -161,17 +161,6 @@ export default function LettersPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* 헤더 */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">{TEXT.title[lang]}</h1>
-        <Link
-          href="/admin/letters/new"
-          className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-        >
-          {TEXT.addNew[lang]}
-        </Link>
-      </div>
-
       {/* 레터 목록 */}
       {letters.length === 0 ? (
         <div className="text-center py-12">

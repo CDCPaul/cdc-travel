@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useLanguage } from '@/components/LanguageContext';
 import { Booking } from '@/types/booking';
@@ -8,15 +8,15 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { apiFetchJson } from '@/lib/api-utils';
 
-const BOOKING_EDIT_TEXTS = {
+const CONFIRMED_BOOKING_EDIT_TEXTS = {
   ko: {
-    title: "예약 수정",
+    title: "확정 예약 수정",
     back: "상세보기로",
     save: "저장",
     loading: "로딩 중...",
-    notFound: "예약을 찾을 수 없습니다",
-    saveSuccess: "예약이 성공적으로 수정되었습니다",
-    saveError: "예약 수정에 실패했습니다",
+    notFound: "확정 예약을 찾을 수 없습니다",
+    saveSuccess: "확정 예약이 성공적으로 수정되었습니다",
+    saveError: "확정 예약 수정에 실패했습니다",
     basicInfo: "기본 정보",
     tourInfo: "투어 정보",
     customerInfo: "고객 정보",
@@ -53,13 +53,13 @@ const BOOKING_EDIT_TEXTS = {
     remarks: "비고"
   },
   en: {
-    title: "Edit Booking",
+    title: "Edit Confirmed Booking",
     back: "Back to Details",
     save: "Save",
     loading: "Loading...",
-    notFound: "Booking not found",
-    saveSuccess: "Booking updated successfully",
-    saveError: "Failed to update booking",
+    notFound: "Confirmed booking not found",
+    saveSuccess: "Confirmed booking updated successfully",
+    saveError: "Failed to update confirmed booking",
     basicInfo: "Basic Information",
     tourInfo: "Tour Information",
     customerInfo: "Customer Information",
@@ -97,61 +97,64 @@ const BOOKING_EDIT_TEXTS = {
   }
 };
 
-export default function BookingEditPage() {
+export default function ConfirmedBookingEditPage() {
   const { id } = useParams();
   const router = useRouter();
   const { lang } = useLanguage();
-  const texts = BOOKING_EDIT_TEXTS[lang];
-
+  const texts = CONFIRMED_BOOKING_EDIT_TEXTS[lang];
+  
   const [booking, setBooking] = useState<Booking | null>(null);
   const [formData, setFormData] = useState<Partial<Booking>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchBooking = async () => {
-      try {
-        const data = await apiFetchJson<Booking>(`/api/bookings/${id}`);
-        setBooking(data);
-        setFormData(data);
-      } catch (error) {
-        console.error('예약 데이터 로딩 실패:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (id) {
       fetchBooking();
     }
-  }, [id]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchBooking = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await apiFetchJson<{success: boolean, booking: Booking}>(`/api/bookings/confirmed/${id}`);
+      
+      if (response.success && response.booking) {
+        setBooking(response.booking);
+        setFormData(response.booking);
+      } else {
+        alert(texts.notFound);
+        router.push('/admin/bookings/confirmed');
+      }
+    } catch (error) {
+      console.error('확정 예약 정보 가져오기 실패:', error);
+      alert(texts.notFound);
+      router.push('/admin/bookings/confirmed');
+    } finally {
+      setLoading(false);
+    }
+  }, [id, router, texts.notFound]);
 
   const handleInputChange = (field: keyof Booking, value: string | number | boolean | Date) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
+    
     try {
-      const response = await fetch(`/api/bookings/${id}`, {
+      const response = await apiFetchJson<{success: boolean}>(`/api/bookings/confirmed/${id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(formData)
       });
-
-      if (response.ok) {
+      
+      if (response.success) {
         alert(texts.saveSuccess);
-        router.push(`/admin/bookings/${id}`);
+        router.push(`/admin/bookings/confirmed/${id}`);
       } else {
         alert(texts.saveError);
       }
     } catch (error) {
-      console.error('예약 수정 실패:', error);
+      console.error('확정 예약 수정 실패:', error);
       alert(texts.saveError);
     }
   };
@@ -160,7 +163,7 @@ export default function BookingEditPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600">{texts.loading}</p>
         </div>
       </div>
@@ -171,7 +174,7 @@ export default function BookingEditPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-500">{texts.notFound}</p>
+          <p className="text-gray-600">{texts.notFound}</p>
           <Link href="/admin/bookings/confirmed" className="text-blue-600 hover:text-blue-800 mt-2 inline-block">
             {texts.back}
           </Link>
@@ -183,7 +186,7 @@ export default function BookingEditPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <form id="booking-edit-form" onSubmit={handleSubmit} className="space-y-8">
+        <form id="confirmed-booking-edit-form" onSubmit={handleSubmit} className="space-y-8">
           {/* 기본 정보 */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -297,20 +300,7 @@ export default function BookingEditPage() {
             transition={{ delay: 0.1 }}
             className="bg-white rounded-lg shadow p-6"
           >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">{texts.tourInfo}</h2>
-              <div className="flex items-center space-x-4">
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.airlineIncluded || false}
-                    onChange={(e) => handleInputChange('airlineIncluded', e.target.checked)}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <span className="text-sm font-medium text-gray-700">{texts.airlineIncluded}</span>
-                </label>
-              </div>
-            </div>
+            <h2 className="text-lg font-semibold mb-4">{texts.tourInfo}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -400,6 +390,17 @@ export default function BookingEditPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {texts.airlineIncluded}
+                </label>
+                <input
+                  type="checkbox"
+                  checked={formData.airlineIncluded || false}
+                  onChange={(e) => handleInputChange('airlineIncluded', e.target.checked)}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+              </div>
             </div>
           </motion.div>
 
@@ -411,7 +412,7 @@ export default function BookingEditPage() {
             className="bg-white rounded-lg shadow p-6"
           >
             <h2 className="text-lg font-semibold mb-4">{texts.customerInfo}</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {texts.totalPax}
@@ -475,7 +476,7 @@ export default function BookingEditPage() {
                 <input
                   type="number"
                   value={formData.costPrice || ''}
-                  onChange={(e) => handleInputChange('costPrice', parseInt(e.target.value))}
+                  onChange={(e) => handleInputChange('costPrice', parseFloat(e.target.value))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -486,7 +487,7 @@ export default function BookingEditPage() {
                 <input
                   type="number"
                   value={formData.markup || ''}
-                  onChange={(e) => handleInputChange('markup', parseInt(e.target.value))}
+                  onChange={(e) => handleInputChange('markup', parseFloat(e.target.value))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -497,7 +498,7 @@ export default function BookingEditPage() {
                 <input
                   type="number"
                   value={formData.sellingPrice || ''}
-                  onChange={(e) => handleInputChange('sellingPrice', parseInt(e.target.value))}
+                  onChange={(e) => handleInputChange('sellingPrice', parseFloat(e.target.value))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -508,7 +509,7 @@ export default function BookingEditPage() {
                 <input
                   type="number"
                   value={formData.totalPayment || ''}
-                  onChange={(e) => handleInputChange('totalPayment', parseInt(e.target.value))}
+                  onChange={(e) => handleInputChange('totalPayment', parseFloat(e.target.value))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -519,7 +520,7 @@ export default function BookingEditPage() {
                 <input
                   type="number"
                   value={formData.deposit || ''}
-                  onChange={(e) => handleInputChange('deposit', parseInt(e.target.value))}
+                  onChange={(e) => handleInputChange('deposit', parseFloat(e.target.value))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -530,7 +531,7 @@ export default function BookingEditPage() {
                 <input
                   type="number"
                   value={formData.balance || ''}
-                  onChange={(e) => handleInputChange('balance', parseInt(e.target.value))}
+                  onChange={(e) => handleInputChange('balance', parseFloat(e.target.value))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -554,8 +555,8 @@ export default function BookingEditPage() {
                   onChange={(e) => handleInputChange('paymentStatus', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="pending">미결제</option>
-                  <option value="partial">부분결제</option>
+                  <option value="pending">대기</option>
+                  <option value="partial">부분</option>
                   <option value="completed">완료</option>
                 </select>
               </div>

@@ -153,13 +153,7 @@ export default function TAListPage() {
     );
   };
 
-  const handleSendEmail = () => {
-    if (selectedTAs.length === 0) {
-      alert("이메일을 보낼 TA를 선택해주세요.");
-      return;
-    }
-    window.location.href = `/admin/ta-list/send-email?selected=${selectedTAs.join(',')}`;
-  };
+
 
   if (isLoadingData) {
     return (
@@ -183,32 +177,6 @@ export default function TAListPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* 헤더 */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">{TEXT.title[lang]}</h1>
-        <div className="flex gap-4">
-          <Link
-            href="/admin"
-            className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
-          >
-            {TEXT.backToAdmin[lang]}
-          </Link>
-          <Link
-            href="/admin/ta-list/new"
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-          >
-            {TEXT.addNew[lang]}
-          </Link>
-          <button
-            onClick={handleSendEmail}
-            disabled={selectedTAs.length === 0}
-            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {TEXT.sendEmail[lang]}
-          </button>
-        </div>
-      </div>
-
       {/* 검색 및 선택 */}
       <div className="mb-6 space-y-4">
         <div className="relative">

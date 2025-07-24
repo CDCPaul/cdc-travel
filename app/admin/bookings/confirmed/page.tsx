@@ -4,8 +4,7 @@ import { useState, useEffect } from 'react';
 import { useLanguage } from '@/components/LanguageContext';
 import { Booking } from '@/types/booking';
 import { motion } from 'framer-motion';
-import { ArrowLeftIcon, CalendarIcon, ChartBarIcon, CheckIcon, CheckCircleIcon, CurrencyDollarIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
-import Link from 'next/link';
+import { CalendarIcon, CheckIcon, CheckCircleIcon, CurrencyDollarIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { apiFetchJson } from '@/lib/api-utils';
 
 const CONFIRMED_BOOKINGS_TEXTS = {
@@ -188,42 +187,6 @@ export default function ConfirmedBookingsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center">
-              <Link
-                href="/admin/bookings"
-                className="mr-4 p-2 text-gray-400 hover:text-gray-600"
-              >
-                <ArrowLeftIcon className="h-5 w-5" />
-              </Link>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">{texts.title}</h1>
-                <p className="text-gray-600">{texts.subtitle}</p>
-              </div>
-            </div>
-            <div className="flex space-x-3">
-              <Link
-                href="/admin/bookings/calendar"
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                <CalendarIcon className="h-4 w-4 mr-2" />
-                {texts.calendar}
-              </Link>
-              <Link
-                href="/admin/bookings/reports"
-                className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                <ChartBarIcon className="h-4 w-4 mr-2" />
-                {texts.reports}
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <main className="px-4 sm:px-6 lg:px-8 py-8">
         {/* 통계 카드 */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
@@ -412,7 +375,7 @@ export default function ConfirmedBookingsPage() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         className="hover:bg-gray-50 cursor-pointer"
-                        onClick={() => window.location.href = `/admin/bookings/${booking.id}`}
+                        onClick={() => window.location.href = `/admin/bookings/confirmed/${booking.id}`}
                       >
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                           {booking.bookingNumber}

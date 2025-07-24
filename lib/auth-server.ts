@@ -58,12 +58,17 @@ export async function verifyIdToken(idToken: string): Promise<DecodedToken | nul
  * @param cookies - 요청의 쿠키 객체
  * @returns 검증된 토큰 정보 또는 null
  */
-export async function verifyIdTokenFromCookies(cookies: { get: (name: string) => { value: string } | undefined }): Promise<DecodedToken | null> {
+export async function verifyIdTokenFromCookies(cookies: { get: (name: string) => { value: string } | undefined; getAll: () => { name: string }[] }): Promise<DecodedToken | null> {
   const idToken = cookies.get('idToken')?.value;
   
   if (!idToken) {
     console.error('쿠키에서 idToken을 찾을 수 없습니다.');
-    console.log('사용 가능한 쿠키:', Object.keys(cookies));
+    try {
+      const allCookies = Array.from(cookies.getAll()).map((c) => c.name);
+      console.log('사용 가능한 쿠키:', allCookies);
+    } catch {
+      console.log('쿠키 정보를 가져올 수 없습니다.');
+    }
     return null;
   }
 

@@ -1,20 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { useLanguage } from '@/components/LanguageContext';
 import { Booking } from '@/types/booking';
 import { motion } from 'framer-motion';
-import Link from 'next/link';
 import { apiFetchJson } from '@/lib/api-utils';
 
-const BOOKING_DETAIL_TEXTS = {
+const CONFIRMED_BOOKING_DETAIL_TEXTS = {
   ko: {
-    title: "예약 상세보기",
+    title: "확정 예약 상세보기",
     back: "목록으로",
-    edit: "수정",
     loading: "로딩 중...",
-    notFound: "예약을 찾을 수 없습니다",
+    notFound: "확정 예약을 찾을 수 없습니다",
     basicInfo: "기본 정보",
     tourInfo: "투어 정보",
     customerInfo: "고객 정보",
@@ -57,11 +55,10 @@ const BOOKING_DETAIL_TEXTS = {
     updatedAt: "수정일"
   },
   en: {
-    title: "Booking Details",
+    title: "Confirmed Booking Details",
     back: "Back to List",
-    edit: "Edit",
     loading: "Loading...",
-    notFound: "Booking not found",
+    notFound: "Confirmed booking not found",
     basicInfo: "Basic Information",
     tourInfo: "Tour Information",
     customerInfo: "Customer Information",
@@ -105,52 +102,58 @@ const BOOKING_DETAIL_TEXTS = {
   }
 };
 
-export default function BookingDetailPage() {
+export default function ConfirmedBookingDetailPage() {
   const { id } = useParams();
   const { lang } = useLanguage();
-  const texts = BOOKING_DETAIL_TEXTS[lang];
-
+  const texts = CONFIRMED_BOOKING_DETAIL_TEXTS[lang];
+  
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchBooking = async () => {
-      try {
-        const data = await apiFetchJson<Booking>(`/api/bookings/${id}`);
-        setBooking(data);
-      } catch (error) {
-        console.error('예약 데이터 로딩 실패:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (id) {
       fetchBooking();
     }
-  }, [id]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchBooking = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await apiFetchJson<{success: boolean, booking: Booking}>(`/api/bookings/confirmed/${id}`);
+      
+      if (response.success && response.booking) {
+        setBooking(response.booking);
+      } else {
+        alert(texts.notFound);
+      }
+    } catch (error) {
+      console.error('확정 예약 정보 가져오기 실패:', error);
+      alert(texts.notFound);
+    } finally {
+      setLoading(false);
+    }
+  }, [id, texts.notFound]);
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'confirmed': return lang === 'ko' ? '확정' : 'Confirmed';
-      case 'completed': return lang === 'ko' ? '완료' : 'Completed';
-      case 'cancelled': return lang === 'ko' ? '취소' : 'Cancelled';
+      case 'confirmed': return '확정';
+      case 'completed': return '완료';
       default: return status;
     }
   };
 
   const getPaymentStatusText = (status: string) => {
     switch (status) {
-      case 'pending': return lang === 'ko' ? '미결제' : 'Pending';
-      case 'partial': return lang === 'ko' ? '부분결제' : 'Partial';
-      case 'completed': return lang === 'ko' ? '완료' : 'Completed';
+      case 'completed': return '완료';
+      case 'partial': return '부분';
+      case 'pending': return '대기';
       default: return status;
     }
   };
 
   const formatDate = (date: Date | string | null | undefined) => {
     if (!date) return '-';
-    return new Date(date).toLocaleDateString();
+    return new Date(date).toLocaleDateString('ko-KR');
   };
 
   const formatCurrency = (amount: number) => {
@@ -164,7 +167,7 @@ export default function BookingDetailPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600">{texts.loading}</p>
         </div>
       </div>
@@ -175,10 +178,7 @@ export default function BookingDetailPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-500">{texts.notFound}</p>
-          <Link href="/admin/bookings/confirmed" className="text-blue-600 hover:text-blue-800 mt-2 inline-block">
-            {texts.back}
-          </Link>
+          <p className="text-gray-600">{texts.notFound}</p>
         </div>
       </div>
     );
@@ -187,7 +187,7 @@ export default function BookingDetailPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* 기본 정보 */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -382,13 +382,13 @@ export default function BookingDetailPage() {
           </motion.div>
         </div>
 
-        {/* 비고 */}
+        {/* 비고 - 전체 너비 */}
         {booking.remarks && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
-            className="bg-white rounded-lg shadow p-6 mt-8"
+            className="bg-white rounded-lg shadow p-6 mt-6"
           >
             <h2 className="text-lg font-semibold mb-4">{texts.remarks}</h2>
             <p className="text-gray-700 whitespace-pre-wrap">{booking.remarks}</p>

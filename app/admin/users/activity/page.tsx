@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { auth } from '@/lib/firebase';
 import { useLanguage } from '../../../../components/LanguageContext';
-import Link from 'next/link';
 import { motion } from 'framer-motion';
 
 interface UserActivity {
@@ -487,8 +486,24 @@ export default function UserActivityPage() {
         }
 
         const data = await response.json();
+        
+        // API 응답 구조 확인 및 안전한 데이터 처리
+        if (!data || typeof data !== 'object') {
+          console.error('Invalid API response:', data);
+          setActivities([]);
+          return;
+        }
+        
+        // data.data가 배열인지 확인
+        const activitiesData = data.data;
+        if (!Array.isArray(activitiesData)) {
+          console.error('API response data is not an array:', activitiesData);
+          setActivities([]);
+          return;
+        }
+        
         // timestamp를 Date 객체로 변환
-        const processedData = data.map((activity: UserActivity) => ({
+        const processedData = activitiesData.map((activity: UserActivity) => ({
           ...activity,
           timestamp: activity.timestamp ? new Date(activity.timestamp) : new Date()
         }));
@@ -547,20 +562,6 @@ export default function UserActivityPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center space-x-4">
-              <Link href="/admin/users" className="text-gray-500 hover:text-gray-700">
-                {texts.backToUsers}
-              </Link>
-              <h1 className="text-3xl font-bold text-gray-900">{texts.title}</h1>
-            </div>
-          </div>
-        </div>
-      </header>
-
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         {/* 필터 및 검색 */}
         <div className="bg-white shadow rounded-lg p-6 mb-6">

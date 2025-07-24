@@ -181,30 +181,6 @@ export default function PostersPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">{TEXT.title[lang]}</h1>
-              <p className="mt-2 text-gray-600">{TEXT.fileType[lang]}</p>
-            </div>
-            <div className="flex space-x-4">
-              <Link
-                href="/admin/posters/new"
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                {TEXT.addNew[lang]}
-              </Link>
-              <Link
-                href="/admin"
-                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                {TEXT.backToAdmin[lang]}
-              </Link>
-            </div>
-          </div>
-        </div>
-
         {/* Content */}
         {posters.length === 0 ? (
           <div className="text-center py-12">

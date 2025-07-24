@@ -381,16 +381,6 @@ export default function SpotsPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">{TEXT.title[lang]}</h1>
-        <button
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-          onClick={() => router.push('/admin/spots/new')}
-        >
-          {TEXT.addSpot[lang]}
-        </button>
-      </div>
-
       {/* 필터 바 */}
       <div className="bg-white p-3 sm:p-4 rounded-lg shadow mb-6">
         <div className="flex flex-wrap gap-2 sm:gap-4 items-center">

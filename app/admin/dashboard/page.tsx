@@ -102,7 +102,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
-  const [timeRange, setTimeRange] = useState('30d');
+  const timeRange = '30d'; // 고정값으로 설정
   const { lang } = useLanguage();
   const texts = DASHBOARD_TEXTS[lang];
   const [isTestLoading, setIsTestLoading] = useState(false);
@@ -154,14 +154,18 @@ export default function AdminDashboard() {
   };
 
   const StatCard = ({ title, value, subtitle, icon }: { title: string; value: string | number; subtitle?: string; icon: string }) => (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-3xl font-bold text-gray-900">{value}</p>
-          {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
+    <div className="bg-white rounded-lg shadow p-6">
+      <div className="flex items-center">
+        <div className="flex-shrink-0">
+          <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+            <span className="text-white text-lg">{icon}</span>
+          </div>
         </div>
-        <div className="text-3xl text-blue-600">{icon}</div>
+        <div className="ml-4">
+          <p className="text-sm font-medium text-gray-500">{title}</p>
+          <p className="text-2xl font-semibold text-gray-900">{value}</p>
+          {subtitle && <p className="text-sm text-gray-400">{subtitle}</p>}
+        </div>
       </div>
     </div>
   );
@@ -191,29 +195,6 @@ export default function AdminDashboard() {
           <p className="text-gray-500 text-sm">{texts.noData}</p>
         )}
       </div>
-    </div>
-  );
-
-  const TimeRangeSelector = () => (
-    <div className="flex items-center space-x-4">
-      <select
-        value={timeRange}
-        onChange={(e) => setTimeRange(e.target.value)}
-        className="border border-gray-300 rounded-md px-3 py-2 text-sm bg-white"
-      >
-        <option value="today">{texts.today}</option>
-        <option value="yesterday">{texts.yesterday}</option>
-        <option value="7d">{texts.thisWeek}</option>
-        <option value="30d">{texts.thisMonth}</option>
-        <option value="90d">{texts.lastMonth}</option>
-        <option value="custom">{texts.custom}</option>
-      </select>
-      <button
-        onClick={fetchAnalyticsData}
-        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm transition-colors"
-      >
-        {texts.refresh}
-      </button>
     </div>
   );
 
@@ -354,19 +335,6 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">{texts.title}</h1>
-              <p className="text-gray-600">{texts.subtitle}</p>
-            </div>
-            <TimeRangeSelector />
-          </div>
-        </div>
-      </div>
-
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {analyticsData ? (

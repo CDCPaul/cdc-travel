@@ -1116,12 +1116,12 @@ export default function TourDetailPage() {
               >
                 {product.imageUrls.map((imageUrl, index) => (
                   <SwiperSlide key={index}>
-                    <div className="relative w-full h-full">
+                    <div className="relative w-full h-full bg-gray-100">
                       <Image
                         src={imageUrl}
                         alt={`${safeLang(product.title, lang)} - 이미지 ${index + 1}`}
                         fill
-                        className="object-cover"
+                        className="object-contain"
                         priority={index === 0}
                         onError={(e) => {
                           // 이미지 로딩 실패 시 fallback 표시

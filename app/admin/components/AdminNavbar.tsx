@@ -111,6 +111,7 @@ const DB_MENU = {
     { label: "포함사항 관리", href: "/admin/include-items" },
     { label: "불포함사항 관리", href: "/admin/not-include-items" },
     { label: "파일 관리", href: "/admin/files" },
+    { label: "여행객 관리", href: "/admin/travelers" },
   ],
   en: [
     { label: "Product Management", href: "/admin/products" },
@@ -118,6 +119,7 @@ const DB_MENU = {
     { label: "Included Items", href: "/admin/include-items" },
     { label: "Not Included Items", href: "/admin/not-include-items" },
     { label: "File Management", href: "/admin/files" },
+    { label: "Traveler Management", href: "/admin/travelers" },
   ]
 };
 
@@ -163,7 +165,7 @@ export default function AdminNavbar() {
     setBookingOpen(currentPath.startsWith("/admin/bookings"));
     setAboutUsOpen(currentPath.startsWith("/admin/about-us"));
     setTaOpen(["/admin/ta-list", "/admin/posters", "/admin/itineraries", "/admin/letters"].some(path => currentPath.startsWith(path)));
-    setDbOpen(["/admin/products", "/admin/spots", "/admin/include-items", "/admin/not-include-items", "/admin/files"].some(path => currentPath.startsWith(path)));
+    setDbOpen(["/admin/products", "/admin/spots", "/admin/include-items", "/admin/not-include-items", "/admin/files", "/admin/travelers"].some(path => currentPath.startsWith(path)));
     setUserOpen(["/admin/users", "/admin/migrate-users"].some(path => currentPath.startsWith(path)));
     setSiteSettingsOpen(["/admin/banners", "/admin/settings"].some(path => currentPath.startsWith(path)));
   }, [pathname]);
@@ -252,9 +254,9 @@ export default function AdminNavbar() {
   const currentMainMenu = MAIN_MENU[lang];
   const currentTaMenu = TA_MENU[lang];
   const currentDbMenu = DB_MENU[lang];
+  const currentUserMenu = USER_MENU[lang];
   const currentAboutUsMenu = ABOUT_US_MENU[lang];
   const currentSiteSettingsMenu = SITE_SETTINGS_MENU[lang];
-  const currentUserMenu = USER_MENU[lang];
   const currentBookingMenu = BOOKING_MENU[lang];
 
   if (!userEmail) {
@@ -265,7 +267,7 @@ export default function AdminNavbar() {
     <>
       {/* 상단 네비게이션 바 */}
       <nav className="bg-gradient-to-r from-[#1A3A3A] to-[#2C6E6F] text-white shadow-lg fixed top-0 left-0 right-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[1980px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             {/* 왼쪽: 로고와 ADMIN PANEL */}
             <div className="flex items-center">

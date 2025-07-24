@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/components/LanguageContext';
 import { BookingFormData, BookingType } from '@/types/booking';
 import { motion } from 'framer-motion';
-import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/api-utils';
 
@@ -408,26 +407,8 @@ export default function NewBookingPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center py-6">
-            <Link
-              href="/admin/bookings"
-              className="mr-4 p-2 text-gray-400 hover:text-gray-600"
-            >
-              <ArrowLeftIcon className="h-5 w-5" />
-            </Link>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">{texts.title}</h1>
-              <p className="text-gray-600">{texts.subtitle}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <form id="new-booking-form" onSubmit={handleSubmit} className="space-y-8">
           {/* 기본 정보 */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}

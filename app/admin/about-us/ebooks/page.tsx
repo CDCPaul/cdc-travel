@@ -192,8 +192,6 @@ export default function AdminEbookManagementPage() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6">eBook 관리</h1>
-      
       {/* 등록 폼 */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
         <h2 className="text-xl font-semibold mb-4">새 eBook 등록</h2>
