@@ -312,7 +312,7 @@ export default function HomePage() {
     <MainLayout>
       {/* Hero Section - 새로운 레이아웃 */}
       <section
-        className="relative w-full h-[800px] flex items-center justify-center overflow-hidden"
+        className="relative w-full h-[calc(100vw*800/1200)] md:h-[700px] lg:h-[800px] flex items-center justify-center overflow-hidden"
       >
         {!hasInitialBanner && banners.length === 0 ? (
           // 즉시 표시되는 스켈레톤 (첫 번째 배너가 없을 때만)
@@ -352,8 +352,8 @@ export default function HomePage() {
                   onClick={() => handleBannerClick(banner.id, banner[`title_${lang}`] || 'banner')}
                 >
                   <div className="relative w-full h-full flex bg-black overflow-hidden">
-                    {/* 왼쪽 텍스트 영역 (720px) */}
-                    <div className="w-[720px] h-full flex items-center justify-center relative">
+                    {/* 왼쪽 텍스트 영역 (데스크톱에서만 표시) */}
+                    <div className="hidden lg:flex w-[720px] h-full items-center justify-center relative">
                       <div className={`absolute inset-0 bg-gradient-to-br ${banner.leftBackgroundColor || bannerColors[index % bannerColors.length]}`} />
                       <div className="absolute inset-0 bg-[url('/pattern.svg')] bg-repeat opacity-10" />
                       <div className={`relative z-10 text-center ${banner.leftTextColor || 'text-white'} px-12`}>
@@ -367,8 +367,8 @@ export default function HomePage() {
                       </div>
                     </div>
                     
-                    {/* 오른쪽 미디어 영역 (1200px) */}
-                    <div className="flex-1 h-full relative overflow-hidden">
+                    {/* 미디어 영역 (모바일에서는 전체, 데스크톱에서는 오른쪽) */}
+                    <div className="w-full lg:flex-1 h-full relative overflow-hidden">
                       {banner.type === "image" ? (
                         <>
                           {bannerLoadingStates[banner.id] && (
@@ -383,7 +383,7 @@ export default function HomePage() {
                             className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-700"
                             priority={index === 0}
                             loading={index === 0 ? "eager" : "lazy"}
-                            sizes="1200px"
+                            sizes="(max-width: 1024px) 100vw, 1200px"
                             quality={85}
                             placeholder="blur"
                             blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
@@ -404,6 +404,8 @@ export default function HomePage() {
                           className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-700"
                         />
                       )}
+                      
+
                     </div>
                   </div>
                 </Link>

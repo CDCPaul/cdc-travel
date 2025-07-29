@@ -1,18 +1,20 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { checkAuth, setupTokenRefresh } from "@/lib/auth";
-import { LanguageProvider } from "../../components/LanguageContext";
+import { setupTokenRefresh } from "@/lib/auth";
+import { useLanguage } from "../../components/LanguageContext";
 import AdminNavbar from "./components/AdminNavbar";
-import TokenMonitor from "../../components/ui/TokenMonitor";
 import Link from "next/link";
 import { PlusIcon } from "@heroicons/react/24/outline";
+import { useAuth } from "@/context/AuthContext";
 
 export default function AdminUILayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [isLoading, setIsLoading] = useState(true);
   const tokenRefreshCleanupRef = useRef<(() => void) | null>(null);
+  const { user, loading: authLoading } = useAuth();
+  const { lang } = useLanguage();
 
   useEffect(() => {
     // 로그인 페이지는 인증 확인 제외
@@ -21,28 +23,31 @@ export default function AdminUILayout({ children }: { children: React.ReactNode 
       return;
     }
     
+    // AuthContext에서 로딩 상태 확인
+    if (authLoading) {
+      return;
+    }
+    
     console.log('🔐 관리자 레이아웃에서 인증 확인 시작...');
     
-    checkAuth().then(user => {
-      if (!user) {
-        console.log('❌ 인증되지 않은 사용자. 로그인 페이지로 리다이렉트...');
-        router.replace("/admin/login");
-      } else {
-        console.log('✅ 인증된 사용자 확인됨:', user.email);
-        
-        // 이전 토큰 갱신 설정이 있다면 정리
-        if (tokenRefreshCleanupRef.current) {
-          console.log('🧹 이전 토큰 갱신 설정 정리...');
-          tokenRefreshCleanupRef.current();
-        }
-        
-        // 토큰 자동 갱신 설정
-        console.log('🔄 토큰 자동 갱신 설정 시작...');
-        const unsubscribe = setupTokenRefresh();
-        tokenRefreshCleanupRef.current = unsubscribe;
-        setIsLoading(false);
+    if (!user) {
+      console.log('❌ 인증되지 않은 사용자. 로그인 페이지로 리다이렉트...');
+      router.replace("/admin/login");
+    } else {
+      console.log('✅ 인증된 사용자 확인됨:', user.email);
+      
+      // 이전 토큰 갱신 설정이 있다면 정리
+      if (tokenRefreshCleanupRef.current) {
+        console.log('🧹 이전 토큰 갱신 설정 정리...');
+        tokenRefreshCleanupRef.current();
       }
-    });
+      
+      // 토큰 자동 갱신 설정 (간소화됨)
+      console.log('🔄 토큰 자동 갱신 설정 시작...');
+      const unsubscribe = setupTokenRefresh();
+      tokenRefreshCleanupRef.current = unsubscribe;
+      setIsLoading(false);
+    }
 
     // 컴포넌트 언마운트 시 구독 해제
     return () => {
@@ -52,23 +57,21 @@ export default function AdminUILayout({ children }: { children: React.ReactNode 
         tokenRefreshCleanupRef.current = null;
       }
     };
-  }, [router, pathname]);
+  }, [router, pathname, user, authLoading]);
 
-  if (isLoading) {
+  if (isLoading || authLoading) {
     return (
-      <LanguageProvider>
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600">인증 확인 중...</p>
-          </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">{lang === 'ko' ? '인증 확인 중...' : 'Verifying authentication...'}</p>
         </div>
-      </LanguageProvider>
+      </div>
     );
   }
 
   return (
-    <LanguageProvider>
+    <>
       {/* 상단 네비게이션 바 */}
       {pathname !== "/admin/login" && <AdminNavbar />}
       
@@ -79,14 +82,14 @@ export default function AdminUILayout({ children }: { children: React.ReactNode 
             <div className="flex justify-between items-center py-4">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900">
-                  {getPageTitle(pathname)}
+                  {getPageTitle(pathname, lang)}
                 </h1>
                 <p className="text-gray-600">
-                  {getPageSubtitle(pathname)}
+                  {getPageSubtitle(pathname, lang)}
                 </p>
               </div>
               <div className="flex space-x-3">
-                {getPageActions(pathname)}
+                {getPageActions(pathname, lang)}
               </div>
             </div>
           </div>
@@ -97,144 +100,134 @@ export default function AdminUILayout({ children }: { children: React.ReactNode 
       <main className={pathname !== "/admin/login" ? "pt-0" : ""}>
         {children}
       </main>
-      
-      {/* 토큰 모니터 (개발 환경에서만 표시) */}
-      {pathname !== "/admin/login" && <TokenMonitor />}
-    </LanguageProvider>
+    </>
   );
 }
 
 // 페이지별 제목 반환 함수
-function getPageTitle(pathname: string): string {
-  console.log('getPageTitle called with pathname:', pathname);
-  
-  const pageTitles: { [key: string]: string } = {
-    '/admin/dashboard': '대시보드',
-    '/admin/bookings': '신규 부킹 관리',
-    '/admin/bookings/new': '새 예약 입력',
-    '/admin/bookings/confirmed': '확정 부킹 관리',
-    '/admin/bookings/confirmed/[id]': '확정 예약 상세보기',
-    '/admin/bookings/confirmed/[id]/edit': '확정 예약 수정',
-    '/admin/bookings/[id]': '신규부킹 예약 상세보기',
-    '/admin/bookings/[id]/edit': '신규부킹 예약 수정',
-    '/admin/products': '상품 관리',
-    '/admin/spots': '스팟 관리',
-    '/admin/destinations': '목적지 관리',
-    '/admin/banners': '배너 관리',
-    '/admin/posters': '포스터 관리',
-    '/admin/letters': '레터 관리',
-    '/admin/ta-list': 'TA 관리',
-    '/admin/users': '사용자 관리',
-    '/admin/users/activity': '사용자 활동',
-    '/admin/settings': '설정',
-    '/admin/about-us': '회사소개 관리',
-    '/admin/about-us/ebooks': 'eBook 관리',
-    '/admin/db': 'DB 관리',
-    '/admin/files': '파일 관리',
-    '/admin/include-items': '포함 항목 관리',
-    '/admin/not-include-items': '불포함 항목 관리',
-    '/admin/itineraries': '여행 일정 관리',
-    '/admin/migrate-spot-countries': '스팟 국가 마이그레이션',
-    '/admin/migrate-users': '사용자 마이그레이션',
-    '/admin/optimize-images': '이미지 최적화',
-    '/admin/travelers': '여행객 관리',
-    '/admin/travelers/new': '새 여행객 등록',
+function getPageTitle(pathname: string, lang: 'ko' | 'en'): string {
+  const pageTitles: { [key: string]: { ko: string; en: string } } = {
+    '/admin/dashboard': { ko: '대시보드', en: 'Dashboard' },
+    '/admin/bookings': { ko: '신규 부킹 관리', en: 'New Booking Management' },
+    '/admin/bookings/new': { ko: '새 예약 등록', en: 'New Booking Registration' },
+    '/admin/bookings/confirmed': { ko: '확정 예약 관리', en: 'Confirmed Booking Management' },
+    '/admin/bookings/confirmed/[id]': { ko: '확정 예약 상세보기', en: 'Confirmed Booking Details' },
+    '/admin/bookings/confirmed/[id]/edit': { ko: '확정 예약 수정', en: 'Edit Confirmed Booking' },
+    '/admin/bookings/[id]': { ko: '신규부킹 예약 상세보기', en: 'New Booking Details' },
+    '/admin/bookings/[id]/edit': { ko: '신규부킹 예약 수정', en: 'Edit New Booking' },
+    '/admin/products': { ko: '투어 상품 관리', en: 'Tour Product Management' },
+    '/admin/spots': { ko: '관광지 및 스팟 관리', en: 'Tourist Spots Management' },
+    '/admin/destinations': { ko: '목적지 정보 관리', en: 'Destination Information Management' },
+    '/admin/banners': { ko: '메인 배너 관리', en: 'Main Banner Management' },
+    '/admin/posters': { ko: '포스터 이미지 관리', en: 'Poster Image Management' },
+    '/admin/letters': { ko: '레터 템플릿 관리', en: 'Letter Template Management' },
+    '/admin/ta-list': { ko: 'Travel Agent 관리', en: 'Travel Agent Management' },
+    '/admin/ta-list/send-email': { ko: '이메일 보내기', en: 'Send Email' },
+    '/admin/users': { ko: '사용자 계정 관리', en: 'User Account Management' },
+    '/admin/users/activity': { ko: '사용자 활동 기록 관리', en: 'User Activity Log Management' },
+    '/admin/settings': { ko: '시스템 설정', en: 'System Settings' },
+    '/admin/about-us': { ko: '회사 정보 관리', en: 'Company Information Management' },
+    '/admin/about-us/ebooks': { ko: 'eBook 자료 관리', en: 'eBook Material Management' },
+    '/admin/db': { ko: '데이터베이스 관리', en: 'Database Management' },
+    '/admin/files': { ko: '파일 업로드 관리', en: 'File Upload Management' },
+    '/admin/include-items': { ko: '투어 포함 항목 관리', en: 'Tour Included Items Management' },
+    '/admin/not-include-items': { ko: '투어 불포함 항목 관리', en: 'Tour Excluded Items Management' },
+    '/admin/itineraries': { ko: '여행 일정 관리', en: 'Travel Itinerary Management' },
+    '/admin/migrate-spot-countries': { ko: '스팟 국가 데이터 마이그레이션', en: 'Spot Country Data Migration' },
+    '/admin/migrate-users': { ko: '사용자 데이터 마이그레이션', en: 'User Data Migration' },
+    '/admin/optimize-images': { ko: '이미지 최적화', en: 'Image Optimization' },
+    '/admin/travelers': { ko: '여행객 관리', en: 'Traveler Management' },
+    '/admin/travelers/new': { ko: '새 여행객 등록', en: 'New Traveler Registration' },
   };
   
   // 정확한 경로 먼저 확인
   if (pageTitles[pathname]) {
-    console.log('Exact match found:', pathname, '->', pageTitles[pathname]);
-    return pageTitles[pathname];
+    return pageTitles[pathname][lang];
   }
-  
-  console.log('No exact match, checking dynamic patterns...');
   
   // 동적 라우트 패턴 매칭
   if (pathname.match(/^\/admin\/bookings\/[^\/]+\/edit$/)) {
-    console.log('Dynamic edit pattern matched:', pathname);
-    return '예약 수정';
+    return lang === 'ko' ? '예약 수정' : 'Edit Booking';
   }
   if (pathname.match(/^\/admin\/bookings\/[^\/]+$/) && !pathname.includes('/confirmed/')) {
-    console.log('Dynamic detail pattern matched (non-confirmed):', pathname);
-    return '신규부킹 예약 상세보기';
+    return lang === 'ko' ? '신규부킹 예약 상세보기' : 'New Booking Details';
   }
   if (pathname.match(/^\/admin\/bookings\/confirmed\/[^\/]+$/)) {
-    console.log('Dynamic confirmed detail pattern matched:', pathname);
-    return '확정 예약 상세보기';
+    return lang === 'ko' ? '확정 예약 상세보기' : 'Confirmed Booking Details';
   }
   
-  console.log('No pattern matched, returning default');
-  return '관리자 페이지';
+  return lang === 'ko' ? '관리자 페이지' : 'Admin Page';
 }
 
 // 페이지별 부제목 반환 함수
-function getPageSubtitle(pathname: string): string {
-  const pageSubtitles: { [key: string]: string } = {
-    '/admin/dashboard': 'CDC Travel 관리자 대시보드',
-    '/admin/bookings': '신규 예약 관리',
-    '/admin/bookings/new': '새로운 예약을 등록합니다',
-    '/admin/bookings/confirmed': '확정된 예약 관리',
-    '/admin/bookings/confirmed/[id]': '확정 예약 상세보기',
-    '/admin/bookings/confirmed/[id]/edit': '확정 예약 수정',
-    '/admin/bookings/[id]': '신규부킹 예약 상세보기',
-    '/admin/bookings/[id]/edit': '신규부킹 예약 수정',
-    '/admin/products': '투어 상품 관리',
-    '/admin/spots': '관광지 및 스팟 관리',
-    '/admin/destinations': '목적지 정보 관리',
-    '/admin/banners': '메인 배너 관리',
-    '/admin/posters': '포스터 이미지 관리',
-    '/admin/letters': '레터 템플릿 관리',
-    '/admin/ta-list': 'Travel Agent 관리',
-    '/admin/users': '사용자 계정 관리',
-    '/admin/users/activity': '사용자 활동 기록 관리',
-    '/admin/settings': '시스템 설정',
-    '/admin/about-us': '회사 정보 관리',
-    '/admin/about-us/ebooks': 'eBook 자료 관리',
-    '/admin/db': '데이터베이스 관리',
-    '/admin/files': '파일 업로드 관리',
-    '/admin/include-items': '투어 포함 항목 관리',
-    '/admin/not-include-items': '투어 불포함 항목 관리',
-    '/admin/itineraries': '여행 일정 관리',
-    '/admin/migrate-spot-countries': '스팟 국가 데이터 마이그레이션',
-    '/admin/migrate-users': '사용자 데이터 마이그레이션',
-    '/admin/optimize-images': '이미지 최적화 도구',
-    '/admin/travelers': '여행객 관리',
-    '/admin/travelers/new': '새로운 여행객을 등록합니다',
+function getPageSubtitle(pathname: string, lang: 'ko' | 'en'): string {
+  const pageSubtitles: { [key: string]: { ko: string; en: string } } = {
+    '/admin/dashboard': { ko: 'CDC Travel 관리자 대시보드', en: 'CDC Travel Admin Dashboard' },
+    '/admin/bookings': { ko: '신규 예약 관리', en: 'New Booking Management' },
+    '/admin/bookings/new': { ko: '새로운 예약을 등록합니다', en: 'Register a new booking' },
+    '/admin/bookings/confirmed': { ko: '확정된 예약 관리', en: 'Confirmed Booking Management' },
+    '/admin/bookings/confirmed/[id]': { ko: '확정 예약 상세보기', en: 'Confirmed Booking Details' },
+    '/admin/bookings/confirmed/[id]/edit': { ko: '확정 예약 수정', en: 'Edit Confirmed Booking' },
+    '/admin/bookings/[id]': { ko: '신규부킹 예약 상세보기', en: 'New Booking Details' },
+    '/admin/bookings/[id]/edit': { ko: '신규부킹 예약 수정', en: 'Edit New Booking' },
+    '/admin/products': { ko: '투어 상품 관리', en: 'Tour Product Management' },
+    '/admin/spots': { ko: '관광지 및 스팟 관리', en: 'Tourist Spots Management' },
+    '/admin/destinations': { ko: '목적지 정보 관리', en: 'Destination Information Management' },
+    '/admin/banners': { ko: '메인 배너 관리', en: 'Main Banner Management' },
+    '/admin/posters': { ko: '포스터 이미지 관리', en: 'Poster Image Management' },
+    '/admin/letters': { ko: '레터 템플릿 관리', en: 'Letter Template Management' },
+    '/admin/ta-list': { ko: 'Travel Agent 관리', en: 'Travel Agent Management' },
+    '/admin/ta-list/send-email': { ko: '선택된 TA들에게 이메일을 발송합니다', en: 'Send emails to selected travel agents' },
+    '/admin/users': { ko: '사용자 계정 관리', en: 'User Account Management' },
+    '/admin/users/activity': { ko: '사용자 활동 기록 관리', en: 'User Activity Log Management' },
+    '/admin/settings': { ko: '시스템 설정', en: 'System Settings' },
+    '/admin/about-us': { ko: '회사 정보 관리', en: 'Company Information Management' },
+    '/admin/about-us/ebooks': { ko: 'eBook 자료 관리', en: 'eBook Material Management' },
+    '/admin/db': { ko: '데이터베이스 관리', en: 'Database Management' },
+    '/admin/files': { ko: '파일 업로드 관리', en: 'File Upload Management' },
+    '/admin/include-items': { ko: '투어 포함 항목 관리', en: 'Tour Included Items Management' },
+    '/admin/not-include-items': { ko: '투어 불포함 항목 관리', en: 'Tour Excluded Items Management' },
+    '/admin/itineraries': { ko: '여행 일정 관리', en: 'Travel Itinerary Management' },
+    '/admin/migrate-spot-countries': { ko: '스팟 국가 데이터 마이그레이션', en: 'Spot Country Data Migration' },
+    '/admin/migrate-users': { ko: '사용자 데이터 마이그레이션', en: 'User Data Migration' },
+    '/admin/optimize-images': { ko: '이미지 최적화 도구', en: 'Image Optimization Tool' },
+    '/admin/travelers': { ko: '여행객 관리', en: 'Traveler Management' },
+    '/admin/travelers/new': { ko: '새로운 여행객을 등록합니다', en: 'Register a new traveler' },
   };
   
   // 정확한 경로 먼저 확인
   if (pageSubtitles[pathname]) {
-    return pageSubtitles[pathname];
+    return pageSubtitles[pathname][lang];
   }
   
   // 동적 라우트 패턴 매칭
   if (pathname.match(/^\/admin\/bookings\/[^\/]+\/edit$/)) {
-    return '예약 수정';
+    return lang === 'ko' ? '예약 수정' : 'Edit Booking';
   }
   if (pathname.match(/^\/admin\/bookings\/[^\/]+$/) && !pathname.includes('/confirmed/')) {
-    return '신규부킹 예약 상세보기';
+    return lang === 'ko' ? '신규부킹 예약 상세보기' : 'New Booking Details';
   }
   if (pathname.match(/^\/admin\/bookings\/confirmed\/[^\/]+$/)) {
-    return '확정 예약 상세보기';
+    return lang === 'ko' ? '확정 예약 상세보기' : 'Confirmed Booking Details';
   }
   
-  return '관리자 페이지';
+  return lang === 'ko' ? '관리자 페이지' : 'Admin Page';
 }
 
 // 페이지별 액션 버튼 반환 함수
-function getPageActions(pathname: string): React.ReactNode {
+function getPageActions(pathname: string, lang: 'ko' | 'en'): React.ReactNode {
   // 정확한 경로 먼저 확인
   switch (pathname) {
     case '/admin/dashboard':
       return (
         <div className="flex items-center space-x-4">
           <select className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="today">오늘</option>
-            <option value="yesterday">어제</option>
-            <option value="thisWeek">이번 주</option>
-            <option value="thisMonth">이번 달</option>
-            <option value="lastMonth">지난 달</option>
-            <option value="custom">커스텀</option>
+            <option value="today">{lang === 'ko' ? '오늘' : 'Today'}</option>
+            <option value="yesterday">{lang === 'ko' ? '어제' : 'Yesterday'}</option>
+            <option value="thisWeek">{lang === 'ko' ? '이번 주' : 'This Week'}</option>
+            <option value="thisMonth">{lang === 'ko' ? '이번 달' : 'This Month'}</option>
+            <option value="lastMonth">{lang === 'ko' ? '지난 달' : 'Last Month'}</option>
+            <option value="custom">{lang === 'ko' ? '커스텀' : 'Custom'}</option>
           </select>
         </div>
       );
@@ -245,7 +238,7 @@ function getPageActions(pathname: string): React.ReactNode {
           href="/admin/bookings/new"
           className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
         >
-          새 예약
+          {lang === 'ko' ? '새 예약' : 'New Booking'}
         </Link>
       );
     
@@ -256,7 +249,7 @@ function getPageActions(pathname: string): React.ReactNode {
           form="new-booking-form"
           className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
         >
-          저장
+          {lang === 'ko' ? '저장' : 'Save'}
         </button>
       );
     
@@ -270,7 +263,7 @@ function getPageActions(pathname: string): React.ReactNode {
           className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
         >
           <PlusIcon className="h-4 w-4 mr-2" />
-          새 상품
+          {lang === 'ko' ? '새 상품' : 'New Product'}
         </Link>
       );
     
@@ -281,7 +274,7 @@ function getPageActions(pathname: string): React.ReactNode {
           className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
         >
           <PlusIcon className="h-4 w-4 mr-2" />
-          새 스팟
+          {lang === 'ko' ? '새 스팟' : 'New Spot'}
         </Link>
       );
     
@@ -292,7 +285,7 @@ function getPageActions(pathname: string): React.ReactNode {
           className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
         >
           <PlusIcon className="h-4 w-4 mr-2" />
-          새 배너
+          {lang === 'ko' ? '새 배너' : 'New Banner'}
         </Link>
       );
     
@@ -303,7 +296,7 @@ function getPageActions(pathname: string): React.ReactNode {
           className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
         >
           <PlusIcon className="h-4 w-4 mr-2" />
-          새 포스터
+          {lang === 'ko' ? '새 포스터' : 'New Poster'}
         </Link>
       );
     
@@ -314,7 +307,7 @@ function getPageActions(pathname: string): React.ReactNode {
           className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
         >
           <PlusIcon className="h-4 w-4 mr-2" />
-          새 레터
+          {lang === 'ko' ? '새 레터' : 'New Letter'}
         </Link>
       );
     
@@ -325,7 +318,17 @@ function getPageActions(pathname: string): React.ReactNode {
           className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
         >
           <PlusIcon className="h-4 w-4 mr-2" />
-          새 TA
+          {lang === 'ko' ? '새 TA' : 'New TA'}
+        </Link>
+      );
+    
+    case '/admin/ta-list/send-email':
+      return (
+        <Link
+          href="/admin/ta-list"
+          className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+        >
+          {lang === 'ko' ? 'TA 목록으로' : 'Back to TA List'}
         </Link>
       );
     
@@ -336,7 +339,7 @@ function getPageActions(pathname: string): React.ReactNode {
           className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
         >
           <PlusIcon className="h-4 w-4 mr-2" />
-          새 eBook
+          {lang === 'ko' ? '새 eBook' : 'New eBook'}
         </Link>
       );
     
@@ -347,7 +350,7 @@ function getPageActions(pathname: string): React.ReactNode {
           className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
         >
           <PlusIcon className="h-4 w-4 mr-2" />
-          새 여행객 등록
+          {lang === 'ko' ? '새 여행객 등록' : 'New Traveler'}
         </Link>
       );
     
@@ -358,7 +361,7 @@ function getPageActions(pathname: string): React.ReactNode {
           form="new-traveler-form"
           className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
         >
-          저장
+          {lang === 'ko' ? '저장' : 'Save'}
         </button>
       );
   }

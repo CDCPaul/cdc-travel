@@ -2,17 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { useLanguage } from "../../../components/LanguageContext";
-import Link from "next/link";
 import Image from "next/image";
 import { auth } from "../../../lib/firebase";
+import { DataTable } from '@/components/ui/data-table';
+import { Eye, Edit, Trash2 } from 'lucide-react';
 
 // 다국어 텍스트
 const TEXT = {
   title: { ko: "TA 목록", en: "TA List" },
   addNew: { ko: "새 TA 추가", en: "Add New TA" },
-  sendEmail: { ko: "이메일 보내기", en: "Send Email" },
-  selectAll: { ko: "전체 선택", en: "Select All" },
-  deselectAll: { ko: "전체 해제", en: "Deselect All" },
   search: { ko: "검색", en: "Search" },
   logo: { ko: "로고", en: "Logo" },
   companyName: { ko: "회사명", en: "Company Name" },
@@ -45,12 +43,9 @@ interface TA {
 export default function TAListPage() {
   const { lang } = useLanguage();
   const [searchTerm, setSearchTerm] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [tas, setTas] = useState<TA[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedTAs, setSelectedTAs] = useState<string[]>([]);
-
   // TA 데이터 가져오기
   useEffect(() => {
     const fetchTAs = async () => {
@@ -86,7 +81,6 @@ export default function TAListPage() {
 
   const handleDelete = async (id: string) => {
     if (confirm("정말 삭제하시겠습니까?")) {
-      setIsLoading(true);
       try {
         const response = await fetch(`/api/ta/${id}`, {
           method: 'DELETE',
@@ -126,32 +120,15 @@ export default function TAListPage() {
         
         // 목록에서 삭제된 TA 제거
         setTas(prev => prev.filter(ta => ta.id !== id));
-        setSelectedTAs(prev => prev.filter(taId => taId !== id));
         
       } catch (error) {
         console.error("삭제 실패:", error);
         alert(error instanceof Error ? error.message : "삭제에 실패했습니다.");
-      } finally {
-        setIsLoading(false);
       }
     }
   };
 
-  const handleSelectAll = () => {
-    if (selectedTAs.length === filteredTAs.length) {
-      setSelectedTAs([]);
-    } else {
-      setSelectedTAs(filteredTAs.map(ta => ta.id));
-    }
-  };
 
-  const handleSelectTA = (id: string) => {
-    setSelectedTAs(prev => 
-      prev.includes(id) 
-        ? prev.filter(taId => taId !== id)
-        : [...prev, id]
-    );
-  };
 
 
 
@@ -177,7 +154,7 @@ export default function TAListPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* 검색 및 선택 */}
+      {/* 검색 */}
       <div className="mb-6 space-y-4">
         <div className="relative">
           <input
@@ -188,159 +165,119 @@ export default function TAListPage() {
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
-        {filteredTAs.length > 0 && (
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={handleSelectAll}
-                className="text-sm text-blue-600 hover:text-blue-800"
-              >
-                {selectedTAs.length === filteredTAs.length ? TEXT.deselectAll[lang] : TEXT.selectAll[lang]}
-              </button>
-              {selectedTAs.length > 0 && (
-                <span className="text-sm text-gray-600">
-                  {selectedTAs.length}개 선택됨
-                </span>
-              )}
-            </div>
-          </div>
-        )}
+
       </div>
 
       {/* TA 목록 테이블 */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                <input
-                  type="checkbox"
-                  checked={selectedTAs.length === filteredTAs.length && filteredTAs.length > 0}
-                  onChange={handleSelectAll}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {TEXT.logo[lang]}
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {TEXT.companyName[lang]}
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {TEXT.taCode[lang]}
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {TEXT.phone[lang]}
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {TEXT.address[lang]}
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {TEXT.email[lang]}
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {TEXT.contactPerson[lang]}
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {TEXT.actions[lang]}
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {filteredTAs.length > 0 ? (
-              filteredTAs.map((ta) => (
-                <tr key={ta.id} className="hover:bg-gray-50 cursor-pointer">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <input
-                      type="checkbox"
-                      checked={selectedTAs.includes(ta.id)}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        handleSelectTA(ta.id);
-                      }}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+      <div className="bg-white rounded-lg shadow">
+        <DataTable 
+          data={filteredTAs}
+          columns={[
+            {
+              key: "logo",
+              header: TEXT.logo[lang],
+              cell: (ta) => (
+                <div className="relative w-12 h-12">
+                  {ta.logo ? (
+                    <Image
+                      src={ta.logo}
+                      alt={`${ta.companyName} 로고`}
+                      width={48}
+                      height={48}
+                      className="object-contain rounded hover:opacity-80 transition-opacity"
                     />
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap" onClick={() => window.location.href = `/admin/ta-list/${ta.id}`}>
-                    <div className="relative w-12 h-12">
-                      {ta.logo ? (
-                        <Image
-                          src={ta.logo}
-                          alt={`${ta.companyName} 로고`}
-                          width={48}
-                          height={48}
-                          className="object-contain rounded hover:opacity-80 transition-opacity"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 bg-gray-200 rounded flex items-center justify-center hover:bg-gray-300 transition-colors">
-                          <span className="text-gray-500 text-xs">No Logo</span>
-                        </div>
-                      )}
+                  ) : (
+                    <div className="w-12 h-12 bg-gray-200 rounded flex items-center justify-center hover:bg-gray-300 transition-colors">
+                      <span className="text-gray-500 text-xs">No Logo</span>
                     </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900" onClick={() => window.location.href = `/admin/ta-list/${ta.id}`}>
-                    <div className="max-w-xs truncate hover:text-blue-600 transition-colors" title={ta.companyName}>
-                      {ta.companyName}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" onClick={() => window.location.href = `/admin/ta-list/${ta.id}`}>
-                    {ta.taCode}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" onClick={() => window.location.href = `/admin/ta-list/${ta.id}`}>
-                    {ta.phone}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500" onClick={() => window.location.href = `/admin/ta-list/${ta.id}`}>
-                    <div className="max-w-xs truncate" title={ta.address}>
-                      {ta.address}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500" onClick={() => window.location.href = `/admin/ta-list/${ta.id}`}>
-                    <div className="max-w-xs truncate hover:text-blue-600 transition-colors" title={ta.email}>
-                      {ta.email}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500" onClick={() => window.location.href = `/admin/ta-list/${ta.id}`}>
-                    {ta.contactPersons.length > 0 ? (
-                      <div>
-                        <div className="font-medium">{ta.contactPersons[0].name}</div>
-                        <div className="text-xs text-gray-400">{ta.contactPersons[0].phone}</div>
-                      </div>
-                    ) : '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex gap-2">
-                      <Link
-                        href={`/admin/ta-list/${ta.id}/edit`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 transition-colors"
-                      >
-                        {TEXT.edit[lang]}
-                      </Link>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(ta.id);
-                        }}
-                        disabled={isLoading}
-                        className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {TEXT.delete[lang]}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={9} className="px-6 py-4 text-center text-sm text-gray-500">
-                  {TEXT.noData[lang]}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        </div>
+                  )}
+                </div>
+              ),
+              sortable: false,
+            },
+            {
+              key: "companyName",
+              header: TEXT.companyName[lang],
+              cell: (ta) => (
+                <div className="max-w-xs truncate hover:text-blue-600 transition-colors" title={ta.companyName}>
+                  {ta.companyName}
+                </div>
+              ),
+              sortable: true,
+            },
+            {
+              key: "taCode",
+              header: TEXT.taCode[lang],
+              cell: (ta) => <div>{ta.taCode}</div>,
+              sortable: true,
+            },
+            {
+              key: "phone",
+              header: TEXT.phone[lang],
+              cell: (ta) => <div>{ta.phone}</div>,
+              sortable: true,
+            },
+            {
+              key: "address",
+              header: TEXT.address[lang],
+              cell: (ta) => (
+                <div className="max-w-xs truncate" title={ta.address}>
+                  {ta.address}
+                </div>
+              ),
+              sortable: true,
+            },
+            {
+              key: "email",
+              header: TEXT.email[lang],
+              cell: (ta) => (
+                <div className="max-w-xs truncate hover:text-blue-600 transition-colors" title={ta.email}>
+                  {ta.email}
+                </div>
+              ),
+              sortable: true,
+            },
+            {
+              key: "contactPerson",
+              header: TEXT.contactPerson[lang],
+              cell: (ta) => (
+                <div>
+                  {ta.contactPersons.length > 0 ? (
+                    <>
+                      <div className="font-medium">{ta.contactPersons[0].name}</div>
+                      <div className="text-xs text-gray-400">{ta.contactPersons[0].phone}</div>
+                    </>
+                  ) : '-'}
+                </div>
+              ),
+              sortable: false,
+            },
+          ]}
+          actions={[
+            {
+              label: "보기",
+              icon: <Eye className="h-4 w-4" />,
+              href: (ta) => `/admin/ta-list/${ta.id}`,
+              variant: "ghost",
+            },
+            {
+              label: "수정",
+              icon: <Edit className="h-4 w-4" />,
+              href: (ta) => `/admin/ta-list/${ta.id}/edit`,
+              variant: "ghost",
+            },
+            {
+              label: "삭제",
+              icon: <Trash2 className="h-4 w-4" />,
+              onClick: (ta) => handleDelete(ta.id),
+              variant: "ghost",
+            },
+          ]}
+          searchKey="companyName"
+          searchPlaceholder="회사명, TA코드, 이메일로 검색..."
+          itemsPerPage={10}
+          emptyMessage={TEXT.noData[lang]}
+        />
       </div>
     </div>
   );

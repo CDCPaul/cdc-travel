@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { LanguageProvider } from "../components/LanguageContext";
+import { AuthProvider } from "../context/AuthContext";
 
 export const metadata: Metadata = {
   title: "CDC Travel",
@@ -14,10 +15,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <body className="antialiased">
-        <LanguageProvider>
-          {children}
-        </LanguageProvider>
+      <body className="antialiased" suppressHydrationWarning={true}>
+        <AuthProvider>
+          <LanguageProvider>
+            {children}
+          </LanguageProvider>
+        </AuthProvider>
       </body>
     </html>
   );

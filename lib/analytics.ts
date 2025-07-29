@@ -1,21 +1,7 @@
-import { getAnalytics, logEvent as firebaseLogEvent, Analytics } from 'firebase/analytics';
+import { logEvent as firebaseLogEvent } from 'firebase/analytics';
 import { db } from './firebase';
 import { collection, addDoc, Timestamp } from 'firebase/firestore';
-import { app } from './firebase';
-
-let analytics: Analytics | null = null;
-
-// Analytics 초기화
-export const initAnalytics = (): Analytics | null => {
-  if (typeof window !== 'undefined' && !analytics) {
-    try {
-      analytics = getAnalytics(app);
-    } catch (error) {
-      console.warn('Analytics initialization failed:', error);
-    }
-  }
-  return analytics;
-};
+import { initAnalytics } from './firebase';
 
 // 이벤트 타입 정의
 export interface AnalyticsEvent {
@@ -67,7 +53,8 @@ export const logEvent = async (
   eventParameters?: Record<string, string | number | boolean>
 ): Promise<void> => {
   try {
-    const analyticsInstance = analytics || initAnalytics();
+    // 지연 로드된 Analytics 인스턴스 사용
+    const analyticsInstance = await initAnalytics();
     if (analyticsInstance) {
       firebaseLogEvent(analyticsInstance, eventName, eventParameters);
     }

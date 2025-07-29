@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { signInWithPopup, setPersistence, browserLocalPersistence, browserSessionPersistence, GoogleAuthProvider } from 'firebase/auth';
-import { auth, googleProvider } from '../../../lib/firebase';
+import { GoogleAuthProvider } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
+import { signInWithGoogle } from '@/lib/auth-lazy';
 
 export default function AdminLogin() {
   const [error, setError] = useState('');
@@ -21,6 +21,16 @@ export default function AdminLogin() {
     setError('');
     
     try {
+      // Lazy import로 Firebase 인증 함수들 로드
+      const {
+        signInWithPopup,
+        setPersistence,
+        browserLocalPersistence,
+        browserSessionPersistence,
+        auth,
+        googleProvider
+      } = await signInWithGoogle();
+      
       if (!auth || !googleProvider) {
         setError('Firebase 인증이 초기화되지 않았습니다.');
         return;

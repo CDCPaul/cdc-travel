@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
+import { verifyIdTokenFromCookies } from '@/lib/auth-server';
 import sharp from 'sharp';
 
 // HTML 엔티티 이스케이프 함수
@@ -148,23 +149,11 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    // Firebase Admin SDK를 사용하여 토큰 검증
-    const { getAuth } = await import('firebase-admin/auth');
-    const { initializeFirebaseAdmin } = await import('@/lib/firebase-admin');
-    
-    const auth = getAuth(initializeFirebaseAdmin());
-    
-    // Authorization 헤더에서 ID 토큰 추출
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: '인증 토큰이 필요합니다.' },
-        { status: 401 }
-      );
+    // 인증 확인
+    const authResult = await verifyIdTokenFromCookies(request.cookies);
+    if (!authResult) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const idToken = authHeader.substring(7);
-    const decodedToken = await auth.verifyIdToken(idToken);
 
     const body = await request.json();
     const { companyName, taCode, phone, address, email, logo, contactPersons } = body;
@@ -232,9 +221,9 @@ export async function POST(request: NextRequest) {
       overlayImage: overlayImageUrl, // 새로 추가된 필드
       contactPersons: contactPersons || [],
       createdAt: new Date(),
-      createdBy: decodedToken.uid,
+      createdBy: authResult.uid,
       updatedAt: new Date(),
-      updatedBy: decodedToken.uid
+      updatedBy: authResult.uid
     };
 
     // Firestore에 저장

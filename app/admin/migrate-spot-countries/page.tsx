@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { collection, getDocs, updateDoc, doc } from "firebase/firestore";
-import { db, auth } from "@/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
+import { db } from "@/lib/firebase";
+import { useAuth } from '@/context/AuthContext';
 import { useRouter } from "next/navigation";
 
 // 국가 옵션 (스팟 등록페이지와 동일)
@@ -26,16 +26,14 @@ export default function MigrateSpotCountriesPage() {
     error?: string;
   }>>([]);
   const router = useRouter();
+  const { user } = useAuth();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (!user) {
-        router.push('/admin/login');
-      }
-    });
-
-    return () => unsubscribe();
-  }, [router]);
+    // AuthContext에서 user 정보 사용 - 중복된 onAuthStateChanged 제거
+    if (!user) {
+      router.push('/admin/login');
+    }
+  }, [user, router]);
 
   const migrateSpotCountries = async () => {
     setIsLoading(true);

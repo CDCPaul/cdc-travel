@@ -17,20 +17,39 @@ export function initializeFirebaseAdmin(): App {
 
   let serviceAccount;
   
-  if (process.env.NODE_ENV === 'production') {
-    // 프로덕션 환경 (Vercel 등)
-    const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-    if (!serviceAccountJson) {
-      throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON environment variable is required in production');
-    }
-    serviceAccount = JSON.parse(serviceAccountJson);
-  } else {
-    // 개발 환경 (development, test 등)
+  // 환경 변수에서 직접 JSON 가져오기 (우선순위)
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (serviceAccountJson) {
     try {
+      serviceAccount = JSON.parse(serviceAccountJson);
+    } catch (error) {
+      console.error('Firebase Admin SDK JSON 파싱 오류:', error);
+      throw new Error('Invalid FIREBASE_SERVICE_ACCOUNT_JSON format');
+    }
+  } else {
+    // 파일 경로에서 읽기 (fallback)
+    const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+    if (!serviceAccountPath) {
+      throw new Error('FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_PATH environment variable is required');
+    }
+
+    try {
+      // fs 모듈을 사용하여 파일 읽기
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      serviceAccount = require('./cdc-home-fb4d1-firebase-adminsdk.json');
-    } catch {
-      throw new Error('Firebase service account key file not found. Please ensure cdc-home-fb4d1-firebase-adminsdk.json exists in lib/ directory for local development.');
+      const fs = require('fs');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const path = require('path');
+      const absolutePath = path.resolve(process.cwd(), serviceAccountPath);
+      
+      if (!fs.existsSync(absolutePath)) {
+        throw new Error(`File not found: ${absolutePath}`);
+      }
+      
+      const fileContent = fs.readFileSync(absolutePath, 'utf8');
+      serviceAccount = JSON.parse(fileContent);
+    } catch (error) {
+      console.error('Firebase Admin SDK 초기화 오류:', error);
+      throw new Error(`Firebase service account key file not found at ${serviceAccountPath}. Please ensure the file exists and the path is correct.`);
     }
   }
   

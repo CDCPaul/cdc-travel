@@ -4,8 +4,10 @@ import { useState, useEffect } from 'react';
 import { useLanguage } from '@/components/LanguageContext';
 import { Booking, BookingFilters, BookingStats, BookingStatus } from '@/types/booking';
 import { motion } from 'framer-motion';
-import Link from 'next/link';
 import { apiFetchJson } from '@/lib/api-utils';
+import { DataTable } from '@/components/ui/data-table';
+import { Eye, Edit, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 const BOOKING_TEXTS = {
   ko: {
@@ -51,7 +53,7 @@ const BOOKING_TEXTS = {
       conversionRate: "전환율"
     },
     bookingType: "부킹타입",
-    airlineIncluded: "항공포함",
+    airIncluded: "항공포함",
     airline: "항공사",
     yes: "네",
     no: "아니오",
@@ -59,7 +61,50 @@ const BOOKING_TEXTS = {
     daily: "일별",
     weekly: "주별",
     monthly: "월별",
-    custom: "기간별"
+    custom: "기간별",
+    // 새로운 텍스트 추가
+    partFilter: "파트 필터",
+    allParts: "전체",
+    airPart: "AIR",
+    cintPart: "CINT",
+    agentName: "에이전트명",
+    customers: "고객정보",
+    flightInfo: "항공정보",
+    tourInfo: "투어정보",
+    hotelName: "호텔명",
+    roomType: "룸타입",
+    roomCount: "룸수",
+    departureRoute: "출발경로",
+    returnRoute: "도착경로",
+    flightType: "항공타입",
+    oneWay: "편도",
+    roundTrip: "왕복",
+    multiCity: "다구간",
+    costPrice: "원가",
+    markup: "마크업",
+    totalPrice: "총가격",
+    // 확장된 행 텍스트
+    basicInfo: "기본 정보",
+    paxInfo: "인원 정보",
+    customerInfo: "고객 정보",
+    pricingInfo: "가격 정보",
+    remarks: "비고",
+    part: "파트",
+    tourRegion: "투어지역",
+    adults: "성인",
+    children: "소아",
+    infants: "유아",
+    foc: "FOC",
+    totalPax: "총 인원",
+    customerRegistration: "등록 완료",
+    startDate: "시작일",
+    endDate: "종료일",
+    hotel: "호텔",
+    cost: "원가",
+    completed: "완료",
+    partial: "부분",
+    pending: "대기",
+    noRemarks: "-"
   },
   en: {
     title: "New Booking Management",
@@ -75,15 +120,15 @@ const BOOKING_TEXTS = {
     dateRange: "Date Range",
     agent: "Agent",
     receivedBy: "Received By",
-    bookingNumber: "Booking No.",
+    bookingNumber: "Booking Number",
     tourStartDate: "Tour Start Date",
     tourEndDate: "Tour End Date",
     nights: "Nights",
     agentCode: "Agent Code",
     customerName: "Customer Name",
     pax: "Pax",
-    region: "Region",
-    localLandCode: "Land Code",
+    region: "Tour Region",
+    localLandCode: "Local Land Code",
     emptyFields: "Empty Fields",
     sellingPrice: "Selling Price",
     paymentStatus: "Payment Status",
@@ -100,11 +145,11 @@ const BOOKING_TEXTS = {
       transferred: "Transferred",
       cancelled: "Cancelled",
       pendingPayments: "Pending Payments",
-      revenue: "Total Estimated Revenue",
+      revenue: "Total Expected Revenue",
       conversionRate: "Conversion Rate"
     },
     bookingType: "Booking Type",
-    airlineIncluded: "Airline Included",
+    airIncluded: "Airline Included",
     airline: "Airline",
     yes: "Yes",
     no: "No",
@@ -112,21 +157,257 @@ const BOOKING_TEXTS = {
     daily: "Daily",
     weekly: "Weekly",
     monthly: "Monthly",
-    custom: "Custom"
+    custom: "Custom",
+    // 새로운 텍스트 추가
+    partFilter: "Part Filter",
+    allParts: "All",
+    airPart: "AIR",
+    cintPart: "CINT",
+    agentName: "Agent Name",
+    customers: "Customer Info",
+    flightInfo: "Flight Info",
+    tourInfo: "Tour Info",
+    hotelName: "Hotel Name",
+    roomType: "Room Type",
+    roomCount: "Room Count",
+    departureRoute: "Departure Route",
+    returnRoute: "Return Route",
+    flightType: "Flight Type",
+    oneWay: "One Way",
+    roundTrip: "Round Trip",
+    multiCity: "Multi City",
+    costPrice: "Cost Price",
+    markup: "Markup",
+    totalPrice: "Total Price",
+    // 확장된 행 텍스트
+    basicInfo: "Basic Info",
+    paxInfo: "Pax Info",
+    customerInfo: "Customer Info",
+    pricingInfo: "Pricing Info",
+    remarks: "Remarks",
+    part: "Part",
+    tourRegion: "Tour Region",
+    adults: "Adults",
+    children: "Children",
+    infants: "Infants",
+    foc: "FOC",
+    totalPax: "Total Pax",
+    customerRegistration: "Registration",
+    startDate: "Start Date",
+    endDate: "End Date",
+    hotel: "Hotel",
+    cost: "Cost",
+    completed: "Completed",
+    partial: "Partial",
+    pending: "Pending",
+    noRemarks: "-"
   }
 };
 
 export default function BookingsPage() {
   const { lang } = useLanguage();
   const texts = BOOKING_TEXTS[lang];
+  const router = useRouter();
   
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [confirmedBookingsCount, setConfirmedBookingsCount] = useState(0);
-  const [filters, setFilters] = useState<BookingFilters>({ status: ['new'] }); // 기본값을 'new'로 설정
+  const [filters, setFilters] = useState<BookingFilters>({ status: ['new'] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewType, setViewType] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('monthly');
+  
+  // 새로운 필터 상태 추가
+  const [selectedPart, setSelectedPart] = useState<'all' | 'AIR' | 'CINT'>('all');
+  const [selectedAgent, setSelectedAgent] = useState<string>('all');
+  const [agents, setAgents] = useState<string[]>([]);
+
+  // 확장된 행의 내용을 정의하는 함수
+  const renderExpandedRow = (booking: Booking) => {
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
+          {/* 기본 정보 */}
+          <div className="space-y-1">
+            <h4 className={`font-medium text-gray-900 text-sm ${lang === 'en' ? 'font-bold' : ''}`}>{texts.basicInfo}</h4>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-gray-600">{texts.part}:</span>
+                <span className="font-medium">{booking.part || '-'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">{texts.agent}:</span>
+                <span className="font-medium">{booking.agentName || '-'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">{texts.receivedBy}:</span>
+                <span className="font-medium">{booking.receivedBy}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">{texts.tourRegion}:</span>
+                <span className="font-medium">{booking.region || '-'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 투어 정보 */}
+          <div className="space-y-1">
+            <h4 className={`font-medium text-gray-900 text-sm ${lang === 'en' ? 'font-bold' : ''}`}>{texts.tourInfo}</h4>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-gray-600">{texts.startDate}:</span>
+                <span className="font-medium">{new Date(booking.tourStartDate).toLocaleDateString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">{texts.endDate}:</span>
+                <span className="font-medium">{new Date(booking.tourEndDate).toLocaleDateString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">{texts.nights}:</span>
+                <span className="font-medium">
+                  {Math.ceil((new Date(booking.tourEndDate).getTime() - new Date(booking.tourStartDate).getTime()) / (1000 * 60 * 60 * 24))}
+                </span>
+              </div>
+              {booking.part === 'AIR' && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">{texts.airline}:</span>
+                    <span className="font-medium">{booking.airline || '-'}</span>
+                  </div>
+                  {booking.departureRoute && booking.returnRoute && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">{texts.departureRoute}:</span>
+                      <span className="font-medium">{booking.departureRoute} → {booking.returnRoute}</span>
+                    </div>
+                  )}
+                  {booking.flightType && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">{texts.flightType}:</span>
+                      <span className="font-medium">{booking.flightType}</span>
+                    </div>
+                  )}
+                </>
+              )}
+              {booking.part === 'CINT' && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">{texts.hotelName}:</span>
+                    <span className="font-medium">{booking.hotelName || '-'}</span>
+                  </div>
+                  {booking.roomType && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">{texts.roomType}:</span>
+                      <span className="font-medium">{booking.roomType}</span>
+                    </div>
+                  )}
+                  {booking.roomCount && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">{texts.roomCount}:</span>
+                      <span className="font-medium">{booking.roomCount}개</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* 인원 정보 */}
+          <div className="space-y-1">
+            <h4 className={`font-medium text-gray-900 text-sm ${lang === 'en' ? 'font-bold' : ''}`}>{texts.paxInfo}</h4>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-gray-600">{texts.adults}:</span>
+                <span className="font-medium">{booking.adults}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">{texts.children}:</span>
+                <span className="font-medium">{booking.children}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">{texts.infants}:</span>
+                <span className="font-medium">{booking.infants}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">{texts.foc}:</span>
+                <span className="font-medium">{booking.foc || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">{texts.totalPax}:</span>
+                <span className="font-medium">{booking.totalPax}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 고객 정보 */}
+          <div className="space-y-1">
+            <h4 className={`font-medium text-gray-900 text-sm ${lang === 'en' ? 'font-bold' : ''}`}>{texts.customerInfo}</h4>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-gray-600">{texts.customerRegistration}:</span>
+                <span className={`font-medium ${
+                  booking.customers && booking.customers.length > 0 
+                    ? 'text-green-600' 
+                    : 'text-red-600'
+                }`}>
+                  {booking.customers ? booking.customers.length : 0}/{booking.totalPax}
+                </span>
+              </div>
+              {booking.customers && booking.customers.length > 0 && (
+                <div className="text-xs text-gray-500 mt-1">
+                  {booking.customers.slice(0, 2).map(c => `${c.firstName} ${c.lastName}`).join(', ')}
+                  {booking.customers.length > 2 && ` +${booking.customers.length - 2}명`}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 가격 정보 */}
+          <div className="space-y-1">
+            <h4 className={`font-medium text-gray-900 text-sm ${lang === 'en' ? 'font-bold' : ''}`}>{texts.pricingInfo}</h4>
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-gray-600">{texts.cost}:</span>
+                <span className="font-medium">${booking.costPrice?.toLocaleString() || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">{texts.markup}:</span>
+                <span className="font-medium">${booking.markup?.toLocaleString() || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">{texts.sellingPrice}:</span>
+                <span className="font-medium text-blue-600">${booking.sellingPrice?.toLocaleString() || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">{texts.paymentStatus}:</span>
+                <span className={`px-1 py-0.5 rounded text-xs ${
+                  booking.paymentStatus === 'completed' ? 'bg-green-100 text-green-800' :
+                  booking.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                  'bg-red-100 text-red-800'
+                }`}>
+                  {booking.paymentStatus === 'completed' ? texts.completed : 
+                   booking.paymentStatus === 'partial' ? texts.partial : texts.pending}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 비고 */}
+          <div className="space-y-1">
+            <h4 className={`font-medium text-gray-900 text-sm ${lang === 'en' ? 'font-bold' : ''}`}>{texts.remarks}</h4>
+            <div className="text-xs">
+              {booking.remarks ? (
+                <div className="bg-gray-50 rounded p-2 max-h-20 overflow-y-auto">
+                  <p className="text-gray-700 whitespace-pre-wrap">{booking.remarks}</p>
+                </div>
+              ) : (
+                <span className="text-gray-400">{texts.noRemarks}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
   
   // 날짜 선택 상태
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -145,11 +426,7 @@ export default function BookingsPage() {
   useEffect(() => {
     const setupAuth = async () => {
       const { setupTokenRefresh, checkAuth } = await import('@/lib/auth');
-      
-      // 토큰 자동 갱신 설정
       setupTokenRefresh();
-      
-      // 인증 상태 확인
       const user = await checkAuth();
       if (!user) {
         console.error('사용자가 로그인되어 있지 않습니다.');
@@ -159,7 +436,8 @@ export default function BookingsPage() {
     
     setupAuth();
     fetchBookings();
-    fetchConfirmedBookingsCount(); // 확정 부킹 수 가져오기
+    fetchConfirmedBookingsCount();
+    fetchAgents();
   }, [filters]);
 
   // 뷰 타입이 변경될 때마다 통계 업데이트
@@ -190,7 +468,6 @@ export default function BookingsPage() {
     }
   };
 
-  // 확정 부킹 수 가져오기
   const fetchConfirmedBookingsCount = async () => {
     try {
       const response = await apiFetchJson<{success: boolean, bookings: Booking[]}>('/api/bookings?status=confirmed');
@@ -200,6 +477,19 @@ export default function BookingsPage() {
       }
     } catch (error) {
       console.error('Error fetching confirmed bookings count:', error);
+    }
+  };
+
+  const fetchAgents = async () => {
+    try {
+      const response = await apiFetchJson<{success: boolean, agents: Array<{agentName: string}>}>('/api/ta');
+      
+      if (response.success && response.agents) {
+        const agentNames = response.agents.map(agent => agent.agentName).filter(Boolean);
+        setAgents(agentNames);
+      }
+    } catch (error) {
+      console.error('Error fetching agents:', error);
     }
   };
 
@@ -365,13 +655,31 @@ export default function BookingsPage() {
         break;
     }
 
-    // 검색어 필터링
+    // 파트별 필터링
+    if (selectedPart !== 'all') {
+      filteredBookings = filteredBookings.filter(booking => booking.part === selectedPart);
+    }
+
+    // 에이전트별 필터링
+    if (selectedAgent !== 'all') {
+      filteredBookings = filteredBookings.filter(booking => booking.agentName === selectedAgent);
+    }
+
+    // 검색어 필터링 (통합 검색)
     if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
       filteredBookings = filteredBookings.filter(booking =>
-        booking.bookingNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        booking.receivedBy.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        booking.customers.some(customer => customer.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (booking.tourRegion && booking.tourRegion.toLowerCase().includes(searchTerm.toLowerCase()))
+        booking.bookingNumber.toLowerCase().includes(searchLower) ||
+        booking.receivedBy.toLowerCase().includes(searchLower) ||
+        booking.agentName?.toLowerCase().includes(searchLower) ||
+        booking.customers?.some(customer => 
+          customer.firstName?.toLowerCase().includes(searchLower) ||
+          customer.lastName?.toLowerCase().includes(searchLower) ||
+          customer.passportNumber?.toLowerCase().includes(searchLower)
+        ) ||
+        (booking.region && booking.region.toLowerCase().includes(searchLower)) ||
+        (booking.airline && booking.airline.toLowerCase().includes(searchLower)) ||
+        (booking.hotelName && booking.hotelName.toLowerCase().includes(searchLower))
       );
     }
 
@@ -566,14 +874,71 @@ export default function BookingsPage() {
               
               {/* 검색 및 필터 */}
               <div className="flex items-center space-x-4">
+                {/* 파트 필터링 버튼 */}
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm font-medium text-gray-700">{texts.partFilter}:</span>
+                  <div className="flex space-x-1">
+                    <button
+                      onClick={() => setSelectedPart('all')}
+                      className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                        selectedPart === 'all'
+                          ? 'bg-gray-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {texts.allParts}
+                    </button>
+                    <button
+                      onClick={() => setSelectedPart('AIR')}
+                      className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                        selectedPart === 'AIR'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                      }`}
+                    >
+                      {texts.airPart}
+                    </button>
+                    <button
+                      onClick={() => setSelectedPart('CINT')}
+                      className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                        selectedPart === 'CINT'
+                          ? 'bg-green-600 text-white'
+                          : 'bg-green-100 text-green-700 hover:bg-green-200'
+                      }`}
+                    >
+                      {texts.cintPart}
+                    </button>
+                  </div>
+                </div>
+
+                {/* 에이전트 필터링 */}
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm font-medium text-gray-700">{texts.agent}:</span>
+                  <select
+                    value={selectedAgent}
+                    onChange={(e) => setSelectedAgent(e.target.value)}
+                    className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">전체 에이전트</option>
+                    {agents.map((agent, index) => (
+                      <option key={index} value={agent}>{agent}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 통합 검색창 */}
                 <div className="flex items-center space-x-2">
                   <input
                     type="text"
                     placeholder={texts.search}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
+                    className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
                   />
+                </div>
+
+                {/* 상태 필터링 */}
+                <div className="flex items-center space-x-2">
                   <select
                     value={filters.status?.[0] || 'new'}
                     onChange={(e) => setFilters({ ...filters, status: e.target.value ? [e.target.value as BookingStatus] : ['new'] })}
@@ -582,14 +947,17 @@ export default function BookingsPage() {
                     <option value="new">{getStatusText('new')}</option>
                     <option value="cancelled">{getStatusText('cancelled')}</option>
                   </select>
-                  <Link
-                    href="/admin/bookings/confirmed"
-                    className="px-3 py-1 text-sm text-green-600 hover:text-green-800 border border-green-300 rounded-md hover:bg-green-50"
-                  >
-                    확정 예약 보기
-                  </Link>
+                </div>
+
+                {/* 기타 버튼들 */}
+                <div className="flex items-center space-x-2">
                   <button
-                    onClick={() => setFilters({ status: ['new'] })}
+                    onClick={() => {
+                      setFilters({ status: ['new'] });
+                      setSelectedPart('all');
+                      setSelectedAgent('all');
+                      setSearchTerm('');
+                    }}
                     className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
                   >
                     {texts.clearFilters}
@@ -691,108 +1059,177 @@ export default function BookingsPage() {
           })()}
         </div>
 
-        {/* 예약 목록 */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.bookingType}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.bookingNumber}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.receivedBy}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.tourStartDate}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.tourEndDate}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.nights}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    AGT
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.pax}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.region}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.airlineIncluded}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.airline}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    LAND
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {getFilteredBookings().length === 0 ? (
-                  <tr>
-                    <td colSpan={12} className="px-6 py-12 text-center text-gray-500">
-                      {texts.noBookings}
-                    </td>
-                  </tr>
-                ) : (
-                  getFilteredBookings().map((booking) => (
-                    <motion.tr
-                      key={booking.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="hover:bg-gray-50 cursor-pointer"
-                      onClick={() => window.location.href = `/admin/bookings/${booking.id}`}
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {booking.bookingType}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {booking.bookingNumber}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {booking.receivedBy}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {new Date(booking.tourStartDate).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {new Date(booking.tourEndDate).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {Math.ceil((new Date(booking.tourEndDate).getTime() - new Date(booking.tourStartDate).getTime()) / (1000 * 60 * 60 * 24))}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {booking.agentCode}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {booking.totalPax}({booking.adults}+{booking.children}+{booking.infants})
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {booking.region}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {booking.airlineIncluded ? texts.yes : texts.no}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {booking.airline || '-'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {booking.localLandCode}
-                      </td>
-                    </motion.tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+        {/* 범용 DataTable을 사용한 예약 목록 */}
+        <div className="bg-white rounded-lg shadow">
+          <DataTable 
+            data={getFilteredBookings()}
+            columns={[
+              {
+                key: "part",
+                header: "파트",
+                cell: (booking: Booking) => (
+                  <div className={`inline-flex px-1.5 py-0.5 rounded-full text-xs font-medium ${
+                    booking.part === 'AIR' 
+                      ? 'bg-blue-100 text-blue-800' 
+                      : booking.part === 'CINT'
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {booking.part || '-'}
+                  </div>
+                ),
+                sortable: true,
+              },
+              {
+                key: "bookingNumber",
+                header: "예약번호",
+                cell: (booking: Booking) => <div className="font-medium text-xs">{booking.bookingNumber}</div>,
+                sortable: true,
+              },
+              {
+                key: "agentCode",
+                header: "에이전트",
+                cell: (booking: Booking) => <div className="text-xs">{booking.agentCode || '-'}</div>,
+                sortable: true,
+              },
+              {
+                key: "receivedBy",
+                header: "접수자",
+                cell: (booking: Booking) => <div className="text-xs">{booking.receivedBy}</div>,
+                sortable: true,
+              },
+              {
+                key: "tourStartDate",
+                header: "시작일",
+                cell: (booking: Booking) => <div className="text-xs">{new Date(booking.tourStartDate).toLocaleDateString()}</div>,
+                sortable: true,
+              },
+              {
+                key: "tourEndDate",
+                header: "종료일",
+                cell: (booking: Booking) => <div className="text-xs">{new Date(booking.tourEndDate).toLocaleDateString()}</div>,
+                sortable: true,
+              },
+              {
+                key: "nights",
+                header: "박수",
+                cell: (booking: Booking) => {
+                  const nights = Math.ceil((new Date(booking.tourEndDate).getTime() - new Date(booking.tourStartDate).getTime()) / (1000 * 60 * 60 * 24));
+                  return <div className="text-xs">{nights}</div>;
+                },
+                sortable: true,
+              },
+              {
+                key: "totalPax",
+                header: "인원",
+                cell: (booking: Booking) => (
+                  <div className="text-xs">
+                    {booking.totalPax}({booking.adults}+{booking.children}+{booking.infants}+{booking.foc || 0})
+                  </div>
+                ),
+                sortable: true,
+              },
+              {
+                key: "customers",
+                header: "고객정보",
+                cell: (booking: Booking) => (
+                  <div className="text-xs" title={booking.customers?.map(c => `${c.firstName} ${c.lastName}`).join(', ')}>
+                    {booking.customers?.slice(0, 2).map(c => `${c.firstName} ${c.lastName}`).join(', ')}
+                    {booking.customers && booking.customers.length > 2 && ` +${booking.customers.length - 2}명`}
+                  </div>
+                ),
+                sortable: false,
+              },
+              {
+                key: "flightInfo",
+                header: "항공/투어정보",
+                cell: (booking: Booking) => {
+                  if (booking.part === 'AIR') {
+                    return (
+                      <div className="text-xs">
+                        <div className="font-medium">{booking.airline || '-'}</div>
+                        <div className="text-gray-500 text-xs">
+                          {booking.departureRoute && booking.returnRoute && `${booking.departureRoute} → ${booking.returnRoute}`}
+                          {booking.flightType && ` (${booking.flightType})`}
+                        </div>
+                      </div>
+                    );
+                  } else if (booking.part === 'CINT') {
+                    return (
+                      <div className="text-xs">
+                        <div className="font-medium">{booking.hotelName || '-'}</div>
+                        <div className="text-gray-500 text-xs">
+                          {booking.roomType && `${booking.roomType} ${booking.roomCount}개`}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return <div className="text-xs">-</div>;
+                },
+                sortable: false,
+              },
+              {
+                key: "region",
+                header: "투어지역",
+                cell: (booking: Booking) => <div className="text-xs">{booking.region || '-'}</div>,
+                sortable: true,
+              },
+              {
+                key: "sellingPrice",
+                header: "판매가",
+                cell: (booking: Booking) => <div className="font-medium text-xs">${booking.sellingPrice?.toLocaleString() || 0}</div>,
+                sortable: true,
+              },
+              {
+                key: "paymentStatus",
+                header: "결제상태",
+                cell: (booking: Booking) => (
+                  <div className={`inline-flex px-1.5 py-0.5 rounded-full text-xs font-medium ${
+                    booking.paymentStatus === 'completed' 
+                      ? 'bg-green-100 text-green-800'
+                      : booking.paymentStatus === 'partial'
+                      ? 'bg-yellow-100 text-yellow-800'
+                      : 'bg-red-100 text-red-800'
+                  }`}>
+                    {booking.paymentStatus === 'completed' ? texts.completed : 
+                     booking.paymentStatus === 'partial' ? texts.partial : texts.pending}
+                  </div>
+                ),
+                sortable: true,
+              },
+            ]}
+            expandable={true}
+            expandedRow={renderExpandedRow}
+            onRowDoubleClick={(booking: Booking) => {
+              router.push(`/admin/bookings/${booking.id}/edit`);
+            }}
+            actions={[
+              {
+                label: "보기",
+                icon: <Eye className="h-4 w-4" />,
+                href: (booking: Booking) => `/admin/bookings/${booking.id}`,
+                variant: "ghost",
+              },
+              {
+                label: "수정",
+                icon: <Edit className="h-4 w-4" />,
+                href: (booking: Booking) => `/admin/bookings/${booking.id}/edit`,
+                variant: "ghost",
+              },
+              {
+                label: "삭제",
+                icon: <Trash2 className="h-4 w-4" />,
+                onClick: (booking: Booking) => {
+                  if (confirm("정말로 이 예약을 삭제하시겠습니까?")) {
+                    console.log("Delete booking:", booking.id);
+                  }
+                },
+                variant: "ghost",
+              },
+            ]}
+            itemsPerPage={10}
+            emptyMessage="예약 내역이 없습니다."
+          />
         </div>
       </main>
     </div>

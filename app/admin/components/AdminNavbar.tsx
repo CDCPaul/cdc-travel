@@ -6,9 +6,10 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { useLanguage } from "../../../components/LanguageContext";
 import { motion, AnimatePresence } from "framer-motion";
-import { auth } from "../../../lib/firebase";
-import { onAuthStateChanged, signOut } from "firebase/auth";
 import { useRouter } from "next/navigation";
+import { useAuth } from '@/context/AuthContext';
+import { getSignOutUtils } from '@/lib/auth-lazy';
+import ExchangeRateDisplay from '@/components/ExchangeRateDisplay';
 
 // 드롭다운 화살표 아이콘
 const ChevronDownIcon = ({ isOpen }: { isOpen: boolean }) => (
@@ -81,12 +82,14 @@ const ABOUT_US_MENU = {
 const TA_MENU = {
   ko: [
     { label: "TA 목록", href: "/admin/ta-list" },
+    { label: "이메일 전송", href: "/admin/ta-list/send-email" },
     { label: "전단지 관리", href: "/admin/posters" },
     { label: "IT 관리", href: "/admin/itineraries" },
     { label: "레터 관리", href: "/admin/letters" },
   ],
   en: [
     { label: "TA List", href: "/admin/ta-list" },
+    { label: "Send Email", href: "/admin/ta-list/send-email" },
     { label: "Poster Management", href: "/admin/posters" },
     { label: "IT Management", href: "/admin/itineraries" },
     { label: "Letter Management", href: "/admin/letters" },
@@ -139,7 +142,7 @@ const USER_MENU = {
 export default function AdminNavbar() {
   const pathname = usePathname();
   const { lang, setLang } = useLanguage();
-  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const { user } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const router = useRouter();
 
@@ -151,12 +154,8 @@ export default function AdminNavbar() {
   const [userOpen, setUserOpen] = useState(false);
   const [siteSettingsOpen, setSiteSettingsOpen] = useState(false);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUserEmail(user?.email || null);
-    });
-    return () => unsubscribe();
-  }, []);
+  // 중복된 onAuthStateChanged 제거 - AuthContext에서 user 정보 사용
+  const userEmail = user?.email || null;
 
   // 현재 경로에 따라 드롭다운 상태 자동 설정
   useEffect(() => {
@@ -246,9 +245,14 @@ export default function AdminNavbar() {
   }, []);
 
   const handleLogout = async () => {
-    await signOut(auth);
-    await fetch('/api/logout', { method: 'POST' });
-    router.push('/admin/login');
+    try {
+      const { signOut, auth } = await getSignOutUtils();
+      await signOut(auth);
+      await fetch('/api/logout', { method: 'POST' });
+      router.push('/admin/login');
+    } catch (error) {
+      console.error('로그아웃 실패:', error);
+    }
   };
 
   const currentMainMenu = MAIN_MENU[lang];
@@ -516,8 +520,13 @@ export default function AdminNavbar() {
               </div>
             </div>
 
-            {/* 오른쪽: 언어 설정, 사용자 정보, 로그아웃 */}
+            {/* 오른쪽: 환율, 언어 설정, 사용자 정보, 로그아웃 */}
             <div className="flex items-center space-x-4">
+              {/* 환율 표시 */}
+              <div className="hidden lg:flex items-center">
+                <ExchangeRateDisplay className="text-white/90" />
+              </div>
+              
               {/* 언어 전환 */}
               <div className="hidden sm:flex items-center space-x-2">
                 <button

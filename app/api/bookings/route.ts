@@ -1,63 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdTokenFromCookies } from '@/lib/auth-server';
 import { db } from '@/lib/firebase';
-import { collection, query, where, getDocs, orderBy, addDoc } from 'firebase/firestore';
-import { Booking, BookingStatus } from '@/types/booking';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { Booking, BookingStatus, PaymentStatus } from '@/types/booking';
 import { getAuth } from 'firebase-admin/auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { getAllBookingsFromAllDepartments, addBookingToDepartment, getDepartmentFromPart, DEPARTMENT_COLLECTIONS } from '@/lib/booking-utils';
 
-// Firestore Timestamp를 Date로 변환하는 안전한 함수
-const convertTimestampToDate = (timestamp: FirebaseFirestore.Timestamp | Date | null | undefined): Date | null => {
-  if (!timestamp) return null;
-  
-  // 이미 Date 객체인 경우
-  if (timestamp instanceof Date) {
-    return timestamp;
-  }
-  
-  // Firestore Timestamp인 경우
-  if (timestamp && typeof timestamp.toDate === 'function') {
-    try {
-      return timestamp.toDate();
-    } catch (error) {
-      console.error('Firestore Timestamp 변환 실패:', error);
-      return null;
-    }
-  }
-  
-  // 문자열인 경우 Date로 파싱
-  if (typeof timestamp === 'string') {
-    try {
-      const parsed = new Date(timestamp);
-      return isNaN(parsed.getTime()) ? null : parsed;
-    } catch (error) {
-      console.error('문자열 날짜 파싱 실패:', error);
-      return null;
-    }
-  }
-  
-  // 숫자인 경우 (timestamp)
-  if (typeof timestamp === 'number') {
-    try {
-      return new Date(timestamp);
-    } catch (error) {
-      console.error('숫자 timestamp 변환 실패:', error);
-      return null;
-    }
-  }
-  
-  // 객체인 경우 (seconds, nanoseconds)
-  if (timestamp && typeof timestamp === 'object' && timestamp.seconds) {
-    try {
-      return new Date(timestamp.seconds * 1000);
-    } catch (error) {
-      console.error('Timestamp 객체 변환 실패:', error);
-      return null;
-    }
-  }
-  
-  return null;
-};
+
 
 export async function GET(request: NextRequest) {
   try {
@@ -81,27 +31,24 @@ export async function GET(request: NextRequest) {
     const region = searchParams.get('region');
     const searchTerm = searchParams.get('search');
 
-    // Firestore 쿼리 구성
-    let q = query(collection(db, 'bookings'));
-
-    // 필터 적용
+    // 모든 부서의 부킹 조회
+    const allBookings = await getAllBookingsFromAllDepartments();
+    
+    // 필터 적용 (클라이언트 사이드)
+    let filteredBookings = allBookings;
+    
     if (status) {
-      q = query(q, where('status', '==', status));
+      filteredBookings = filteredBookings.filter(booking => booking.status === status);
     }
     if (bookingType) {
-      q = query(q, where('bookingType', '==', bookingType));
+      filteredBookings = filteredBookings.filter(booking => booking.bookingType === bookingType);
     }
     if (agentCode) {
-      q = query(q, where('agentCode', '==', agentCode));
+      filteredBookings = filteredBookings.filter(booking => booking.agentCode === agentCode);
     }
     if (region) {
-      q = query(q, where('region', '==', region));
+      filteredBookings = filteredBookings.filter(booking => booking.region === region);
     }
-
-    // 정렬 추가 (인덱스 사용)
-    q = query(q, orderBy('createdAt', 'desc'));
-
-    const querySnapshot = await getDocs(q);
 
     // 사용자 정보를 가져오기 위한 함수
     const getUserName = async (uid: string) => {
@@ -128,38 +75,21 @@ export async function GET(request: NextRequest) {
 
     // 예약 데이터와 사용자 정보를 함께 처리
     const bookingsWithUserNames = await Promise.all(
-      querySnapshot.docs.map(async (doc) => {
-        const data = doc.data();
-        
+      allBookings.map(async (booking) => {
         // receivedBy가 유효한 값인지 확인
         let receivedByName = 'Unknown';
-        if (data.receivedBy && typeof data.receivedBy === 'string' && data.receivedBy.trim() !== '') {
-          receivedByName = await getUserName(data.receivedBy);
+        if (booking.receivedBy && typeof booking.receivedBy === 'string' && booking.receivedBy.trim() !== '') {
+          receivedByName = await getUserName(booking.receivedBy);
         }
         
         return {
-          id: doc.id,
-          ...data,
+          ...booking,
           receivedBy: receivedByName, // UID를 이름으로 변경
-          tourStartDate: convertTimestampToDate(data.tourStartDate),
-          tourEndDate: convertTimestampToDate(data.tourEndDate),
-          receivedAt: convertTimestampToDate(data.receivedAt),
-          confirmedAt: convertTimestampToDate(data.confirmedAt),
-          paymentDate: convertTimestampToDate(data.paymentDate),
-          deadline: convertTimestampToDate(data.deadline),
-          actualDeadline: convertTimestampToDate(data.actualDeadline),
-          createdAt: convertTimestampToDate(data.createdAt),
-          updatedAt: convertTimestampToDate(data.updatedAt),
-          customers: data.customers || []
         } as Booking;
       })
     );
 
-    const bookings = bookingsWithUserNames;
-
     // 검색어 필터링 (클라이언트 사이드)
-    let filteredBookings = bookings;
-    
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filteredBookings = filteredBookings.filter(booking => 
@@ -167,20 +97,22 @@ export async function GET(request: NextRequest) {
         booking.agentCode.toLowerCase().includes(term) ||
         booking.agentName.toLowerCase().includes(term) ||
         booking.customers.some(customer => 
-          customer.name.toLowerCase().includes(term)
+          customer.firstName?.toLowerCase().includes(term) ||
+          customer.lastName?.toLowerCase().includes(term) ||
+          customer.passportNumber?.toLowerCase().includes(term)
         )
       );
     }
 
     // 통계 계산
     const stats = {
-      total: bookings.length,
-      new: bookings.filter(b => b.status === 'new').length,
-      confirmed: bookings.filter(b => b.status === 'confirmed').length,
-      completed: bookings.filter(b => b.status === 'completed').length,
-      cancelled: bookings.filter(b => b.status === 'cancelled').length,
-      revenue: bookings.reduce((sum, b) => sum + b.sellingPrice, 0),
-      pendingPayments: bookings.filter(b => b.paymentStatus === 'pending').length
+      total: bookingsWithUserNames.length,
+      new: bookingsWithUserNames.filter((b: Booking) => b.status === 'new').length,
+      confirmed: bookingsWithUserNames.filter((b: Booking) => b.status === 'confirmed').length,
+      completed: bookingsWithUserNames.filter((b: Booking) => b.status === 'completed').length,
+      cancelled: bookingsWithUserNames.filter((b: Booking) => b.status === 'cancelled').length,
+      revenue: bookingsWithUserNames.reduce((sum: number, b: Booking) => sum + b.sellingPrice, 0),
+      pendingPayments: bookingsWithUserNames.filter((b: Booking) => b.paymentStatus === 'pending').length
     };
 
     return NextResponse.json({
@@ -214,6 +146,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const {
+      part, // 파트 정보 추가
       bookingType,
       tourStartDate,
       tourEndDate,
@@ -239,16 +172,19 @@ export async function POST(request: NextRequest) {
       remarks
     } = body;
 
-    // 예약번호 생성 (BK-YYYYMMDD-001 형식)
+    // 파트별 예약번호 생성 (AIR-YYYYMMDD-001 또는 CINT-YYYYMMDD-001 형식)
     const today = new Date();
     const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
     
-    // 오늘 날짜의 예약 개수 조회
+    // 부서 결정
+    const department = getDepartmentFromPart(part);
+    
+    // 해당 부서의 오늘 날짜 예약 개수 조회
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
     
     const todayBookingsQuery = query(
-      collection(db, 'bookings'),
+      collection(db, 'bookings', DEPARTMENT_COLLECTIONS[department]),
       where('createdAt', '>=', startOfDay),
       where('createdAt', '<', endOfDay)
     );
@@ -256,10 +192,12 @@ export async function POST(request: NextRequest) {
     const todayBookingsSnapshot = await getDocs(todayBookingsQuery);
     const todayCount = todayBookingsSnapshot.size + 1;
     
-    const bookingNumber = `BK-${dateStr}-${todayCount.toString().padStart(3, '0')}`;
+    // 부서별 예약번호 생성
+    const bookingNumber = `${part}-${dateStr}-${todayCount.toString().padStart(3, '0')}`;
 
     // 새 예약 데이터
     const newBooking = {
+      part, // 파트 정보 추가
       bookingNumber,
       status: 'new' as BookingStatus,
       bookingType,
@@ -279,10 +217,13 @@ export async function POST(request: NextRequest) {
       airlineRoute2,
       roomType,
       roomCount,
+      airIncluded: false, // 기본값 추가
+      airlineIncluded: false, // 기본값 추가
       adults,
       children,
       infants,
       totalPax: adults + children + infants,
+      foc: 0, // 기본값 추가
       costPrice,
       markup,
       sellingPrice,
@@ -290,8 +231,8 @@ export async function POST(request: NextRequest) {
       deposit: 0,
       balance: sellingPrice,
       paymentMethod: '',
-      paymentStatus: 'pending' as BookingStatus,
-      customers: customers.map((customer: { name: string; contact: string; passport?: string; specialRequests?: string }, index: number) => ({
+      paymentStatus: 'pending' as PaymentStatus,
+      customers: customers.map((customer: { firstName: string; lastName: string; gender: string; nationality: string; passportNumber: string; passportExpiry: string }, index: number) => ({
         id: `customer-${index}`,
         ...customer
       })),
@@ -302,8 +243,8 @@ export async function POST(request: NextRequest) {
       updatedBy: authResult.uid
     };
 
-    // Firestore에 저장
-    const docRef = await addDoc(collection(db, 'bookings'), newBooking);
+    // 부서별 컬렉션에 저장
+    const docRef = await addBookingToDepartment(newBooking, department);
 
     return NextResponse.json({
       success: true,

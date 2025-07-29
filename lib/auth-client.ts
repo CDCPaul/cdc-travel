@@ -17,8 +17,8 @@ export const authenticatedRequest = async (
       throw new Error('사용자가 로그인되어 있지 않습니다.');
     }
 
-    // 토큰 가져오기 (강제 갱신 포함)
-    const idToken = await getIdToken(user, true);
+    // Firebase SDK의 자동 토큰 갱신 기능 사용 (강제 갱신 비활성화)
+    const idToken = await getIdToken(user, false);
     
     const response = await fetch(url, {
       ...options,
@@ -29,27 +29,11 @@ export const authenticatedRequest = async (
       },
     });
 
-    // 401 에러인 경우 토큰을 다시 갱신하고 재시도
+    // 401 에러인 경우 로그인 페이지로 리다이렉트
     if (response.status === 401) {
-      console.log('토큰이 만료되었습니다. 토큰을 갱신합니다...');
-      const newToken = await getIdToken(user, true);
-      
-      const retryResponse = await fetch(url, {
-        ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${newToken}`,
-          ...options.headers,
-        },
-      });
-
-      if (retryResponse.status === 401) {
-        // 여전히 401이면 로그인 페이지로 리다이렉트
-        window.location.href = '/admin/login';
-        throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
-      }
-
-      return retryResponse;
+      console.log('토큰이 만료되었습니다. 로그인 페이지로 이동합니다.');
+      window.location.href = '/admin/login';
+      throw new Error('인증이 만료되었습니다. 다시 로그인해주세요.');
     }
 
     return response;

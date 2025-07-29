@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { useAuth } from '@/context/AuthContext';
 import { useLanguage } from '../../../components/LanguageContext';
 import { logPageView } from '@/lib/analytics';
 import { 
@@ -106,6 +105,7 @@ export default function AdminDashboard() {
   const { lang } = useLanguage();
   const texts = DASHBOARD_TEXTS[lang];
   const [isTestLoading, setIsTestLoading] = useState(false);
+  const { user } = useAuth();
 
   // Analytics API에서 데이터 가져오기
   const fetchAnalyticsData = useCallback(async () => {
@@ -130,17 +130,12 @@ export default function AdminDashboard() {
   }, [timeRange, texts.error]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        logPageView('Admin Dashboard', '/admin/dashboard', { language: lang });
-        fetchAnalyticsData();
-      } else {
-        // router.push('/admin-login'); // Removed as per edit hint
-      }
-    });
-
-    return () => unsubscribe();
-  }, [lang, fetchAnalyticsData]);
+    // AuthContext에서 user 정보 사용 - 중복된 onAuthStateChanged 제거
+    if (user) {
+      logPageView('Admin Dashboard', '/admin/dashboard', { language: lang });
+      fetchAnalyticsData();
+    }
+  }, [user, lang, fetchAnalyticsData]);
 
   const handleTestTokenRefresh = async () => {
     setIsTestLoading(true);

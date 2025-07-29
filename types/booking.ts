@@ -1,13 +1,16 @@
 export type BookingStatus = 'new' | 'confirmed' | 'completed' | 'cancelled';
 export type BookingType = 'FIT' | 'PKG' | 'GROUP' | 'REVISION';
 export type PaymentStatus = 'pending' | 'partial' | 'completed';
+export type BookingPart = 'AIR' | 'CINT';
 
 export interface Customer {
-  id: string;
-  name: string;
-  contact: string;
-  passport?: string;
-  specialRequests?: string;
+  id?: string;
+  firstName: string;
+  lastName: string;
+  gender: string;
+  nationality: string;
+  passportNumber: string;
+  passportExpiry: string;
 }
 
 export interface BookingStatusHistory {
@@ -29,6 +32,7 @@ export interface Booking {
   id: string;
   
   // 기본 정보
+  part?: BookingPart;           // AIR 또는 CINT
   bookingNumber: string;        // 예약번호 (자동 생성)
   status: BookingStatus;
   bookingType: BookingType;
@@ -49,9 +53,16 @@ export interface Booking {
   airline: string;
   airlineRoute1: string;
   airlineRoute2: string;
+  departureRoute?: string;    // 출발 노선
+  returnRoute?: string;       // 도착 노선
+  flightType?: string;        // 편도/왕복/다구간
+  returnDepartureRoute?: string;  // 왕복 시 오는편 출발
+  returnArrivalRoute?: string;    // 왕복 시 오는편 도착
+  flightSegments?: Array<{ departure: string; arrival: string }>;  // 다구간 세그먼트
   roomType: string;
   localLandName: string;
   roomCount: number;
+  airIncluded?: boolean;     // 항공포함 여부 (airlineIncluded와 별개)
   airlineIncluded: boolean;  // 항공포함 여부
   nights?: number;           // 박수
   tourRegion?: string;       // 투어지역
@@ -62,6 +73,7 @@ export interface Booking {
   adults: number;
   children: number;
   infants: number;
+  foc: number;              // FOC 인원
   
   // 가격 정보
   costPrice: number;
@@ -130,8 +142,15 @@ export interface BookingFormData {
   airline: string;
   airlineRoute1: string;
   airlineRoute2: string;
+  departureRoute?: string;
+  returnRoute?: string;
+  flightType?: string;
+  returnDepartureRoute?: string;
+  returnArrivalRoute?: string;
+  flightSegments?: Array<{ departure: string; arrival: string }>;
   roomType: string;
   roomCount: number;
+  airIncluded?: boolean;
   airlineIncluded: boolean;  // 항공포함 여부
   adults: number;
   children: number;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuth } from 'firebase-admin/auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
+import { OAuthService } from '@/lib/oauth-service';
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,22 +27,16 @@ export async function POST(request: NextRequest) {
     }
 
     const idToken = authHeader.substring(7);
-    await auth.verifyIdToken(idToken);
+    const decodedToken = await auth.verifyIdToken(idToken);
+    const userId = decodedToken.uid;
 
-    // 쿠키에서 Google Access Token 가져오기
-    const cookies = request.headers.get('cookie');
-    let accessToken = null;
+    // OAuthService를 사용하여 유효한 access token 가져오기 (자동 갱신 포함)
+    const accessToken = await OAuthService.getValidAccessToken(userId);
     
-    if (cookies) {
-      const googleAccessTokenMatch = cookies.match(/googleAccessToken=([^;]+)/);
-      if (googleAccessTokenMatch) {
-        accessToken = decodeURIComponent(googleAccessTokenMatch[1]);
-      }
-    }
-
     if (!accessToken) {
+      console.log('유효한 Google Access Token을 찾을 수 없습니다.');
       return NextResponse.json(
-        { error: 'Google Access Token이 필요합니다.' },
+        { error: 'Google Access Token이 필요합니다. 다시 로그인해주세요.', requiresReauth: true },
         { status: 401 }
       );
     }

@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { createAdminUser, verifyAdminRole } from "@/lib/admin-setup";
-import { auth } from "@/lib/firebase";
-import { onAuthStateChanged, User } from "firebase/auth";
+import { useAuth } from '@/context/AuthContext';
 
 export default function MigrateUsersPage() {
   const [uid, setUid] = useState("");
@@ -11,15 +10,10 @@ export default function MigrateUsersPage() {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { user } = useAuth();
 
-  // 현재 로그인한 사용자 확인
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-    });
-    return unsubscribe;
-  }, []);
+  // AuthContext에서 user 정보 사용 - 중복된 onAuthStateChanged 제거
+  const currentUser = user;
 
   const handleCreateAdmin = async (e: React.FormEvent) => {
     e.preventDefault();

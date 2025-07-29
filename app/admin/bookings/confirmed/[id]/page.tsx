@@ -315,10 +315,14 @@ export default function ConfirmedBookingDetailPage() {
                 <div className="space-y-2">
                   {booking.customers.map((customer, index) => (
                     <div key={index} className="p-3 bg-gray-50 rounded">
-                      <div className="font-medium">{customer.name}</div>
-                      <div className="text-sm text-gray-600">{customer.contact}</div>
-                      {customer.passport && (
-                        <div className="text-sm text-gray-600">여권: {customer.passport}</div>
+                      <div className="font-medium">{customer.firstName} {customer.lastName}</div>
+                      <div className="text-sm text-gray-600">성별: {customer.gender}</div>
+                      <div className="text-sm text-gray-600">국적: {customer.nationality}</div>
+                      {customer.passportNumber && (
+                        <div className="text-sm text-gray-600">여권번호: {customer.passportNumber}</div>
+                      )}
+                      {customer.passportExpiry && (
+                        <div className="text-sm text-gray-600">여권만료일: {customer.passportExpiry}</div>
                       )}
                     </div>
                   ))}

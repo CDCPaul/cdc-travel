@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '@/components/LanguageContext';
 import { Booking } from '@/types/booking';
-import { motion } from 'framer-motion';
 import { CalendarIcon, CheckIcon, CheckCircleIcon, CurrencyDollarIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { apiFetchJson } from '@/lib/api-utils';
+import { DataTable } from '@/components/ui/data-table';
+import { Eye, Edit } from 'lucide-react';
 
 const CONFIRMED_BOOKINGS_TEXTS = {
   ko: {
@@ -33,7 +34,7 @@ const CONFIRMED_BOOKINGS_TEXTS = {
     land: "LAND",
     emptyField: "빈필드",
     passengerList: "명단",
-    airlineIncluded: "항공포함",
+    airIncluded: "항공포함",
     airline: "항공사",
     yes: "예",
     no: "아니오",
@@ -75,7 +76,7 @@ const CONFIRMED_BOOKINGS_TEXTS = {
     land: "LAND",
     emptyField: "Empty Field",
     passengerList: "Passenger List",
-    airlineIncluded: "Airline Included",
+    airIncluded: "Airline Included",
     airline: "Airline",
     yes: "Yes",
     no: "No",
@@ -293,136 +294,129 @@ export default function ConfirmedBookingsPage() {
         </div>
 
         {/* 확정 예약 목록 */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.bookingNumber}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.receivedBy}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.tourStartDate}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.tourEndDate}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.nights}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.agentCode}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.pax}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.tourRegion}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.airlineIncluded}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.airline}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.land}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.emptyField}
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {texts.passengerList}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {bookings.length === 0 ? (
-                  <tr>
-                    <td colSpan={13} className="px-6 py-12 text-center text-gray-500">
-                      {texts.noBookings}
-                    </td>
-                  </tr>
-                ) : (
-                  bookings.map((booking) => {
-                    // 명단 정보 계산 (총 인원수 대비 작성된 인원수)
-                    const totalPax = booking.totalPax || 0;
-                    const filledPax = booking.customers?.length || 0;
-                    const passengerListText = `${filledPax}/${totalPax}`;
-                    
-                    // 박수 계산 (시작일과 종료일이 있으면 계산)
-                    let nightsDisplay = booking.nights;
-                    if (!nightsDisplay && booking.tourStartDate && booking.tourEndDate) {
-                      const startDate = new Date(booking.tourStartDate);
-                      const endDate = new Date(booking.tourEndDate);
-                      const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-                      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                      nightsDisplay = diffDays;
-                    }
-                    
-                    // 투어지역 표시 (tourRegion이 없으면 region 사용)
-                    const tourRegionDisplay = booking.tourRegion || booking.region || '-';
-                    
-                    // 랜드 표시 (land가 없으면 localLandCode 사용)
-                    const landDisplay = booking.land || booking.localLandCode || '-';
-                    
-                    return (
-                      <motion.tr
-                        key={booking.id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="hover:bg-gray-50 cursor-pointer"
-                        onClick={() => window.location.href = `/admin/bookings/confirmed/${booking.id}`}
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {booking.bookingNumber}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {booking.receivedBy || '-'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {booking.tourStartDate ? new Date(booking.tourStartDate).toLocaleDateString() : '-'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {booking.tourEndDate ? new Date(booking.tourEndDate).toLocaleDateString() : '-'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {nightsDisplay || '-'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {booking.agentCode}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {booking.totalPax}({booking.adults}+{booking.children}+{booking.infants})
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {tourRegionDisplay}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {booking.airlineIncluded ? texts.yes : texts.no}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {booking.airline || '-'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {landDisplay}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          -
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {passengerListText}
-                        </td>
-                      </motion.tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+        <div className="bg-white rounded-lg shadow">
+          <DataTable 
+            data={bookings}
+            columns={[
+              {
+                key: "bookingNumber",
+                header: texts.bookingNumber,
+                cell: (booking) => <div className="font-medium">{booking.bookingNumber}</div>,
+                sortable: true,
+              },
+              {
+                key: "receivedBy",
+                header: texts.receivedBy,
+                cell: (booking) => <div>{booking.receivedBy || '-'}</div>,
+                sortable: true,
+              },
+              {
+                key: "tourStartDate",
+                header: texts.tourStartDate,
+                cell: (booking) => <div>{booking.tourStartDate ? new Date(booking.tourStartDate).toLocaleDateString() : '-'}</div>,
+                sortable: true,
+              },
+              {
+                key: "tourEndDate",
+                header: texts.tourEndDate,
+                cell: (booking) => <div>{booking.tourEndDate ? new Date(booking.tourEndDate).toLocaleDateString() : '-'}</div>,
+                sortable: true,
+              },
+              {
+                key: "nights",
+                header: texts.nights,
+                cell: (booking) => {
+                  let nightsDisplay = booking.nights;
+                  if (!nightsDisplay && booking.tourStartDate && booking.tourEndDate) {
+                    const startDate = new Date(booking.tourStartDate);
+                    const endDate = new Date(booking.tourEndDate);
+                    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    nightsDisplay = diffDays;
+                  }
+                  return <div>{nightsDisplay || '-'}</div>;
+                },
+                sortable: false,
+              },
+              {
+                key: "agentCode",
+                header: texts.agentCode,
+                cell: (booking) => <div>{booking.agentCode}</div>,
+                sortable: true,
+              },
+              {
+                key: "totalPax",
+                header: texts.pax,
+                cell: (booking) => <div>{booking.totalPax}({booking.adults}+{booking.children}+{booking.infants})</div>,
+                sortable: true,
+              },
+              {
+                key: "tourRegion",
+                header: texts.tourRegion,
+                cell: (booking) => {
+                  const tourRegionDisplay = booking.tourRegion || booking.region || '-';
+                  return <div>{tourRegionDisplay}</div>;
+                },
+                sortable: true,
+              },
+              {
+                key: "airIncluded",
+                header: texts.airIncluded,
+                cell: (booking) => <div>{booking.airIncluded ? texts.yes : texts.no}</div>,
+                sortable: false,
+              },
+              {
+                key: "airline",
+                header: texts.airline,
+                cell: (booking) => <div>{booking.airline || '-'}</div>,
+                sortable: true,
+              },
+              {
+                key: "land",
+                header: texts.land,
+                cell: (booking) => {
+                  const landDisplay = booking.land || booking.localLandCode || '-';
+                  return <div>{landDisplay}</div>;
+                },
+                sortable: true,
+              },
+              {
+                key: "emptyField",
+                header: texts.emptyField,
+                cell: () => <div>-</div>,
+                sortable: false,
+              },
+              {
+                key: "passengerList",
+                header: texts.passengerList,
+                cell: (booking) => {
+                  const totalPax = booking.totalPax || 0;
+                  const filledPax = booking.customers?.length || 0;
+                  const passengerListText = `${filledPax}/${totalPax}`;
+                  return <div>{passengerListText}</div>;
+                },
+                sortable: false,
+              },
+            ]}
+            actions={[
+              {
+                label: "보기",
+                icon: <Eye className="h-4 w-4" />,
+                href: (booking) => `/admin/bookings/confirmed/${booking.id}`,
+                variant: "ghost",
+              },
+              {
+                label: "수정",
+                icon: <Edit className="h-4 w-4" />,
+                href: (booking) => `/admin/bookings/confirmed/${booking.id}/edit`,
+                variant: "ghost",
+              },
+            ]}
+            searchKey="bookingNumber"
+            searchPlaceholder="예약번호, 접수자로 검색..."
+            itemsPerPage={10}
+            emptyMessage={texts.noBookings}
+          />
         </div>
       </main>
     </div>

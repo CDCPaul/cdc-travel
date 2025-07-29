@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useLanguage } from "../../../../components/LanguageContext";
-import { useSearchParams, useRouter } from "next/navigation";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { auth } from "../../../../lib/firebase";
 import Image from "next/image";
 import TiptapEditor from "../../../../components/ui/TiptapEditor";
@@ -56,7 +55,9 @@ const TEXT = {
   logoInsertInfo: { ko: "• 전단지에만 선택된 각 에이전트의 로고와 회사 정보가 상단 250px 영역에 합성되어 자동으로 첨부됩니다.", en: "• TA logos and company information are automatically composited in the top 250px area of posters only." },
   companyInfoNote: { ko: "• 회사 정보: 회사명, 전화번호, 이메일이 3줄로 표시됩니다.", en: "• Company information: Company name, phone number, and email are displayed in 3 lines." },
   itLetterNote: { ko: "• IT와 레터는 원본 그대로 발송됩니다.", en: "• IT and letters are sent as original." },
-  logoSizeNote: { ko: "• 로고는 세로 250px 크기로 자동 조정되며, 가로 비율은 유지됩니다.", en: "• Logos are automatically resized to 250px height while maintaining aspect ratio." }
+  logoSizeNote: { ko: "• 로고는 세로 250px 크기로 자동 조정되며, 가로 비율은 유지됩니다.", en: "• Logos are automatically resized to 250px height while maintaining aspect ratio." },
+  selectAll: { ko: "전체 선택", en: "Select All" },
+  deselectAll: { ko: "전체 해제", en: "Deselect All" }
 };
 
 interface SelectedTA {
@@ -89,13 +90,13 @@ interface Attachment {
 
 export default function SendEmailPage() {
   const { lang } = useLanguage();
-  const searchParams = useSearchParams();
   const router = useRouter();
   
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedTAs, setSelectedTAs] = useState<SelectedTA[]>([]);
+  const [allTAs, setAllTAs] = useState<SelectedTA[]>([]);
   
   const [emailSubject, setEmailSubject] = useState("");
   const [emailContent, setEmailContent] = useState("");
@@ -191,17 +192,9 @@ export default function SendEmailPage() {
     };
   }, [isLoading, generatedSessionId, cleanupGeneratedFiles, previewUrls]);
 
-  // 선택된 TA 데이터 불러오기
+  // 모든 TA 데이터 불러오기
   useEffect(() => {
-    const selectedIdsParam = searchParams.get('selected')?.split(',') || [];
-    
-    const fetchSelectedTAs = async () => {
-      if (selectedIdsParam.length === 0) {
-        setError("선택된 에이전트가 없습니다.");
-        setIsLoadingData(false);
-        return;
-      }
-
+    const fetchAllTAs = async () => {
       try {
         const response = await fetch('/api/ta');
         const result = await response.json();
@@ -211,8 +204,8 @@ export default function SendEmailPage() {
         }
 
         const allTAs = result.data || [];
-        const filteredTAs = allTAs.filter((ta: { id: string }) => selectedIdsParam.includes(ta.id));
-        setSelectedTAs(filteredTAs);
+        setAllTAs(allTAs);
+        setSelectedTAs(allTAs); // 기본적으로 모든 TA 선택
       } catch (error) {
         console.error('TA 데이터 로드 실패:', error);
         setError(error instanceof Error ? error.message : "Failed to load data.");
@@ -221,8 +214,8 @@ export default function SendEmailPage() {
       }
     };
 
-    fetchSelectedTAs();
-  }, [searchParams]);
+    fetchAllTAs();
+  }, []);
 
   // 첨부파일 목록 불러오기
   const fetchAttachments = useCallback(async () => {
@@ -506,9 +499,7 @@ export default function SendEmailPage() {
           if (newToken) {
             console.log('토큰이 갱신되었습니다. 다시 시도합니다.');
             // 토큰 갱신 후 다시 발송 시도
-            setTimeout(() => {
-              handleSubmit(e);
-            }, 1000);
+            handleSubmit(e);
             return;
           } else {
             alert('토큰 갱신에 실패했습니다. 다시 로그인해주세요.');
@@ -558,10 +549,8 @@ export default function SendEmailPage() {
       const totalCount = result.results?.length || 0;
       alert(`${TEXT.sendSuccess[lang]}\n발송된 이메일: ${successCount}개 / ${totalCount}개\n발송 시간: ${duration}ms (${(duration / 1000).toFixed(2)}초)`);
       
-      // 성공 후 페이지 이동 전에 잠시 대기 (파일 정리 방지)
-      setTimeout(() => {
-        router.push("/admin/ta-list");
-      }, 1000);
+      // 성공 후 페이지 이동
+      router.push("/admin/ta-list");
     } catch (error) {
       console.error("이메일 발송 실패:", error);
       
@@ -604,18 +593,8 @@ export default function SendEmailPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* 헤더 */}
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">{TEXT.title[lang]}</h1>
-        <Link
-          href="/admin/ta-list"
-          className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-        >
-          {TEXT.backToList[lang]}
-        </Link>
-      </div>
 
-      {/* 선택된 에이전트 정보 */}
+      {/* TA 선택 */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
         <h2 className="text-lg font-medium text-blue-800 mb-2">
           {TEXT.selectedAgents[lang]}
@@ -623,12 +602,66 @@ export default function SendEmailPage() {
         <p className="text-blue-600">
           {selectedTAs.length} {TEXT.agentCount[lang]}
         </p>
-        <div className="mt-3 space-y-1">
-          {selectedTAs.map((ta) => (
-            <div key={ta.id} className="text-sm text-blue-700">
-              • {ta.companyName} ({ta.taCode}) - {ta.email}
-            </div>
-          ))}
+        
+        {/* TA 선택 체크박스 */}
+        <div className="mt-4 max-h-60 overflow-y-auto border border-blue-200 rounded-lg p-3 bg-white">
+          <div className="space-y-2">
+            {allTAs.map((ta) => (
+              <label key={ta.id} className="flex items-center space-x-3 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                <input
+                  type="checkbox"
+                  checked={selectedTAs.some(selected => selected.id === ta.id)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedTAs(prev => [...prev, ta]);
+                    } else {
+                      setSelectedTAs(prev => prev.filter(selected => selected.id !== ta.id));
+                    }
+                  }}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <div className="flex items-center space-x-3 flex-1">
+                  <div className="relative w-8 h-8">
+                    {ta.logo ? (
+                      <Image
+                        src={ta.logo}
+                        alt={`${ta.companyName} 로고`}
+                        width={32}
+                        height={32}
+                        className="object-contain rounded"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 bg-gray-200 rounded flex items-center justify-center">
+                        <span className="text-gray-500 text-xs">No</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-gray-900">{ta.companyName}</div>
+                    <div className="text-xs text-gray-500">{ta.taCode} • {ta.email}</div>
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+        
+        {/* 전체 선택/해제 버튼 */}
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={() => setSelectedTAs(allTAs)}
+            className="text-sm text-blue-600 hover:text-blue-800"
+          >
+            {TEXT.selectAll[lang]}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedTAs([])}
+            className="text-sm text-blue-600 hover:text-blue-800"
+          >
+            {TEXT.deselectAll[lang]}
+          </button>
         </div>
       </div>
 

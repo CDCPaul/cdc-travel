@@ -2,7 +2,7 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import { getAnalytics, isSupported, Analytics } from "firebase/analytics";
+import { Analytics } from "firebase/analytics";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -21,13 +21,19 @@ if (typeof window === 'undefined' && !process.env.NEXT_PUBLIC_FIREBASE_API_KEY) 
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-// Analytics 초기화 (브라우저 환경에서만)
+// Analytics 지연 로드 (필요할 때만 초기화)
 let analytics: Analytics | null = null;
-if (typeof window !== 'undefined') {
-  isSupported().then(yes => yes ? getAnalytics(app) : null).then(analyticsInstance => {
-    analytics = analyticsInstance;
-  });
-}
+
+export const initAnalytics = async () => {
+  if (typeof window !== 'undefined' && !analytics) {
+    const { isSupported, getAnalytics } = await import('firebase/analytics');
+    const supported = await isSupported();
+    if (supported) {
+      analytics = getAnalytics(app);
+    }
+  }
+  return analytics;
+};
 
 export const db = getFirestore(app);
 // Firebase Storage 초기화 (기본 설정 사용)

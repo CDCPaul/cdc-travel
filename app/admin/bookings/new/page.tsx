@@ -3,10 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLanguage } from '@/components/LanguageContext';
-import { BookingFormData, BookingType } from '@/types/booking';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { apiFetch } from '@/lib/api-utils';
+import CustomerSelectionModal from '@/components/CustomerSelectionModal';
+import TASelectionModal from '@/components/TASelectionModal';
 
 const BOOKING_FORM_TEXTS = {
   ko: {
@@ -15,46 +15,96 @@ const BOOKING_FORM_TEXTS = {
     back: "목록으로",
     save: "저장",
     cancel: "취소",
+    partSelection: "파트 선택",
+    air: "AIR",
+    cint: "CINT",
     basicInfo: "기본 정보",
     tourInfo: "투어 정보",
     passengerInfo: "인원 정보",
     pricingInfo: "가격 정보",
-
+    customerInfo: "고객 정보",
     remarks: "비고",
-    bookingType: "투어 타입",
+    paymentInfo: "결제 정보",
+    costInfo: "원가 정보",
+    agentName: "에이전트명",
+    agentCode: "에이전트 코드",
     tourStartDate: "투어 시작일",
     tourEndDate: "투어 종료일",
     country: "국가",
     region: "지역",
-    agentCode: "에이전트 코드",
-    agentName: "에이전트명",
     localLandName: "현지 랜드사명",
     localLandCode: "현지 랜드사 코드",
-    hotelName: "호텔명",
     airline: "항공사",
-    airlineRoute1: "출발항공루트",
-    airlineRoute2: "리턴항공루트",
+    departureRoute: "출발항공 루트",
+    returnRoute: "리턴항공 루트",
+    flightType: "편도/왕복/다구간",
+    hotelName: "호텔명",
     roomType: "룸 타입",
     roomCount: "룸 수",
     airlineIncluded: "항공포함",
     adults: "성인",
     children: "소아",
     infants: "유아",
+    foc: "FOC",
+    totalPax: "총 인원",
     costPrice: "원가",
     markup: "마크업",
     sellingPrice: "판매가",
-
-    totalPax: "총 인원",
-    autoCalculate: "자동 계산",
+    firstName: "성",
+    lastName: "이름",
+    gender: "성별",
+    nationality: "국적",
+    passportNumber: "여권번호",
+    passportExpiry: "여권만료일",
+    addCustomer: "고객 추가",
+    removeCustomer: "고객 삭제",
+    searchCustomer: "DB에서 고객 검색",
+    paymentCurrency: "결제통화",
+    depositRequired: "예약금여부",
+    totalAmount: "총 금액",
+    perPersonAmount: "1인당 결제금액",
+    totalPaymentAmount: "총결제금액",
+    exchangeRate: "적용환율",
+    totalDollarAmount: "총 달러금액",
+    paymentDeadline: "결제시한",
+    paymentCompleted: "결제완료여부",
+    paymentDate: "결제완료일",
+    paymentBank: "결제은행",
+    perPersonCost: "1인당 원가",
+    totalCost: "총 원가",
+    totalDollarCost: "총 달러원가",
+    ticketingDate: "발권일",
+    landCostPaymentDate: "랜드원가 결제일",
+    income: "인컴",
+    otherExpenses: "기타지출",
+    finalProfit: "최종수익",
     required: "필수 입력 항목입니다",
-    invalidNumber: "올바른 숫자를 입력하세요",
-    saveSuccess: "예약이 성공적으로 저장되었습니다",
-    saveError: "예약 저장에 실패했습니다",
-    selectCountry: "국가를 선택하세요",
-    selectRegion: "지역을 선택하세요",
-    selectLocalLand: "현지 랜드사를 선택하세요",
+    autoCalculate: "자동 계산",
+    laterInput: "추후 입력 가능",
     optional: "선택사항",
-    laterInput: "추후 입력 가능"
+    notEditable: "추후 수정 불가",
+    editable: "추후 수정 가능",
+    // 새로운 항공 관련 텍스트
+    airlineSelection: "항공사",
+    flightTypeSelection: "여정 유형",
+    oneway: "편도",
+    roundtrip: "왕복",
+    multicity: "다구간",
+    flightInfo: "여정 정보",
+    departure: "출발지",
+    arrival: "도착지",
+    outbound: "가는 편",
+    inbound: "오는 편",
+    flightSegments: "여정 구간",
+    addSegment: "구간 추가",
+    removeSegment: "삭제",
+    segment: "구간",
+    // 섹션 제목 추가
+    hotelInfo: "호텔 정보",
+    airlineInfo: "항공 정보",
+    taSelection: "TA 선택",
+    customerSelection: "고객 선택",
+    enterCustomerInfo: "고객 정보를 입력하거나 DB에서 선택하세요"
   },
   en: {
     title: "New Booking",
@@ -62,237 +112,194 @@ const BOOKING_FORM_TEXTS = {
     back: "Back to List",
     save: "Save",
     cancel: "Cancel",
+    partSelection: "Part Selection",
+    air: "AIR",
+    cint: "CINT",
     basicInfo: "Basic Information",
     tourInfo: "Tour Information",
     passengerInfo: "Passenger Information",
     pricingInfo: "Pricing Information",
-
+    customerInfo: "Customer Information",
     remarks: "Remarks",
-    bookingType: "Tour Type",
+    paymentInfo: "Payment Information",
+    costInfo: "Cost Information",
+    agentName: "Agent Name",
+    agentCode: "Agent Code",
     tourStartDate: "Tour Start Date",
     tourEndDate: "Tour End Date",
     country: "Country",
     region: "Region",
-    agentCode: "Agent Code",
-    agentName: "Agent Name",
-    localLandName: "Local Land Name",
+    localLandName: "Local Land Company",
     localLandCode: "Local Land Code",
-    hotelName: "Hotel Name",
     airline: "Airline",
-    airlineRoute1: "Departure Route",
-    airlineRoute2: "Return Route",
+    departureRoute: "Departure Route",
+    returnRoute: "Return Route",
+    flightType: "One-way/Round-trip/Multi-city",
+    hotelName: "Hotel Name",
     roomType: "Room Type",
-    roomCount: "Room Count",
+    roomCount: "Number of Rooms",
     airlineIncluded: "Airline Included",
     adults: "Adults",
     children: "Children",
     infants: "Infants",
+    foc: "FOC",
+    totalPax: "Total Passengers",
     costPrice: "Cost Price",
     markup: "Markup",
     sellingPrice: "Selling Price",
-
-    totalPax: "Total Pax",
+    firstName: "First Name",
+    lastName: "Last Name",
+    gender: "Gender",
+    nationality: "Nationality",
+    passportNumber: "Passport Number",
+    passportExpiry: "Passport Expiry",
+    addCustomer: "Add Customer",
+    removeCustomer: "Remove Customer",
+    searchCustomer: "Search Customer from DB",
+    paymentCurrency: "Payment Currency",
+    depositRequired: "Deposit Required",
+    totalAmount: "Total Amount",
+    perPersonAmount: "Amount per Person",
+    totalPaymentAmount: "Total Payment Amount",
+    exchangeRate: "Exchange Rate",
+    totalDollarAmount: "Total Dollar Amount",
+    paymentDeadline: "Payment Deadline",
+    paymentCompleted: "Payment Completed",
+    paymentDate: "Payment Date",
+    paymentBank: "Payment Bank",
+    perPersonCost: "Cost per Person",
+    totalCost: "Total Cost",
+    totalDollarCost: "Total Dollar Cost",
+    ticketingDate: "Ticketing Date",
+    landCostPaymentDate: "Land Cost Payment Date",
+    income: "Income",
+    otherExpenses: "Other Expenses",
+    finalProfit: "Final Profit",
+    required: "Required field",
     autoCalculate: "Auto Calculate",
-    required: "This field is required",
-    invalidNumber: "Please enter a valid number",
-    saveSuccess: "Booking saved successfully",
-    saveError: "Failed to save booking",
-    selectCountry: "Select Country",
-    selectRegion: "Select Region",
-    selectLocalLand: "Select Local Land",
+    laterInput: "Can be input later",
     optional: "Optional",
-    laterInput: "Can be input later"
+    notEditable: "Cannot be edited later",
+    editable: "Can be edited later",
+    // 새로운 항공 관련 텍스트
+    airlineSelection: "Airline",
+    flightTypeSelection: "Flight Type",
+    oneway: "One-way",
+    roundtrip: "Round-trip",
+    multicity: "Multi-city",
+    flightInfo: "Flight Information",
+    departure: "Departure",
+    arrival: "Arrival",
+    outbound: "Outbound",
+    inbound: "Inbound",
+    flightSegments: "Flight Segments",
+    addSegment: "Add Segment",
+    removeSegment: "Remove",
+    segment: "Segment",
+    // 섹션 제목 추가
+    hotelInfo: "Hotel Information",
+    airlineInfo: "Airline Information",
+    taSelection: "Select TA",
+    customerSelection: "Select Customer",
+    enterCustomerInfo: "Enter customer information or select from DB"
   }
 };
+
+interface Customer {
+  firstName: string;
+  lastName: string;
+  gender: string;
+  nationality: string;
+  passportNumber: string;
+  passportExpiry: string;
+}
+
+interface FormData {
+  part?: 'AIR' | 'CINT';
+  agentName?: string;
+  agentCode?: string;
+  tourStartDate?: string;
+  tourEndDate?: string;
+  // AIR 전용 필드
+  airline?: string;
+  departureRoute?: string;
+  returnRoute?: string;
+  flightType?: string;
+  returnDepartureRoute?: string;
+  returnArrivalRoute?: string;
+  multiDepartureRoute?: string;
+  multiArrivalRoute?: string;
+  flightSegments?: Array<{ departure: string; arrival: string }>;
+  // CINT 전용 필드
+  country?: string;
+  region?: string;
+  localLandName?: string;
+  localLandCode?: string;
+  hotelName?: string;
+  roomType?: string;
+  roomCount?: number;
+  airIncluded?: boolean;
+  // 공통 필드
+  adults?: number;
+  children?: number;
+  infants?: number;
+  foc?: number;
+  costPrice?: number;
+  markup?: number;
+  customers?: Customer[];
+  remarks?: string;
+}
+
+interface Traveler {
+  id: string;
+  surname: string;
+  givenNames: string;
+  fullName: string;
+  gender: string;
+  nationality: string;
+  passportNumber: string;
+  passportExpiry: string;
+  email: string;
+  phone: string;
+  passportPhotoURL: string;
+  createdAt: unknown;
+}
+
+interface TA {
+  id: string;
+  companyName: string;
+  taCode: string;
+  phone: string;
+  address: string;
+  email: string;
+  logo?: string;
+  overlayImage?: string;
+  contactPersons?: Array<{
+    name: string;
+    position: string;
+    phone: string;
+    email: string;
+  }>;
+  createdAt: unknown;
+}
 
 export default function NewBookingPage() {
   const { lang } = useLanguage();
   const texts = BOOKING_FORM_TEXTS[lang];
   const router = useRouter();
   
-  const [formData, setFormData] = useState<BookingFormData>({
-    bookingType: 'FIT',
-    tourStartDate: '',
-    tourEndDate: '',
-    country: '',
-    region: '',
-    agentCode: '',
-    agentName: '',
-    localLandName: '',
-    localLandCode: '',
-    hotelName: '',
-    airline: '',
-    airlineRoute1: '',
-    airlineRoute2: '',
-    roomType: '',
-    roomCount: 1,
-    adults: 1,
-    children: 0,
-    infants: 0,
-    costPrice: 0,
-    markup: 0,
-    sellingPrice: 0,
-    customers: [{ name: '', contact: '', passport: '', specialRequests: '' }],
-    remarks: '',
-    airlineIncluded: false
-  });
-
-  const [agents, setAgents] = useState<Array<{id: string, companyName: string, taCode: string}>>([]);
-  const [loadingAgents, setLoadingAgents] = useState(false);
-
-  // 국가 및 지역 데이터
-  const COUNTRIES = [
-    { code: 'KR', name: { ko: '한국', en: 'Korea' }, flag: '/images/KR.webp', enabled: true },
-    { code: 'PH', name: { ko: '필리핀', en: 'Philippines' }, flag: '/images/PH.webp', enabled: true },
-    { code: 'JP', name: { ko: '일본', en: 'Japan' }, flag: '/images/JP.webp', enabled: true },
-    { code: 'VN', name: { ko: '베트남', en: 'Vietnam' }, flag: '/images/VN.webp', enabled: true },
-    { code: 'TW', name: { ko: '대만', en: 'Taiwan' }, flag: '/images/TW.webp', enabled: true },
-  ];
-
-  const REGIONS: Record<string, { code: string; name: { ko: string; en: string }; enabled: boolean }[]> = {
-    KR: [
-      { code: 'seoul', name: { ko: '서울', en: 'Seoul' }, enabled: true },
-      { code: 'busan', name: { ko: '부산', en: 'Busan' }, enabled: true },
-      { code: 'jeju', name: { ko: '제주', en: 'Jeju' }, enabled: true },
-      { code: 'gyeongju', name: { ko: '경주', en: 'Gyeongju' }, enabled: true },
-      { code: 'jeonnam', name: { ko: '전남', en: 'Jeonnam' }, enabled: true },
-      { code: 'gyeonggi', name: { ko: '경기도', en: 'Gyeonggi' }, enabled: true },
-      { code: 'gangwon', name: { ko: '강원도', en: 'Gangwon' }, enabled: true },
-      { code: 'incheon', name: { ko: '인천', en: 'Incheon' }, enabled: true },
-      { code: 'daegu', name: { ko: '대구', en: 'Daegu' }, enabled: true },
-      { code: 'gwangju', name: { ko: '광주', en: 'Gwangju' }, enabled: true },
-    ],
-    PH: [
-      { code: 'manila', name: { ko: '마닐라', en: 'Manila' }, enabled: true },
-      { code: 'cebu', name: { ko: '세부', en: 'Cebu' }, enabled: true },
-      { code: 'bohol', name: { ko: '보홀', en: 'Bohol' }, enabled: true },
-      { code: 'palawan', name: { ko: '팔라완', en: 'Palawan' }, enabled: true },
-      { code: 'davao', name: { ko: '다바오', en: 'Davao' }, enabled: true },
-      { code: 'baguio', name: { ko: '바기오', en: 'Baguio' }, enabled: true },
-      { code: 'puerto-princesa', name: { ko: '푸에르토프린세사', en: 'Puerto Princesa' }, enabled: true },
-      { code: 'el-nido', name: { ko: '엘니도', en: 'El Nido' }, enabled: true },
-      { code: 'boracay', name: { ko: '보라카이', en: 'Boracay' }, enabled: true },
-      { code: 'siargao', name: { ko: '시아르가오', en: 'Siargao' }, enabled: true },
-    ],
-    JP: [
-      { code: 'tokyo', name: { ko: '도쿄', en: 'Tokyo' }, enabled: true },
-      { code: 'osaka', name: { ko: '오사카', en: 'Osaka' }, enabled: true },
-      { code: 'kyoto', name: { ko: '교토', en: 'Kyoto' }, enabled: true },
-      { code: 'yokohama', name: { ko: '요코하마', en: 'Yokohama' }, enabled: true },
-      { code: 'nagoya', name: { ko: '나고야', en: 'Nagoya' }, enabled: true },
-      { code: 'sapporo', name: { ko: '삿포로', en: 'Sapporo' }, enabled: true },
-      { code: 'fukuoka', name: { ko: '후쿠오카', en: 'Fukuoka' }, enabled: true },
-      { code: 'kobe', name: { ko: '고베', en: 'Kobe' }, enabled: true },
-      { code: 'kawasaki', name: { ko: '가와사키', en: 'Kawasaki' }, enabled: true },
-      { code: 'hiroshima', name: { ko: '히로시마', en: 'Hiroshima' }, enabled: true },
-    ],
-    VN: [
-      { code: 'hanoi', name: { ko: '하노이', en: 'Hanoi' }, enabled: true },
-      { code: 'ho-chi-minh', name: { ko: '호치민', en: 'Ho Chi Minh' }, enabled: true },
-      { code: 'da-nang', name: { ko: '다낭', en: 'Da Nang' }, enabled: true },
-      { code: 'ha-long', name: { ko: '하롱', en: 'Ha Long' }, enabled: true },
-      { code: 'hue', name: { ko: '후에', en: 'Hue' }, enabled: true },
-      { code: 'nha-trang', name: { ko: '나트랑', en: 'Nha Trang' }, enabled: true },
-      { code: 'phu-quoc', name: { ko: '푸꾸옥', en: 'Phu Quoc' }, enabled: true },
-      { code: 'sapa', name: { ko: '사파', en: 'Sapa' }, enabled: true },
-      { code: 'mai-chau', name: { ko: '마이쩌우', en: 'Mai Chau' }, enabled: true },
-      { code: 'cat-ba', name: { ko: '깟바', en: 'Cat Ba' }, enabled: true },
-    ],
-    TW: [
-      { code: 'taipei', name: { ko: '타이페이', en: 'Taipei' }, enabled: true },
-      { code: 'kaohsiung', name: { ko: '가오슝', en: 'Kaohsiung' }, enabled: true },
-      { code: 'taichung', name: { ko: '타이중', en: 'Taichung' }, enabled: true },
-      { code: 'tainan', name: { ko: '타이난', en: 'Tainan' }, enabled: true },
-      { code: 'hsinchu', name: { ko: '신주', en: 'Hsinchu' }, enabled: true },
-      { code: 'keelung', name: { ko: '지룽', en: 'Keelung' }, enabled: true },
-      { code: 'chiayi', name: { ko: '자이', en: 'Chiayi' }, enabled: true },
-      { code: 'pingtung', name: { ko: '핑둥', en: 'Pingtung' }, enabled: true },
-      { code: 'yilan', name: { ko: '이란', en: 'Yilan' }, enabled: true },
-      { code: 'hualien', name: { ko: '화롄', en: 'Hualien' }, enabled: true },
-    ],
-  };
-
-  // 현지 랜드사 데이터
-  const LOCAL_LANDS = [
-    { code: 'SW', name: { ko: 'Sewoon Travel', en: 'Sewoon Travel' }, enabled: true },
-  ];
-
-  // 공항 코드 데이터
-  const AIRPORTS = {
-    KR: [
-      { code: 'ICN', name: { ko: '인천공항', en: 'Incheon Airport' }, city: 'seoul' },
-      { code: 'GMP', name: { ko: '김포공항', en: 'Gimpo Airport' }, city: 'seoul' },
-      { code: 'CJU', name: { ko: '제주공항', en: 'Jeju Airport' }, city: 'jeju' },
-      { code: 'PUS', name: { ko: '부산공항', en: 'Busan Airport' }, city: 'busan' },
-    ],
-    PH: [
-      { code: 'MNL', name: { ko: '마닐라공항', en: 'Manila Airport' }, city: 'manila' },
-      { code: 'CEB', name: { ko: '세부공항', en: 'Cebu Airport' }, city: 'cebu' },
-      { code: 'TAG', name: { ko: '타그빌라란공항', en: 'Tagbilaran Airport' }, city: 'bohol' },
-      { code: 'PPS', name: { ko: '푸에르토프린세사공항', en: 'Puerto Princesa Airport' }, city: 'puerto-princesa' },
-      { code: 'DVO', name: { ko: '다바오공항', en: 'Davao Airport' }, city: 'davao' },
-      { code: 'BAG', name: { ko: '바기오공항', en: 'Baguio Airport' }, city: 'baguio' },
-      { code: 'LGP', name: { ko: '레가스피공항', en: 'Legazpi Airport' }, city: 'legazpi' },
-      { code: 'CRK', name: { ko: '클락공항', en: 'Clark Airport' }, city: 'clark' },
-    ],
-    JP: [
-      { code: 'NRT', name: { ko: '나리타공항', en: 'Narita Airport' }, city: 'tokyo' },
-      { code: 'HND', name: { ko: '하네다공항', en: 'Haneda Airport' }, city: 'tokyo' },
-      { code: 'KIX', name: { ko: '간사이공항', en: 'Kansai Airport' }, city: 'osaka' },
-      { code: 'ITM', name: { ko: '이타미공항', en: 'Itami Airport' }, city: 'osaka' },
-      { code: 'CTS', name: { ko: '치토세공항', en: 'Chitose Airport' }, city: 'sapporo' },
-      { code: 'FUK', name: { ko: '후쿠오카공항', en: 'Fukuoka Airport' }, city: 'fukuoka' },
-      { code: 'NGO', name: { ko: '주부공항', en: 'Chubu Airport' }, city: 'nagoya' },
-      { code: 'HIJ', name: { ko: '히로시마공항', en: 'Hiroshima Airport' }, city: 'hiroshima' },
-    ],
-    VN: [
-      { code: 'HAN', name: { ko: '하노이공항', en: 'Hanoi Airport' }, city: 'hanoi' },
-      { code: 'SGN', name: { ko: '호치민공항', en: 'Ho Chi Minh Airport' }, city: 'ho-chi-minh' },
-      { code: 'DAD', name: { ko: '다낭공항', en: 'Da Nang Airport' }, city: 'da-nang' },
-      { code: 'CXR', name: { ko: '나트랑공항', en: 'Nha Trang Airport' }, city: 'nha-trang' },
-      { code: 'PQC', name: { ko: '푸꾸옥공항', en: 'Phu Quoc Airport' }, city: 'phu-quoc' },
-      { code: 'DLI', name: { ko: '달랏공항', en: 'Dalat Airport' }, city: 'dalat' },
-    ],
-    TW: [
-      { code: 'TPE', name: { ko: '타이페이공항', en: 'Taipei Airport' }, city: 'taipei' },
-      { code: 'KHH', name: { ko: '가오슝공항', en: 'Kaohsiung Airport' }, city: 'kaohsiung' },
-      { code: 'RMQ', name: { ko: '타이중공항', en: 'Taichung Airport' }, city: 'taichung' },
-      { code: 'TNN', name: { ko: '타이난공항', en: 'Tainan Airport' }, city: 'tainan' },
-      { code: 'HUN', name: { ko: '화롄공항', en: 'Hualien Airport' }, city: 'hualien' },
-    ],
-  };
-
-  // 출발 공항 (필리핀)
-  const DEPARTURE_AIRPORTS = [
-    { code: 'CEB', name: { ko: '세부공항', en: 'Cebu Airport' } },
-    { code: 'MNL', name: { ko: '마닐라공항', en: 'Manila Airport' } },
-    { code: 'TAG', name: { ko: '타그빌라란공항', en: 'Tagbilaran Airport' } },
-  ];
-
-  // 항공사 목록
-  const AIRLINES = [
-    { code: 'LJ', name: { ko: '진에어', en: 'Jin Air' } },
-    { code: 'BX', name: { ko: '에어부산', en: 'Air Busan' } },
-    { code: '7C', name: { ko: '제주항공', en: 'Jeju Air' } },
-    { code: 'KE', name: { ko: '대한항공', en: 'Korean Air' } },
-    { code: 'OZ', name: { ko: '아시아나항공', en: 'Asiana Airlines' } },
-    { code: '5J', name: { ko: '세부퍼시픽', en: 'Cebu Pacific' } },
-    { code: 'PR', name: { ko: '필리핀항공', en: 'Philippine Airlines' } },
-    { code: 'TW', name: { ko: '티웨이항공', en: 'Tway Air' } },
-    { code: 'RS', name: { ko: '에어서울', en: 'Air Seoul' } },
-  ];
-
+  const [selectedPart, setSelectedPart] = useState<'AIR' | 'CINT' | null>(null);
+  const [formData, setFormData] = useState<FormData>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [showTASelectionModal, setShowTASelectionModal] = useState(false);
+  const [flightSegments, setFlightSegments] = useState([{ departure: '', arrival: '' }]);
 
   useEffect(() => {
     const setupAuth = async () => {
       const { setupTokenRefresh, checkAuth } = await import('@/lib/auth');
-      
-      // 토큰 자동 갱신 설정
       setupTokenRefresh();
-      
-      // 인증 상태 확인
       const user = await checkAuth();
       if (!user) {
         alert('로그인이 필요합니다.');
@@ -302,239 +309,290 @@ export default function NewBookingPage() {
     };
     
     setupAuth();
-    fetchAgents();
   }, [router]);
 
-  const fetchAgents = async () => {
-    setLoadingAgents(true);
-    try {
-      const response = await fetch('/api/ta');
-      const data = await response.json();
-      if (data.success) {
-        setAgents(data.data);
-      }
-    } catch (error) {
-      console.error('에이전트 목록 로딩 실패:', error);
-    } finally {
-      setLoadingAgents(false);
+  const handlePartSelection = (part: 'AIR' | 'CINT') => {
+    setSelectedPart(part);
+    setFlightSegments([{ departure: '', arrival: '' }]);
+    
+    // 파트에 따른 초기 데이터 설정
+    const initialData: FormData = {
+      part,
+      agentName: '',
+      agentCode: '',
+      tourStartDate: '',
+      tourEndDate: '',
+      // AIR 전용 필드
+      airline: '',
+      departureRoute: '',
+      returnRoute: '',
+      flightType: '',
+      returnDepartureRoute: '',
+      returnArrivalRoute: '',
+      multiDepartureRoute: '',
+      multiArrivalRoute: '',
+      flightSegments: [{ departure: '', arrival: '' }],
+      // CINT 전용 필드
+      country: '',
+      region: '',
+      localLandName: '',
+      localLandCode: '',
+      hotelName: '',
+      roomType: '',
+      roomCount: 1,
+      airIncluded: false,
+      // 공통 필드
+      adults: 0,
+      children: 0,
+      infants: 0,
+      foc: 0,
+      costPrice: 0,
+      markup: 0,
+      customers: [{ firstName: '', lastName: '', gender: '', nationality: '', passportNumber: '', passportExpiry: '' }],
+      remarks: ''
+    };
+    
+    setFormData(initialData);
+  };
+
+  const updateFormData = (field: string, value: string | number | boolean) => {
+    setFormData((prev: FormData) => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors((prev: Record<string, string>) => ({ ...prev, [field]: '' }));
     }
   };
 
   const calculateTotalPax = () => {
-    return formData.adults + formData.children + formData.infants;
+    const { adults = 0, children = 0, infants = 0, foc = 0 } = formData;
+    return `${adults}+${children}+${infants}+${foc}FOC`;
   };
 
   const calculateSellingPrice = () => {
-    return formData.costPrice + formData.markup;
+    const costPrice = formData.costPrice || 0;
+    const markup = formData.markup || 0;
+    return costPrice + markup;
   };
 
-  const updateFormData = (field: keyof BookingFormData, value: unknown) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    
-    // 자동 계산
-    if (field === 'costPrice' || field === 'markup') {
-      const newCostPrice = (formData.costPrice || 0) + (formData.markup || 0);
-      const newMarkup = (formData.costPrice || 0) + (formData.markup || 0);
-      setFormData(prev => ({ 
-        ...prev, 
-        [field]: value,
-        sellingPrice: newCostPrice + newMarkup 
+  const removeCustomer = (index: number) => {
+    setFormData((prev: FormData) => ({
+      ...prev,
+      customers: prev.customers?.filter((_: Customer, i: number) => i !== index)
+    }));
+  };
+
+  const updateCustomer = (index: number, field: string, value: string) => {
+    setFormData((prev: FormData) => ({
+      ...prev,
+      customers: prev.customers?.map((customer: Customer, i: number) => 
+        i === index ? { ...customer, [field]: value } : customer
+      )
+    }));
+  };
+
+  const handleCustomerSelect = (traveler: Traveler) => {
+    // Traveler 데이터를 Customer 형식으로 변환
+    const customer = {
+      firstName: traveler.givenNames || '',
+      lastName: traveler.surname || '',
+      gender: traveler.gender || '',
+      nationality: traveler.nationality || '',
+      passportNumber: traveler.passportNumber || '',
+      passportExpiry: traveler.passportExpiry || ''
+    };
+
+    setFormData((prev: FormData) => {
+      const currentCustomers = prev.customers || [];
+      
+      // 빈 슬롯 찾기 (firstName이 비어있는 첫 번째 고객)
+      let targetIndex = -1;
+      for (let i = 0; i < currentCustomers.length; i++) {
+        if (!currentCustomers[i].firstName && !currentCustomers[i].lastName) {
+          targetIndex = i;
+          break;
+        }
+      }
+      
+      // 빈 슬롯이 없으면 새로 추가
+      if (targetIndex === -1) {
+        return {
+          ...prev,
+          customers: [...currentCustomers, customer]
+        };
+      }
+      
+      // 빈 슬롯에 고객 정보 채우기
+      const updatedCustomers = [...currentCustomers];
+      updatedCustomers[targetIndex] = customer;
+      
+      return {
+        ...prev,
+        customers: updatedCustomers
+      };
+    });
+  };
+
+  const handleTASelect = (ta: TA) => {
+    setFormData((prev: FormData) => ({
+      ...prev,
+      agentName: ta.companyName,
+      agentCode: ta.taCode
+    }));
+  };
+
+  const addFlightSegment = () => {
+    const newSegments = [...flightSegments, { departure: '', arrival: '' }];
+    setFlightSegments(newSegments);
+    setFormData((prev: FormData) => ({
+      ...prev,
+      flightSegments: newSegments
+    }));
+  };
+
+  const removeFlightSegment = (index: number) => {
+    if (flightSegments.length > 1) {
+      const newSegments = flightSegments.filter((_, i) => i !== index);
+      setFlightSegments(newSegments);
+      setFormData((prev: FormData) => ({
+        ...prev,
+        flightSegments: newSegments
       }));
     }
-    
-    // 에러 제거
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: '' }));
-    }
   };
 
-
-
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
+  const updateFlightSegment = (index: number, field: 'departure' | 'arrival', value: string) => {
+    setFlightSegments(prev => 
+      prev.map((segment, i) => 
+        i === index ? { ...segment, [field]: value } : segment
+      )
+    );
     
-    if (!formData.tourStartDate) newErrors.tourStartDate = texts.required;
-    if (!formData.tourEndDate) newErrors.tourEndDate = texts.required;
-    if (!formData.country) newErrors.country = texts.required;
-    if (!formData.region) newErrors.region = texts.required;
-    if (!formData.agentCode) newErrors.agentCode = texts.required;
-    if (!formData.agentName) newErrors.agentName = texts.required;
-    if (!formData.localLandName) newErrors.localLandName = texts.required;
-    // 투어정보는 선택사항이므로 유효성 검사에서 제외
-    // if (!formData.hotelName) newErrors.hotelName = texts.required;
-    // if (!formData.airline) newErrors.airline = texts.required;
-    // if (!formData.airlineRoute1) newErrors.airlineRoute1 = texts.required;
-    // if (!formData.roomType) newErrors.roomType = texts.required;
-    
-    if (formData.adults < 1) newErrors.adults = texts.required;
-    if (formData.costPrice < 0) newErrors.costPrice = texts.invalidNumber;
-    if (formData.markup < 0) newErrors.markup = texts.invalidNumber;
-    
-
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    // formData에도 저장
+    setFormData((prev: FormData) => ({
+      ...prev,
+      flightSegments: flightSegments.map((segment, i) => 
+        i === index ? { ...segment, [field]: value } : segment
+      )
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
-    
     setLoading(true);
+    
     try {
-      // API 호출로 예약 저장 (토큰 갱신 포함)
-      const response = await apiFetch('/api/bookings', {
+      // API 호출 로직
+      const response = await fetch('/api/bookings', {
         method: 'POST',
-        body: JSON.stringify(formData)
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...formData,
+          part: selectedPart, // 파트 정보 추가
+        }),
       });
-      
-      const result = await response.json();
-      
-      // 성공 메시지 (예약번호 표시)
-      alert(`${texts.saveSuccess}\n예약번호: ${result.bookingNumber}`);
-      router.push('/admin/bookings');
-      
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('예약 생성 성공:', result);
+        alert('예약이 성공적으로 저장되었습니다.');
+        router.push('/admin/bookings');
+      } else {
+        throw new Error('예약 저장에 실패했습니다.');
+      }
     } catch (error) {
       console.error('예약 저장 실패:', error);
-      alert(texts.saveError);
+      alert('예약 저장에 실패했습니다.');
     } finally {
       setLoading(false);
     }
   };
 
+  // 파트 선택 화면 표시
+  if (!selectedPart) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="max-w-md w-full bg-white rounded-lg shadow p-8">
+          <h1 className="text-2xl font-bold text-gray-900 mb-6 text-center">{texts.title}</h1>
+          <p className="text-gray-600 mb-8 text-center">{texts.subtitle}</p>
+          
+          <div className="space-y-4">
+            <button
+              onClick={() => handlePartSelection('AIR')}
+              className="w-full py-4 px-6 border-2 border-blue-500 rounded-lg text-blue-600 font-semibold hover:bg-blue-50 transition-colors"
+            >
+              {texts.air}
+            </button>
+            <button
+              onClick={() => handlePartSelection('CINT')}
+              className="w-full py-4 px-6 border-2 border-green-500 rounded-lg text-green-600 font-semibold hover:bg-green-50 transition-colors"
+            >
+              {texts.cint}
+            </button>
+          </div>
+          
+          <div className="mt-6 text-center">
+            <Link href="/admin/bookings" className="text-gray-500 hover:text-gray-700">
+              {texts.back}
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <form id="new-booking-form" onSubmit={handleSubmit} className="space-y-8">
-          {/* 기본 정보 */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <span className="text-sm font-medium text-gray-700">{texts.partSelection}:</span>
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                selectedPart === 'AIR' 
+                  ? 'bg-blue-100 text-blue-800' 
+                  : 'bg-green-100 text-green-800'
+              }`}>
+                {selectedPart}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* 기본 정보 섹션 */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-white rounded-lg shadow p-6"
           >
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">{texts.basicInfo}</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">{texts.basicInfo}</h2>
+              <span className="text-sm text-red-500 bg-red-50 px-2 py-1 rounded">
+                {texts.notEditable}
+              </span>
+            </div>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {texts.bookingType}
-                </label>
-                <select
-                  value={formData.bookingType}
-                  onChange={(e) => updateFormData('bookingType', e.target.value as BookingType)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="FIT">FIT</option>
-                  <option value="PKG">PKG</option>
-                  <option value="GROUP">GROUP</option>
-                  <option value="REVISION">REVISION</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {texts.tourStartDate}
-                </label>
-                <input
-                  type="date"
-                  value={formData.tourStartDate}
-                  onChange={(e) => updateFormData('tourStartDate', e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.tourStartDate ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                />
-                {errors.tourStartDate && <p className="text-red-500 text-sm mt-1">{errors.tourStartDate}</p>}
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {texts.tourEndDate}
-                </label>
-                <input
-                  type="date"
-                  value={formData.tourEndDate}
-                  onChange={(e) => updateFormData('tourEndDate', e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.tourEndDate ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                />
-                {errors.tourEndDate && <p className="text-red-500 text-sm mt-1">{errors.tourEndDate}</p>}
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {texts.country}
-                </label>
-                <select
-                  value={formData.country}
-                  onChange={(e) => {
-                    updateFormData('country', e.target.value);
-                    updateFormData('region', ''); // 국가 변경 시 지역 초기화
-                  }}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.country ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                >
-                  <option value="">{texts.selectCountry}</option>
-                  {COUNTRIES.filter(country => country.enabled).map((country) => (
-                    <option key={country.code} value={country.code}>
-                      {country.name[lang]}
-                    </option>
-                  ))}
-                </select>
-                {errors.country && <p className="text-red-500 text-sm mt-1">{errors.country}</p>}
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {texts.region}
-                </label>
-                <select
-                  value={formData.region}
-                  onChange={(e) => updateFormData('region', e.target.value)}
-                  disabled={!formData.country}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.region ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                >
-                  <option value="">{formData.country ? texts.selectRegion : texts.selectCountry}</option>
-                  {formData.country && REGIONS[formData.country]?.filter(region => region.enabled).map((region) => (
-                    <option key={region.code} value={region.code}>
-                      {region.name[lang]}
-                    </option>
-                  ))}
-                </select>
-                {errors.region && <p className="text-red-500 text-sm mt-1">{errors.region}</p>}
-              </div>
-              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {texts.agentName}
                 </label>
-                <select
-                  value={formData.agentName}
-                  onChange={(e) => {
-                    const selectedAgent = agents.find(agent => agent.companyName === e.target.value);
-                    updateFormData('agentName', e.target.value);
-                    if (selectedAgent) {
-                      updateFormData('agentCode', selectedAgent.taCode);
-                    }
-                  }}
-                  disabled={loadingAgents}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.agentName ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                >
-                  <option value="">{loadingAgents ? '로딩 중...' : '에이전트를 선택하세요'}</option>
-                  {agents.map((agent) => (
-                    <option key={agent.id} value={agent.companyName}>
-                      {agent.companyName} ({agent.taCode})
-                    </option>
-                  ))}
-                </select>
-                {errors.agentName && <p className="text-red-500 text-sm mt-1">{errors.agentName}</p>}
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={formData.agentName || ''}
+                    onChange={(e) => updateFormData('agentName', e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowTASelectionModal(true)}
+                    className="px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    {texts.taSelection}
+                  </button>
+                </div>
               </div>
               
               <div>
@@ -543,82 +601,115 @@ export default function NewBookingPage() {
                 </label>
                 <input
                   type="text"
-                  value={formData.agentCode}
+                  value={formData.agentCode || ''}
                   onChange={(e) => updateFormData('agentCode', e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.agentCode ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
                   readOnly
                 />
-                {errors.agentCode && <p className="text-red-500 text-sm mt-1">{errors.agentCode}</p>}
               </div>
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {texts.localLandName}
-                </label>
-                <select
-                  value={formData.localLandName}
-                  onChange={(e) => {
-                    const selectedLand = LOCAL_LANDS.find(land => land.name[lang] === e.target.value);
-                    updateFormData('localLandName', e.target.value);
-                    if (selectedLand) {
-                      updateFormData('localLandCode', selectedLand.code);
-                    }
-                  }}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.localLandName ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                >
-                  <option value="">{texts.selectLocalLand}</option>
-                  {LOCAL_LANDS.filter(land => land.enabled).map((land) => (
-                    <option key={land.code} value={land.name[lang]}>
-                      {land.name[lang]} ({land.code})
-                    </option>
-                  ))}
-                </select>
-                {errors.localLandName && <p className="text-red-500 text-sm mt-1">{errors.localLandName}</p>}
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {texts.localLandCode}
+                  {texts.tourStartDate}
                 </label>
                 <input
-                  type="text"
-                  value={formData.localLandCode}
-                  onChange={(e) => updateFormData('localLandCode', e.target.value)}
+                  type="date"
+                  value={formData.tourStartDate || ''}
+                  onChange={(e) => updateFormData('tourStartDate', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  readOnly
                 />
               </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {texts.tourEndDate}
+                </label>
+                <input
+                  type="date"
+                  value={formData.tourEndDate || ''}
+                  onChange={(e) => updateFormData('tourEndDate', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {selectedPart === 'CINT' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {texts.country}
+                    </label>
+                    <select
+                      value={formData.country || ''}
+                      onChange={(e) => updateFormData('country', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">국가 선택</option>
+                      <option value="KR">한국</option>
+                      <option value="PH">필리핀</option>
+                      <option value="JP">일본</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {texts.region}
+                    </label>
+                    <select
+                      value={formData.region || ''}
+                      onChange={(e) => updateFormData('region', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">지역 선택</option>
+                      <option value="seoul">서울</option>
+                      <option value="cebu">세부</option>
+                      <option value="tokyo">도쿄</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {texts.localLandName}
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.localLandName || ''}
+                      onChange={(e) => updateFormData('localLandName', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {texts.localLandCode}
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.localLandCode || ''}
+                      onChange={(e) => updateFormData('localLandCode', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
+                      readOnly
+                    />
+                  </div>
+                </>
+              )}
             </div>
           </motion.div>
 
-          {/* 투어 정보 */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-white rounded-lg shadow p-6"
-          >
+          {/* 호텔 정보 - CINT 전용 */}
+          {selectedPart === 'CINT' && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-white rounded-lg shadow p-6"
+            >
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">{texts.tourInfo}</h2>
-              <div className="flex items-center space-x-4">
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.airlineIncluded}
-                    onChange={(e) => updateFormData('airlineIncluded', e.target.checked)}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <span className="text-sm font-medium text-gray-700">{texts.airlineIncluded}</span>
-                </label>
-                <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                  {texts.optional}
-                </span>
-              </div>
+              <h2 className="text-xl font-semibold text-gray-900">{texts.hotelInfo}</h2>
+              <span className="text-sm text-green-500 bg-green-50 px-2 py-1 rounded">
+                {texts.editable}
+              </span>
             </div>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -626,14 +717,10 @@ export default function NewBookingPage() {
                 </label>
                 <input
                   type="text"
-                  value={formData.hotelName}
+                  value={formData.hotelName || ''}
                   onChange={(e) => updateFormData('hotelName', e.target.value)}
-                  placeholder={lang === 'ko' ? "호텔명 (선택사항)" : "Hotel Name (Optional)"}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.hotelName ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                {errors.hotelName && <p className="text-red-500 text-sm mt-1">{errors.hotelName}</p>}
               </div>
               
               <div>
@@ -642,14 +729,10 @@ export default function NewBookingPage() {
                 </label>
                 <input
                   type="text"
-                  value={formData.roomType}
+                  value={formData.roomType || ''}
                   onChange={(e) => updateFormData('roomType', e.target.value)}
-                  placeholder={lang === 'ko' ? "룸 타입 (선택사항)" : "Room Type (Optional)"}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.roomType ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                {errors.roomType && <p className="text-red-500 text-sm mt-1">{errors.roomType}</p>}
               </div>
               
               <div>
@@ -659,81 +742,272 @@ export default function NewBookingPage() {
                 <input
                   type="number"
                   min="1"
-                  value={formData.roomCount}
+                  value={formData.roomCount || 1}
                   onChange={(e) => updateFormData('roomCount', parseInt(e.target.value))}
-                  placeholder={lang === 'ko' ? "룸 수 (선택사항)" : "Room Count (Optional)"}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {texts.airline}
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={formData.airIncluded || false}
+                  onChange={(e) => updateFormData('airIncluded', e.target.checked)}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label className="text-sm font-medium text-gray-700">
+                  {texts.airlineIncluded}
                 </label>
-                <select
-                  value={formData.airline}
-                  onChange={(e) => updateFormData('airline', e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.airline ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                >
-                  <option value="">{lang === 'ko' ? "항공사 선택 (선택사항)" : "Select Airline (Optional)"}</option>
-                  {AIRLINES.map((airline) => (
-                    <option key={airline.code} value={airline.name[lang]}>
-                      {airline.name[lang]} ({airline.code})
-                    </option>
-                  ))}
-                </select>
-                {errors.airline && <p className="text-red-500 text-sm mt-1">{errors.airline}</p>}
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {texts.airlineRoute1}
-                </label>
-                <select
-                  value={formData.airlineRoute1}
-                  onChange={(e) => updateFormData('airlineRoute1', e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.airlineRoute1 ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                >
-                  <option value="">{lang === 'ko' ? "출발 루트 선택 (선택사항)" : "Select Departure Route (Optional)"}</option>
-                  {DEPARTURE_AIRPORTS.map((departure) => 
-                    AIRPORTS[formData.country as keyof typeof AIRPORTS]?.map((arrival) => (
-                      <option key={`${departure.code}-${arrival.code}`} value={`${departure.code}-${arrival.code}`}>
-                        {departure.code}-{arrival.code} ({departure.name[lang]} → {arrival.name[lang]})
-                      </option>
-                    ))
-                  ).flat()}
-                </select>
-                {errors.airlineRoute1 && <p className="text-red-500 text-sm mt-1">{errors.airlineRoute1}</p>}
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {texts.airlineRoute2}
-                </label>
-                <select
-                  value={formData.airlineRoute2}
-                  onChange={(e) => updateFormData('airlineRoute2', e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.airlineRoute2 ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                >
-                  <option value="">{lang === 'ko' ? "리턴 루트 선택 (선택사항)" : "Select Return Route (Optional)"}</option>
-                  {AIRPORTS[formData.country as keyof typeof AIRPORTS]?.map((departure) => 
-                    DEPARTURE_AIRPORTS.map((arrival) => (
-                      <option key={`${departure.code}-${arrival.code}`} value={`${departure.code}-${arrival.code}`}>
-                        {departure.code}-{arrival.code} ({departure.name[lang]} → {arrival.name[lang]})
-                      </option>
-                    ))
-                  ).flat()}
-                </select>
-                {errors.airlineRoute2 && <p className="text-red-500 text-sm mt-1">{errors.airlineRoute2}</p>}
               </div>
             </div>
           </motion.div>
+          )}
+
+          {/* 항공 정보 - AIR/CINT 공통 */}
+          {(selectedPart === 'AIR' || selectedPart === 'CINT') && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="bg-white rounded-lg shadow p-6"
+            >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">{texts.airlineInfo}</h2>
+              <span className="text-sm text-green-500 bg-green-50 px-2 py-1 rounded">
+                {texts.editable}
+              </span>
+            </div>
+            
+            <div className="space-y-6">
+              {/* 항공사 선택 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {texts.airlineSelection}
+                </label>
+                <select
+                  value={formData.airline || ''}
+                  onChange={(e) => updateFormData('airline', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
+                >
+                  <option value="">{texts.airlineSelection} 선택</option>
+                  <option value="LJ">진에어 (LJ)</option>
+                  <option value="BX">에어부산 (BX)</option>
+                  <option value="7C">제주항공 (7C)</option>
+                  <option value="KE">대한항공 (KE)</option>
+                  <option value="OZ">아시아나항공 (OZ)</option>
+                  <option value="TW">티웨이항공 (TW)</option>
+                  <option value="RS">에어서울 (RS)</option>
+                  <option value="PR">필리핀항공 (PR)</option>
+                  <option value="5J">세부퍼시픽 (5J)</option>
+                </select>
+              </div>
+
+              {/* 여정 유형 선택 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {texts.flightTypeSelection}
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => updateFormData('flightType', 'oneway')}
+                    className={`px-4 py-3 border-2 rounded-lg text-center font-medium transition-colors ${
+                      formData.flightType === 'oneway'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-300 hover:border-blue-300'
+                    }`}
+                  >
+                    {texts.oneway}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateFormData('flightType', 'roundtrip')}
+                    className={`px-4 py-3 border-2 rounded-lg text-center font-medium transition-colors ${
+                      formData.flightType === 'roundtrip'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-300 hover:border-blue-300'
+                    }`}
+                  >
+                    {texts.roundtrip}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateFormData('flightType', 'multicity')}
+                    className={`px-4 py-3 border-2 rounded-lg text-center font-medium transition-colors ${
+                      formData.flightType === 'multicity'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-300 hover:border-blue-300'
+                    }`}
+                  >
+                    {texts.multicity}
+                  </button>
+                </div>
+              </div>
+
+              {/* 여정 정보 */}
+              {formData.flightType && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">
+                    {texts.flightInfo}
+                  </h3>
+                  
+                  {formData.flightType === 'oneway' && (
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            {texts.departure}
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="예: ICN (인천)"
+                            value={formData.departureRoute || ''}
+                            onChange={(e) => updateFormData('departureRoute', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            {texts.arrival}
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="예: CEB (세부)"
+                            value={formData.returnRoute || ''}
+                            onChange={(e) => updateFormData('returnRoute', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {formData.flightType === 'roundtrip' && (
+                    <div className="space-y-4">
+                      <div className="bg-blue-50 p-4 rounded-lg">
+                        <h4 className="text-sm font-medium text-blue-800 mb-3">{texts.outbound}</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              {texts.departure}
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="예: ICN (인천)"
+                              value={formData.departureRoute || ''}
+                              onChange={(e) => updateFormData('departureRoute', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              {texts.arrival}
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="예: CEB (세부)"
+                              value={formData.returnRoute || ''}
+                              onChange={(e) => updateFormData('returnRoute', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-green-50 p-4 rounded-lg">
+                        <h4 className="text-sm font-medium text-green-800 mb-3">{texts.inbound}</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              {texts.departure}
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="예: CEB (세부)"
+                              value={formData.returnDepartureRoute || ''}
+                              onChange={(e) => updateFormData('returnDepartureRoute', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              {texts.arrival}
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="예: ICN (인천)"
+                              value={formData.returnArrivalRoute || ''}
+                              onChange={(e) => updateFormData('returnArrivalRoute', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {formData.flightType === 'multicity' && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-lg font-semibold text-gray-900">{texts.flightSegments}</h4>
+                        <button
+                          type="button"
+                          onClick={addFlightSegment}
+                          className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                          + {texts.addSegment}
+                        </button>
+                      </div>
+                      
+                      {flightSegments.map((segment, index) => (
+                        <div key={index} className="bg-purple-50 p-4 rounded-lg">
+                          <div className="flex items-center justify-between mb-3">
+                            <h5 className="text-sm font-medium text-purple-800">{texts.segment} {index + 1}</h5>
+                            {flightSegments.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeFlightSegment(index)}
+                                className="text-red-600 hover:text-red-800 text-sm"
+                              >
+                                {texts.removeSegment}
+                              </button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {texts.departure}
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="예: ICN (인천)"
+                                value={segment.departure}
+                                onChange={(e) => updateFlightSegment(index, 'departure', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {texts.arrival}
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="예: CEB (세부)"
+                                value={segment.arrival}
+                                onChange={(e) => updateFlightSegment(index, 'arrival', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </motion.div>
+          )}
 
           {/* 인원 정보 */}
           <motion.div
@@ -742,8 +1016,14 @@ export default function NewBookingPage() {
             transition={{ delay: 0.2 }}
             className="bg-white rounded-lg shadow p-6"
           >
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">{texts.passengerInfo}</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">{texts.passengerInfo}</h2>
+              <span className="text-sm text-green-500 bg-green-50 px-2 py-1 rounded">
+                {texts.editable}
+              </span>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {texts.adults}
@@ -751,13 +1031,10 @@ export default function NewBookingPage() {
                 <input
                   type="number"
                   min="1"
-                  value={formData.adults}
+                  value={formData.adults || 1}
                   onChange={(e) => updateFormData('adults', parseInt(e.target.value))}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    errors.adults ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-                {errors.adults && <p className="text-red-500 text-sm mt-1">{errors.adults}</p>}
               </div>
               
               <div>
@@ -767,7 +1044,7 @@ export default function NewBookingPage() {
                 <input
                   type="number"
                   min="0"
-                  value={formData.children}
+                  value={formData.children || 0}
                   onChange={(e) => updateFormData('children', parseInt(e.target.value))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -780,8 +1057,21 @@ export default function NewBookingPage() {
                 <input
                   type="number"
                   min="0"
-                  value={formData.infants}
+                  value={formData.infants || 0}
                   onChange={(e) => updateFormData('infants', parseInt(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {texts.foc}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.foc || 0}
+                  onChange={(e) => updateFormData('foc', parseInt(e.target.value))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -791,7 +1081,7 @@ export default function NewBookingPage() {
                   {texts.totalPax}
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   value={calculateTotalPax()}
                   disabled
                   className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
@@ -813,42 +1103,35 @@ export default function NewBookingPage() {
                 {texts.laterInput}
               </span>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {texts.costPrice}
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.costPrice}
-                    onChange={(e) => updateFormData('costPrice', parseFloat(e.target.value))}
-                    placeholder={lang === 'ko' ? "원가 (추후 입력 가능)" : "Cost Price (Can be input later)"}
-                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.costPrice ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  />
-                  {errors.costPrice && <p className="text-red-500 text-sm mt-1">{errors.costPrice}</p>}
-                </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {texts.costPrice}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.costPrice || ''}
+                  onChange={(e) => updateFormData('costPrice', parseFloat(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
               
-                              <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {texts.markup}
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.markup}
-                    onChange={(e) => updateFormData('markup', parseFloat(e.target.value))}
-                    placeholder={lang === 'ko' ? "마크업 (추후 입력 가능)" : "Markup (Can be input later)"}
-                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      errors.markup ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  />
-                  {errors.markup && <p className="text-red-500 text-sm mt-1">{errors.markup}</p>}
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {texts.markup}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.markup || ''}
+                  onChange={(e) => updateFormData('markup', parseFloat(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -864,7 +1147,154 @@ export default function NewBookingPage() {
             </div>
           </motion.div>
 
-
+          {/* 고객 정보 */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="bg-white rounded-lg shadow p-6"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">{texts.customerInfo}</h2>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                  {texts.laterInput}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormData((prev: FormData) => ({
+                      ...prev,
+                      customers: [...(prev.customers || []), { firstName: '', lastName: '', gender: '', nationality: '', passportNumber: '', passportExpiry: '' }]
+                    }));
+                  }}
+                  className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  {texts.addCustomer}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCustomerModal(true)}
+                  className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  {texts.searchCustomer}
+                </button>
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              {formData.customers?.map((customer: Customer, index: number) => (
+                <div key={index} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-medium text-gray-700">고객 {index + 1}</h3>
+                    <div className="flex items-center space-x-2">
+                      {(!customer.firstName && !customer.lastName) && (
+                        <button
+                          type="button"
+                          onClick={() => setShowCustomerModal(true)}
+                          className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                        >
+                          {texts.customerSelection}
+                        </button>
+                      )}
+                      {formData.customers && formData.customers.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeCustomer(index)}
+                          className="text-red-600 hover:text-red-800 text-sm"
+                        >
+                          {texts.removeCustomer}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {(!customer.firstName && !customer.lastName) ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>{texts.enterCustomerInfo}</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {texts.lastName}
+                        </label>
+                        <input
+                          type="text"
+                          value={customer.lastName || ''}
+                          onChange={(e) => updateCustomer(index, 'lastName', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {texts.firstName}
+                        </label>
+                        <input
+                          type="text"
+                          value={customer.firstName || ''}
+                          onChange={(e) => updateCustomer(index, 'firstName', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {texts.gender}
+                        </label>
+                        <select
+                          value={customer.gender || ''}
+                          onChange={(e) => updateCustomer(index, 'gender', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">성별 선택</option>
+                          <option value="M">남성</option>
+                          <option value="F">여성</option>
+                        </select>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {texts.nationality}
+                        </label>
+                        <input
+                          type="text"
+                          value={customer.nationality || ''}
+                          onChange={(e) => updateCustomer(index, 'nationality', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {texts.passportNumber}
+                        </label>
+                        <input
+                          type="text"
+                          value={customer.passportNumber || ''}
+                          onChange={(e) => updateCustomer(index, 'passportNumber', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {texts.passportExpiry}
+                        </label>
+                        <input
+                          type="date"
+                          value={customer.passportExpiry || ''}
+                          onChange={(e) => updateCustomer(index, 'passportExpiry', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </motion.div>
 
           {/* 비고 */}
           <motion.div
@@ -873,12 +1303,19 @@ export default function NewBookingPage() {
             transition={{ delay: 0.5 }}
             className="bg-white rounded-lg shadow p-6"
           >
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">{texts.remarks}</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">{texts.remarks}</h2>
+              <span className="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                {texts.optional}
+              </span>
+            </div>
+            
             <textarea
-              value={formData.remarks}
+              value={formData.remarks || ''}
               onChange={(e) => updateFormData('remarks', e.target.value)}
               rows={4}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="비고 사항을 입력하세요..."
             />
           </motion.div>
 
@@ -904,6 +1341,18 @@ export default function NewBookingPage() {
             </button>
           </motion.div>
         </form>
+
+        <CustomerSelectionModal
+          isOpen={showCustomerModal}
+          onClose={() => setShowCustomerModal(false)}
+          onSelect={handleCustomerSelect}
+        />
+
+        <TASelectionModal
+          isOpen={showTASelectionModal}
+          onClose={() => setShowTASelectionModal(false)}
+          onSelect={handleTASelect}
+        />
       </main>
     </div>
   );
