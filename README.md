@@ -29,6 +29,7 @@ npm run dev
 `.env.local` 파일을 생성하고 다음 변수들을 설정하세요:
 
 ```
+# Firebase 설정
 NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
 NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_auth_domain
 NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
@@ -37,7 +38,16 @@ NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
 FIREBASE_PRIVATE_KEY=your_private_key
 FIREBASE_CLIENT_EMAIL=your_client_email
+
+# Google Maps API
 GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+
+# 환율 API 설정
+NEXT_PUBLIC_EXCHANGE_RATE_API_URL=https://api.exchangerate.host/live
+NEXT_PUBLIC_EXCHANGE_RATE_API_KEY=your_exchange_rate_api_key
+
+# Cron Job 시크릿 (자동 환율 업데이트용)
+CRON_SECRET=your_cron_secret_key
 ```
 
 ## 프로젝트 구조
@@ -64,6 +74,16 @@ cdc-travel/
 - 원본 비율 유지
 - 품질 최적화
 
+## 환율 자동 업데이트
+
+매일 필리핀 시간 오전 9시에 자동으로 환율 정보를 업데이트합니다:
+
+- Vercel Cron Jobs를 사용한 자동 스케줄링
+- 필리핀 시간대 (Asia/Manila) 기준
+- USD, KRW, PHP 통화 지원
+- 관리자 페이지에서 수동 업데이트 가능
+- 실시간 환율 상태 모니터링
+
 ## 관리자 기능
 
 - 상품 관리 (추가/편집/삭제)
@@ -71,6 +91,8 @@ cdc-travel/
 - 배너 관리
 - 사용자 관리
 - 파일 업로드 및 최적화
+- 환율 자동 업데이트 관리
+- 시스템 설정 및 모니터링
 
 ## 개발 가이드
 

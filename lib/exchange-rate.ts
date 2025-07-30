@@ -9,9 +9,12 @@ export class ExchangeRateService {
   /**
    * 오늘 날짜의 환율 데이터를 가져옵니다.
    * DB에 저장된 데이터가 있으면 사용하고, 없으면 API 호출 후 저장합니다.
+   * 필리핀 시간 기준으로 작동합니다.
    */
   static async getTodayExchangeRate(): Promise<ExchangeRateDisplay> {
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    // 필리핀 시간 기준으로 오늘 날짜 계산
+    const phTime = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Manila"}));
+    const today = phTime.toISOString().split('T')[0]; // YYYY-MM-DD
     
     try {
       // 1. DB에서 오늘 날짜의 환율 데이터 조회
@@ -65,7 +68,9 @@ export class ExchangeRateService {
       throw new Error('API 응답이 성공하지 않았습니다.');
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    // 필리핀 시간 기준으로 오늘 날짜 계산
+    const phTime = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Manila"}));
+    const today = phTime.toISOString().split('T')[0];
     
     // KRWPHP 계산 (USDKRW / USDPHP)
     const krwphp = data.quotes.USDKRW / data.quotes.USDPHP;
@@ -167,9 +172,12 @@ export class ExchangeRateService {
 
   /**
    * 수동으로 환율을 업데이트합니다 (관리자용).
+   * 필리핀 시간 기준으로 작동합니다.
    */
   static async updateExchangeRate(): Promise<ExchangeRateDisplay> {
-    const today = new Date().toISOString().split('T')[0];
+    // 필리핀 시간 기준으로 오늘 날짜 계산
+    const phTime = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Manila"}));
+    const today = phTime.toISOString().split('T')[0];
     const apiRate = await this.fetchExchangeRateFromAPI();
     await this.saveExchangeRateToDB(today, apiRate);
     return this.convertToDisplayFormat(apiRate);

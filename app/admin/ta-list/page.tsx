@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useLanguage } from "../../../components/LanguageContext";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { auth } from "../../../lib/firebase";
 import { DataTable } from '@/components/ui/data-table';
@@ -42,6 +43,7 @@ interface TA {
 
 export default function TAListPage() {
   const { lang } = useLanguage();
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [tas, setTas] = useState<TA[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -128,6 +130,11 @@ export default function TAListPage() {
     }
   };
 
+  // 테이블 행 클릭 시 상세보기 페이지로 이동
+  const handleRowClick = (ta: TA) => {
+    router.push(`/admin/ta-list/${ta.id}`);
+  };
+
 
 
 
@@ -153,25 +160,27 @@ export default function TAListPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      {/* 검색 */}
-      <div className="mb-6 space-y-4">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder={TEXT.search[lang]}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+    <div className="min-h-screen bg-gray-50">
+      <main className="px-4 sm:px-6 lg:px-8 py-8">
+        {/* 검색 */}
+        <div className="mb-6 space-y-4">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder={TEXT.search[lang]}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
         </div>
 
-      </div>
-
-      {/* TA 목록 테이블 */}
-      <div className="bg-white rounded-lg shadow">
+        {/* TA 목록 테이블 */}
+        <div className="bg-white rounded-lg shadow">
         <DataTable 
           data={filteredTAs}
+          onRowClick={handleRowClick}
           columns={[
             {
               key: "logo",
@@ -273,12 +282,12 @@ export default function TAListPage() {
               variant: "ghost",
             },
           ]}
-          searchKey="companyName"
-          searchPlaceholder="회사명, TA코드, 이메일로 검색..."
+          searchKey=""
           itemsPerPage={10}
           emptyMessage={TEXT.noData[lang]}
         />
-      </div>
+        </div>
+      </main>
     </div>
   );
 } 

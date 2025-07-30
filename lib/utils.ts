@@ -180,3 +180,52 @@ export const airlineLogoMap: Record<string, string> = {
   '에어서울': '/images/airline/RS.png',
   'Air Seoul': '/images/airline/RS.png',
 }; 
+
+/**
+ * 필리핀 시간대 (Asia/Manila) 기준으로 현재 시간을 가져옵니다.
+ */
+export function getPhilippineTime(): Date {
+  return new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Manila"}));
+}
+
+/**
+ * 필리핀 시간 기준으로 오늘 날짜를 YYYY-MM-DD 형식으로 반환합니다.
+ */
+export function getPhilippineDate(): string {
+  const phTime = getPhilippineTime();
+  return phTime.toISOString().split('T')[0];
+}
+
+/**
+ * 필리핀 시간 기준으로 현재 시간이 오전 9시인지 확인합니다.
+ */
+export function isPhilippineTime9AM(): boolean {
+  const phTime = getPhilippineTime();
+  return phTime.getHours() === 9 && phTime.getMinutes() < 5; // 5분 여유
+}
+
+/**
+ * 필리핀 시간 기준으로 오늘 환율이 이미 업데이트되었는지 확인합니다.
+ */
+export function isTodayExchangeRateUpdated(): boolean {
+  const phTime = getPhilippineTime();
+  const today = phTime.toISOString().split('T')[0];
+  
+  // 로컬 스토리지에서 확인 (클라이언트 사이드에서만)
+  if (typeof window !== 'undefined') {
+    const lastUpdate = localStorage.getItem('lastExchangeRateUpdate');
+    return lastUpdate === today;
+  }
+  
+  return false;
+}
+
+/**
+ * 환율 업데이트 완료를 기록합니다.
+ */
+export function markExchangeRateUpdated(): void {
+  if (typeof window !== 'undefined') {
+    const today = getPhilippineDate();
+    localStorage.setItem('lastExchangeRateUpdate', today);
+  }
+} 
