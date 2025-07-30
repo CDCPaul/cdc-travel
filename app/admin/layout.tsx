@@ -42,10 +42,15 @@ export default function AdminUILayout({ children }: { children: React.ReactNode 
         tokenRefreshCleanupRef.current();
       }
       
-      // 토큰 자동 갱신 설정 (간소화됨)
+      // 토큰 자동 갱신 설정 (더 안정적인 방식)
       console.log('🔄 토큰 자동 갱신 설정 시작...');
-      const unsubscribe = setupTokenRefresh();
-      tokenRefreshCleanupRef.current = unsubscribe;
+      try {
+        const unsubscribe = setupTokenRefresh();
+        tokenRefreshCleanupRef.current = unsubscribe;
+      } catch (error) {
+        console.error('❌ 토큰 갱신 설정 실패:', error);
+        // 토큰 갱신 설정 실패해도 페이지는 계속 사용 가능
+      }
       setIsLoading(false);
     }
 
@@ -138,6 +143,7 @@ function getPageTitle(pathname: string, lang: 'ko' | 'en'): string {
     '/admin/optimize-images': { ko: '이미지 최적화', en: 'Image Optimization' },
     '/admin/travelers': { ko: '여행객 관리', en: 'Traveler Management' },
     '/admin/travelers/new': { ko: '새 여행객 등록', en: 'New Traveler Registration' },
+    '/admin/flights': { ko: '항공정보 관리', en: 'Flight Information Management' },
   };
   
   // 정확한 경로 먼저 확인
@@ -193,6 +199,7 @@ function getPageSubtitle(pathname: string, lang: 'ko' | 'en'): string {
     '/admin/optimize-images': { ko: '이미지 최적화 도구', en: 'Image Optimization Tool' },
     '/admin/travelers': { ko: '여행객 관리', en: 'Traveler Management' },
     '/admin/travelers/new': { ko: '새로운 여행객을 등록합니다', en: 'Register a new traveler' },
+    '/admin/flights': { ko: '항공 스케줄 및 루트 관리', en: 'Flight Schedule and Route Management' },
   };
   
   // 정확한 경로 먼저 확인
@@ -309,6 +316,18 @@ function getPageActions(pathname: string, lang: 'ko' | 'en'): React.ReactNode {
           <PlusIcon className="h-4 w-4 mr-2" />
           {lang === 'ko' ? '새 레터' : 'New Letter'}
         </Link>
+      );
+    
+    case '/admin/flights':
+      return (
+        <div className="flex items-center space-x-3">
+          <button className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">
+            {lang === 'ko' ? '항공사별 일정보기' : 'View by Airline'}
+          </button>
+          <button className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700">
+            {lang === 'ko' ? '루트별 항공사 확인' : 'Check Airlines by Route'}
+          </button>
+        </div>
       );
     
     case '/admin/ta-list':

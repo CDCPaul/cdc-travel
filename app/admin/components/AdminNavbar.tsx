@@ -109,6 +109,7 @@ const SITE_SETTINGS_MENU = {
 
 const DB_MENU = {
   ko: [
+    { label: "항공정보 관리", href: "/admin/flights" },
     { label: "상품 관리", href: "/admin/products" },
     { label: "스팟 관리", href: "/admin/spots" },
     { label: "포함사항 관리", href: "/admin/include-items" },
@@ -117,6 +118,7 @@ const DB_MENU = {
     { label: "여행객 관리", href: "/admin/travelers" },
   ],
   en: [
+    { label: "Flight Information", href: "/admin/flights" },
     { label: "Product Management", href: "/admin/products" },
     { label: "Spot Management", href: "/admin/spots" },
     { label: "Included Items", href: "/admin/include-items" },
@@ -164,7 +166,7 @@ export default function AdminNavbar() {
     setBookingOpen(currentPath.startsWith("/admin/bookings"));
     setAboutUsOpen(currentPath.startsWith("/admin/about-us"));
     setTaOpen(["/admin/ta-list", "/admin/posters", "/admin/itineraries", "/admin/letters"].some(path => currentPath.startsWith(path)));
-    setDbOpen(["/admin/products", "/admin/spots", "/admin/include-items", "/admin/not-include-items", "/admin/files", "/admin/travelers"].some(path => currentPath.startsWith(path)));
+    setDbOpen(["/admin/flights", "/admin/products", "/admin/spots", "/admin/include-items", "/admin/not-include-items", "/admin/files", "/admin/travelers"].some(path => currentPath.startsWith(path)));
     setUserOpen(["/admin/users", "/admin/migrate-users"].some(path => currentPath.startsWith(path)));
     setSiteSettingsOpen(["/admin/banners", "/admin/settings"].some(path => currentPath.startsWith(path)));
   }, [pathname]);

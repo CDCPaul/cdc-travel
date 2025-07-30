@@ -76,15 +76,31 @@ export const refreshToken = async (forceRefresh: boolean = false): Promise<strin
 };
 
 /**
- * 토큰 자동 갱신을 설정하는 함수 (간소화됨)
- * Firebase SDK는 내부적으로 토큰을 자동으로 갱신하므로 별도 설정이 불필요
+ * 토큰 자동 갱신을 설정하는 함수 (실제 구현)
+ * 1시간마다 토큰을 갱신하고 쿠키에 저장
  */
 export const setupTokenRefresh = () => {
-  console.log('🔐 토큰 자동 갱신은 Firebase SDK가 처리하므로 별도 설정이 불필요합니다.');
+  console.log('🔄 토큰 자동 갱신 설정 시작...');
   
-  // 정리 함수 반환 (아무것도 하지 않음)
+  // 1시간마다 토큰 갱신
+  const interval = setInterval(async () => {
+    const user = auth.currentUser;
+    if (user) {
+      try {
+        const newToken = await getIdToken(user, false); // 강제 갱신 비활성화
+        setAuthCookie(newToken);
+        console.log('✅ 토큰 자동 갱신 완료:', user.email);
+      } catch (error) {
+        console.error('❌ 토큰 자동 갱신 실패:', error);
+        // 갱신 실패 시에도 에러를 던지지 않음
+      }
+    }
+  }, 60 * 60 * 1000); // 1시간 (60분 * 60초 * 1000ms)
+
+  // 정리 함수 반환
   return () => {
-    console.log('🧹 토큰 갱신 설정 정리 (불필요)');
+    console.log('🧹 토큰 자동 갱신 정리...');
+    clearInterval(interval);
   };
 };
 
@@ -104,26 +120,31 @@ export const removeGoogleAccessTokenCookie = () => {
 };
 
 /**
- * 인증 상태를 확인하는 함수 (개선됨)
+ * 현재 인증 상태를 확인하는 함수 (서버 측)
  * @returns Promise<User | null> - 인증된 사용자 또는 null
  */
 export const checkAuth = async (): Promise<User | null> => {
-  // 1. 먼저 현재 사용자 확인 (즉시 반환)
-  const currentUser = auth.currentUser;
-  if (currentUser) {
-    console.log('✅ checkAuth: 현재 사용자 확인됨', currentUser.email);
-    return currentUser;
-  }
+  try {
+    // 1. 먼저 현재 사용자 확인 (즉시 반환)
+    const currentUser = auth.currentUser;
+    if (currentUser) {
+      console.log('✅ checkAuth: 현재 사용자 확인됨', currentUser.email);
+      return currentUser;
+    }
 
-  // 2. 현재 사용자가 없으면 인증 상태 변경 대기
-  console.log('⏳ checkAuth: 인증 상태 변경 대기 중...');
-  return new Promise((resolve) => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      unsubscribe();
-      console.log('✅ checkAuth: 인증 상태 확인 완료', user?.email || '로그아웃');
-      resolve(user);
+    // 2. 현재 사용자가 없으면 인증 상태 변경 대기
+    console.log('⏳ checkAuth: 인증 상태 변경 대기 중...');
+    return new Promise((resolve) => {
+      const unsubscribe = onAuthStateChanged(auth, (user) => {
+        unsubscribe();
+        console.log('✅ checkAuth: 인증 상태 확인 완료', user?.email || '로그아웃');
+        resolve(user);
+      });
     });
-  });
+  } catch (error) {
+    console.error('❌ checkAuth 오류:', error);
+    return null;
+  }
 };
 
 /**
