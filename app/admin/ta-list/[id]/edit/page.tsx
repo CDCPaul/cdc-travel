@@ -205,11 +205,20 @@ export default function EditTAPage() {
         contactPersons: contactPersons.filter(person => person.name.trim() && person.phone.trim() && person.email.trim())
       };
 
+      // 인증 토큰 가져오기
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error('로그인이 필요합니다.');
+      }
+      
+      const idToken = await user.getIdToken();
+      
       // API 호출
       const response = await fetch(`/api/ta/${taId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
         },
         body: JSON.stringify(taData)
       });

@@ -6,6 +6,11 @@ import { AuthProvider } from "../context/AuthContext";
 export const metadata: Metadata = {
   title: "CDC Travel",
   description: "CDC Travel - Your trusted travel partner",
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon.ico',
+    apple: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({
