@@ -114,22 +114,28 @@ async function createTAOverlayImage(ta: {
         <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
           <feDropShadow dx="2" dy="2" stdDeviation="3" flood-color="rgba(0,0,0,0.3)"/>
         </filter>
+        <style>
+          @font-face {
+            font-family: 'Arial';
+            src: url('data:font/ttf;base64,') format('truetype');
+          }
+        </style>
       </defs>
       
       <!-- 회사명 (오른쪽 정렬) -->
-      <text x="${width - 100}" y="100" font-family="Arial, Helvetica, sans-serif" font-size="90" font-weight="bold" 
+      <text x="${width - 100}" y="100" font-family="Arial, sans-serif" font-size="90" font-weight="bold" 
             fill="#333333" filter="url(#shadow)" text-anchor="end">
         ${escapeHtml(ta.companyName)}
       </text>
       
       <!-- 전화번호 (오른쪽 정렬) -->
-      <text x="${width - 100}" y="160" font-family="Arial, Helvetica, sans-serif" font-size="40" 
+      <text x="${width - 100}" y="160" font-family="Arial, sans-serif" font-size="40" 
             fill="#666666" filter="url(#shadow)" text-anchor="end">
         📞 ${escapeHtml(ta.phone)}
       </text>
       
       <!-- 이메일 (오른쪽 정렬) -->
-      <text x="${width - 100}" y="220" font-family="Arial, Helvetica, sans-serif" font-size="40" 
+      <text x="${width - 100}" y="220" font-family="Arial, sans-serif" font-size="40" 
             fill="#666666" filter="url(#shadow)" text-anchor="end">
         ✉️ ${escapeHtml(ta.email)}
       </text>
