@@ -1,13 +1,13 @@
 {
   "functions": {
     "app/api/ta/route.ts": {
-      "runtime": "@vercel/node@18"
+      "runtime": "nodejs18.x"
     },
     "app/api/ta/[id]/route.ts": {
-      "runtime": "@vercel/node@18"
+      "runtime": "nodejs18.x"
     },
     "app/api/ta/[id]/regenerate-overlay/route.ts": {
-      "runtime": "@vercel/node@18"
+      "runtime": "nodejs18.x"
     }
   },
   "crons": [
