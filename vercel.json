@@ -1,15 +1,4 @@
 {
-  "functions": {
-    "app/api/ta/route.ts": {
-      "runtime": "nodejs18.x"
-    },
-    "app/api/ta/[id]/route.ts": {
-      "runtime": "nodejs18.x"
-    },
-    "app/api/ta/[id]/regenerate-overlay/route.ts": {
-      "runtime": "nodejs18.x"
-    }
-  },
   "crons": [
     {
       "path": "/api/exchange-rate/auto-update",
