@@ -253,8 +253,19 @@ export default function TADetailPage() {
     
     if (confirm("정말 삭제하시겠습니까?")) {
       try {
+        const user = auth.currentUser;
+        if (!user) {
+          alert('로그인이 필요합니다.');
+          return;
+        }
+
+        const idToken = await user.getIdToken();
         const response = await fetch(`/api/ta/${ta.id}`, {
           method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          }
         });
 
         const result = await response.json();

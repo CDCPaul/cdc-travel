@@ -545,9 +545,9 @@ export default function SendEmailPage() {
         console.error('활동 기록 실패:', error);
       }
       
-              const successCount = result.results?.filter((r: { success: boolean }) => r.success).length || 0;
-      const totalCount = result.results?.length || 0;
-      alert(`${TEXT.sendSuccess[lang]}\n발송된 이메일: ${successCount}개 / ${totalCount}개\n발송 시간: ${duration}ms (${(duration / 1000).toFixed(2)}초)`);
+              const sentCount = result.sentCount || 0;
+      const totalCount = selectedTAs.length;
+      alert(`${TEXT.sendSuccess[lang]}\n발송된 이메일: ${sentCount}개 / ${totalCount}개\n발송 시간: ${duration}ms (${(duration / 1000).toFixed(2)}초)`);
       
       // 성공 후 페이지 이동
       router.push("/admin/ta-list");

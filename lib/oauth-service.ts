@@ -18,7 +18,7 @@ export class OAuthService {
   /**
    * 토큰을 Firestore에 저장
    */
-  static async saveTokens(userId: string, accessToken: string, refreshToken: string): Promise<void> {
+  static async saveTokens(userId: string, accessToken: string, refreshToken: string = ''): Promise<void> {
     const db = getAdminDb();
     const expiryDate = Date.now() + (3600 * 1000); // 1시간 후
 
