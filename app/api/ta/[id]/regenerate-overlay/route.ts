@@ -3,6 +3,7 @@ import { getAdminDb } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import sharp from 'sharp';
+import { ARIAL_FONT_BASE64 } from '@/lib/fonts';
 
 // HTML 엔티티 이스케이프 함수
 function escapeHtml(text: string): string {
@@ -78,7 +79,7 @@ async function createTAOverlayImage(ta: {
         <style>
           @font-face {
             font-family: 'Arial';
-            src: url('data:font/ttf;base64,') format('truetype');
+            src: url('data:font/ttf;base64,${ARIAL_FONT_BASE64}') format('truetype');
           }
         </style>
       </defs>
