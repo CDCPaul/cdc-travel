@@ -15,6 +15,9 @@ const TEXT = {
   save: { ko: "저장", en: "Save" },
   cancel: { ko: "취소", en: "Cancel" },
   logo: { ko: "로고", en: "Logo" },
+  currentLogo: { ko: "현재 로고", en: "Current Logo" },
+  deleteLogo: { ko: "로고 삭제", en: "Delete Logo" },
+  regenerateOverlay: { ko: "오버레이 이미지 재생성", en: "Regenerate Overlay Image" },
   companyName: { ko: "회사명", en: "Company Name" },
   companyNamePlaceholder: { ko: "회사명을 입력하세요", en: "Enter company name" },
   taCode: { ko: "TA 코드", en: "TA Code" },
@@ -42,7 +45,9 @@ const TEXT = {
   saveError: { ko: "TA 수정에 실패했습니다", en: "Failed to update TA" },
   loading: { ko: "저장중...", en: "Saving..." },
   loadingData: { ko: "데이터를 불러오는 중...", en: "Loading data..." },
-  error: { ko: "데이터를 불러오는데 실패했습니다", en: "Failed to load data" }
+  error: { ko: "데이터를 불러오는데 실패했습니다", en: "Failed to load data" },
+  deleteLogoConfirm: { ko: "로고를 삭제하시겠습니까?", en: "Are you sure you want to delete the logo?" },
+  regenerateOverlayConfirm: { ko: "오버레이 이미지를 재생성하시겠습니까?", en: "Are you sure you want to regenerate the overlay image?" }
 };
 
 interface ContactPerson {
@@ -83,6 +88,8 @@ export default function EditTAPage() {
     { name: "", phone: "", email: "" }
   ]);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isDeletingLogo, setIsDeletingLogo] = useState(false);
+  const [isRegeneratingOverlay, setIsRegeneratingOverlay] = useState(false);
   const imageUploaderRef = useRef<{ uploadToStorage: () => Promise<{ urls: string[] }>; getLocalImages: () => LocalImage[]; clearAll: () => void } | null>(null);
 
   // TA 데이터 불러오기
@@ -135,6 +142,90 @@ export default function EditTAPage() {
     if (contactPersons.length > 1) {
       const newContactPersons = contactPersons.filter((_, i) => i !== index);
       setContactPersons(newContactPersons);
+    }
+  };
+
+  // 로고 삭제 함수
+  const handleDeleteLogo = async () => {
+    if (!confirm(TEXT.deleteLogoConfirm[lang])) {
+      return;
+    }
+
+    setIsDeletingLogo(true);
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error('로그인이 필요합니다.');
+      }
+      
+      const idToken = await user.getIdToken();
+      
+      // 로고 삭제 API 호출
+      const response = await fetch(`/api/ta/${taId}/delete-logo`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${idToken}`
+        }
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.error || '로고 삭제에 실패했습니다.');
+      }
+
+      // 로컬 상태 업데이트
+      setTa(prev => prev ? { ...prev, logo: "" } : null);
+      alert('로고가 성공적으로 삭제되었습니다.');
+    } catch (error) {
+      console.error('로고 삭제 실패:', error);
+      alert(error instanceof Error ? error.message : '로고 삭제에 실패했습니다.');
+    } finally {
+      setIsDeletingLogo(false);
+    }
+  };
+
+  // 오버레이 이미지 재생성 함수
+  const handleRegenerateOverlay = async () => {
+    if (!confirm(TEXT.regenerateOverlayConfirm[lang])) {
+      return;
+    }
+
+    setIsRegeneratingOverlay(true);
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        throw new Error('로그인이 필요합니다.');
+      }
+      
+      const idToken = await user.getIdToken();
+      
+      // 오버레이 재생성 API 호출
+      const response = await fetch(`/api/ta/${taId}/regenerate-overlay`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          companyName,
+          phone,
+          email,
+          logo: ta?.logo || ""
+        })
+      });
+
+      if (!response.ok) {
+        const errorResult = await response.json();
+        throw new Error(errorResult.error || '오버레이 재생성에 실패했습니다.');
+      }
+
+      await response.json();
+      alert('오버레이 이미지가 성공적으로 재생성되었습니다.');
+    } catch (error) {
+      console.error('오버레이 재생성 실패:', error);
+      alert(error instanceof Error ? error.message : '오버레이 재생성에 실패했습니다.');
+    } finally {
+      setIsRegeneratingOverlay(false);
     }
   };
 
@@ -321,14 +412,34 @@ export default function EditTAPage() {
             />
             {ta.logo && (
               <div className="mt-2">
-                <p className="text-sm text-gray-600">현재 로고:</p>
-                <Image 
-                  src={ta.logo} 
-                  alt="현재 로고" 
-                  width={80}
-                  height={80}
-                  className="object-contain rounded mt-1" 
-                />
+                <p className="text-sm text-gray-600">{TEXT.currentLogo[lang]}:</p>
+                <div className="flex items-center gap-4 mt-1">
+                  <Image 
+                    src={ta.logo} 
+                    alt="현재 로고" 
+                    width={80}
+                    height={80}
+                    className="object-contain rounded" 
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleDeleteLogo}
+                      disabled={isDeletingLogo}
+                      className="px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 disabled:opacity-50"
+                    >
+                      {isDeletingLogo ? '삭제중...' : TEXT.deleteLogo[lang]}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRegenerateOverlay}
+                      disabled={isRegeneratingOverlay}
+                      className="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 disabled:opacity-50"
+                    >
+                      {isRegeneratingOverlay ? '재생성중...' : TEXT.regenerateOverlay[lang]}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>

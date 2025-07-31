@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Search, Building, Phone, Mail, MapPin } from 'lucide-react';
 import { useLanguage } from '@/components/LanguageContext';
@@ -66,6 +66,28 @@ export default function TASelectionModal({ isOpen, onClose, onSelect }: TASelect
   const [error, setError] = useState<string | null>(null);
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
 
+  const fetchTAs = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch('/api/ta');
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setTas(data.data || []);
+        setFilteredTAs(data.data || []);
+      } else {
+        setError('TA 목록을 불러오는데 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('TA 목록 조회 실패:', error);
+      setError('TA 목록을 불러오는데 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
       fetchTAs();
@@ -75,7 +97,7 @@ export default function TASelectionModal({ isOpen, onClose, onSelect }: TASelect
       setFilteredTAs([]);
       setError(null);
     }
-  }, [isOpen]);
+  }, [isOpen, fetchTAs]);
 
   useEffect(() => {
     // 이전 타이머 클리어
@@ -109,29 +131,7 @@ export default function TASelectionModal({ isOpen, onClose, onSelect }: TASelect
         clearTimeout(timeout);
       }
     };
-  }, [searchTerm, tas, searchTimeout]);
-
-  const fetchTAs = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const response = await fetch('/api/ta');
-      const data = await response.json();
-      
-      if (response.ok && data.success) {
-        setTas(data.data || []);
-        setFilteredTAs(data.data || []);
-      } else {
-        setError('TA 목록을 불러오는데 실패했습니다.');
-      }
-    } catch (error) {
-      console.error('TA 목록 조회 실패:', error);
-      setError('TA 목록을 불러오는데 실패했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [searchTerm, tas]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSelect = (ta: TA) => {
     onSelect(ta);
@@ -142,9 +142,25 @@ export default function TASelectionModal({ isOpen, onClose, onSelect }: TASelect
     if (!date) return '-';
     
     try {
-      // Firestore Timestamp 객체인 경우
+      // Firestore Timestamp 객체인 경우 (toDate 메서드가 있는 경우)
       if (date && typeof date === 'object' && (date as { toDate?: () => Date }).toDate) {
         return (date as { toDate: () => Date }).toDate().toLocaleDateString('ko-KR');
+      }
+      
+      // Firestore Timestamp 객체인 경우 (_seconds, _nanoseconds 형태)
+      if (date && typeof date === 'object' && (date as { _seconds?: number })._seconds) {
+        const parsedDate = new Date((date as { _seconds: number })._seconds * 1000);
+        if (!isNaN(parsedDate.getTime())) {
+          return parsedDate.toLocaleDateString('ko-KR');
+        }
+      }
+      
+      // 객체인 경우 (seconds, nanoseconds)
+      if (date && typeof date === 'object' && (date as { seconds?: number }).seconds) {
+        const parsedDate = new Date((date as { seconds: number }).seconds * 1000);
+        if (!isNaN(parsedDate.getTime())) {
+          return parsedDate.toLocaleDateString('ko-KR');
+        }
       }
       
       // 문자열인 경우
@@ -158,14 +174,6 @@ export default function TASelectionModal({ isOpen, onClose, onSelect }: TASelect
       // 숫자인 경우 (timestamp)
       if (typeof date === 'number') {
         const parsedDate = new Date(date);
-        if (!isNaN(parsedDate.getTime())) {
-          return parsedDate.toLocaleDateString('ko-KR');
-        }
-      }
-      
-      // 객체인 경우 (seconds, nanoseconds)
-      if (date && typeof date === 'object' && (date as { seconds?: number }).seconds) {
-        const parsedDate = new Date((date as { seconds: number }).seconds * 1000);
         if (!isNaN(parsedDate.getTime())) {
           return parsedDate.toLocaleDateString('ko-KR');
         }

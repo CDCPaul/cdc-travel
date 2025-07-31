@@ -159,71 +159,32 @@ export default function AdminNavbar() {
   // 중복된 onAuthStateChanged 제거 - AuthContext에서 user 정보 사용
   const userEmail = user?.email || null;
 
-  // 현재 경로에 따라 드롭다운 상태 자동 설정
-  useEffect(() => {
-    const currentPath = pathname;
-    
-    setBookingOpen(currentPath.startsWith("/admin/bookings"));
-    setAboutUsOpen(currentPath.startsWith("/admin/about-us"));
-    setTaOpen(["/admin/ta-list", "/admin/posters", "/admin/itineraries", "/admin/letters"].some(path => currentPath.startsWith(path)));
-    setDbOpen(["/admin/flights", "/admin/products", "/admin/spots", "/admin/include-items", "/admin/not-include-items", "/admin/files", "/admin/travelers"].some(path => currentPath.startsWith(path)));
-    setUserOpen(["/admin/users", "/admin/migrate-users"].some(path => currentPath.startsWith(path)));
-    setSiteSettingsOpen(["/admin/banners", "/admin/settings"].some(path => currentPath.startsWith(path)));
-  }, [pathname]);
+  // 드롭다운 상태는 사용자가 직접 클릭할 때만 변경되도록 함
+  // 자동으로 열리는 기능 제거
 
-  // 드롭다운 토글 함수들
+  // 드롭다운 토글 함수들 - 각각 독립적으로 동작
   const toggleAboutUs = () => {
     setAboutUsOpen(!aboutUsOpen);
-    setBookingOpen(false);
-    setTaOpen(false);
-    setDbOpen(false);
-    setUserOpen(false);
-    setSiteSettingsOpen(false);
   };
 
   const toggleBooking = () => {
     setBookingOpen(!bookingOpen);
-    setAboutUsOpen(false);
-    setTaOpen(false);
-    setDbOpen(false);
-    setUserOpen(false);
-    setSiteSettingsOpen(false);
   };
 
   const toggleTa = () => {
     setTaOpen(!taOpen);
-    setBookingOpen(false);
-    setAboutUsOpen(false);
-    setDbOpen(false);
-    setUserOpen(false);
-    setSiteSettingsOpen(false);
   };
 
   const toggleDb = () => {
     setDbOpen(!dbOpen);
-    setBookingOpen(false);
-    setAboutUsOpen(false);
-    setTaOpen(false);
-    setUserOpen(false);
-    setSiteSettingsOpen(false);
   };
 
   const toggleUser = () => {
     setUserOpen(!userOpen);
-    setBookingOpen(false);
-    setAboutUsOpen(false);
-    setTaOpen(false);
-    setDbOpen(false);
-    setSiteSettingsOpen(false);
   };
 
   const toggleSiteSettings = () => {
     setSiteSettingsOpen(!siteSettingsOpen);
-    setBookingOpen(false);
-    setAboutUsOpen(false);
-    setTaOpen(false);
-    setDbOpen(false);
-    setUserOpen(false);
   };
 
   // 외부 클릭 시 드롭다운 닫기
@@ -337,6 +298,7 @@ export default function AdminNavbar() {
                           key={item.href}
                           href={item.href}
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          onClick={() => setAboutUsOpen(false)}
                         >
                           {item.label}
                         </Link>
@@ -372,6 +334,7 @@ export default function AdminNavbar() {
                           key={item.href}
                           href={item.href}
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          onClick={() => setBookingOpen(false)}
                         >
                           {item.label}
                         </Link>
@@ -407,6 +370,7 @@ export default function AdminNavbar() {
                           key={item.href}
                           href={item.href}
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          onClick={() => setDbOpen(false)}
                         >
                           {item.label}
                         </Link>
@@ -442,6 +406,7 @@ export default function AdminNavbar() {
                           key={item.href}
                           href={item.href}
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          onClick={() => setTaOpen(false)}
                         >
                           {item.label}
                         </Link>
@@ -477,6 +442,7 @@ export default function AdminNavbar() {
                           key={item.href}
                           href={item.href}
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          onClick={() => setUserOpen(false)}
                         >
                           {item.label}
                         </Link>
@@ -512,6 +478,7 @@ export default function AdminNavbar() {
                           key={item.href}
                           href={item.href}
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          onClick={() => setSiteSettingsOpen(false)}
                         >
                           {item.label}
                         </Link>

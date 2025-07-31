@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '@/components/LanguageContext';
 import { motion } from 'framer-motion';
+import { apiRequest } from '@/lib/api-client';
 
 const TRAVELER_TEXTS = {
   ko: {
@@ -104,17 +105,23 @@ export default function TravelerManagementPage() {
   }, [travelers, searchTerm]);
 
   useEffect(() => {
+    const initializeAuth = async () => {
+      try {
+        const { setupTokenRefresh } = await import('@/lib/auth');
+        setupTokenRefresh();
+      } catch (error) {
+        console.error('토큰 갱신 설정 실패:', error);
+      }
+    };
+
     const fetchTravelers = async () => {
       try {
-        const response = await fetch('/api/travelers', {
-          credentials: 'include'
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setTravelers(data.travelers || []);
+        const response = await apiRequest<{ travelers: Traveler[] }>('/api/travelers');
+        
+        if (response.success && response.data?.travelers) {
+          setTravelers(response.data.travelers);
         } else {
-          console.error('여행객 목록 조회 실패');
+          console.error('여행객 목록 조회 실패:', response.error);
         }
       } catch (error) {
         console.error('여행객 목록 조회 중 오류:', error);
@@ -123,6 +130,7 @@ export default function TravelerManagementPage() {
       }
     };
 
+    initializeAuth();
     fetchTravelers();
   }, []);
 

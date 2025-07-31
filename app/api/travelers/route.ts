@@ -115,7 +115,10 @@ export async function GET() {
       ...doc.data()
     }));
 
-    return NextResponse.json({ travelers });
+    return NextResponse.json({ 
+      success: true,
+      data: { travelers }
+    });
 
   } catch (error) {
     console.error('여행객 목록 조회 실패:', error);

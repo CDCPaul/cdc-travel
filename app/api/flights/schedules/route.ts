@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     let flights: FlightSchedule[] = [];
 
     if (route && year && month) {
-      // 새로운 구조: 루트별 조회
+      // 새로운 구조: 루트별 조회 (최적화된 버전)
       const yearNum = parseInt(year);
       const monthNum = parseInt(month);
       
@@ -33,17 +33,8 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      // 해당 월의 모든 날짜에 대해 루트별 항공편 조회
-      const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
-      
-      for (let day = 1; day <= daysInMonth; day++) {
-        const dateStr = `${yearNum}-${String(monthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const dayFlights = await NewFlightService.getFlightsByRouteAndDate(route, dateStr);
-        flights.push(...dayFlights);
-      }
-
-      // 출발 시간순으로 정렬
-      flights.sort((a, b) => a.departureTime.localeCompare(b.departureTime));
+      // 최적화된 월별 조회 사용
+      flights = await NewFlightService.getFlightsByRouteAndMonth(route, yearNum, monthNum);
 
     } else if (date) {
       // 특정 날짜의 항공편 조회 (기존 방식)

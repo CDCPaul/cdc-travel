@@ -117,19 +117,19 @@ async function createTAOverlayImage(ta: {
       </defs>
       
       <!-- 회사명 (오른쪽 정렬) -->
-      <text x="${width - 100}" y="100" font-family="Arial, sans-serif" font-size="120" font-weight="bold" 
+      <text x="${width - 100}" y="100" font-family="Arial, Helvetica, sans-serif" font-size="90" font-weight="bold" 
             fill="#333333" filter="url(#shadow)" text-anchor="end">
         ${escapeHtml(ta.companyName)}
       </text>
       
       <!-- 전화번호 (오른쪽 정렬) -->
-      <text x="${width - 100}" y="160" font-family="Arial, sans-serif" font-size="40" 
+      <text x="${width - 100}" y="160" font-family="Arial, Helvetica, sans-serif" font-size="40" 
             fill="#666666" filter="url(#shadow)" text-anchor="end">
         📞 ${escapeHtml(ta.phone)}
       </text>
       
       <!-- 이메일 (오른쪽 정렬) -->
-      <text x="${width - 100}" y="220" font-family="Arial, sans-serif" font-size="40" 
+      <text x="${width - 100}" y="220" font-family="Arial, Helvetica, sans-serif" font-size="40" 
             fill="#666666" filter="url(#shadow)" text-anchor="end">
         ✉️ ${escapeHtml(ta.email)}
       </text>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
-import { verifyIdTokenFromCookies } from '@/lib/auth-server';
+import { getAuth } from 'firebase-admin/auth';
+import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
 import sharp from 'sharp';
 
 // HTML 엔티티 이스케이프 함수
@@ -23,7 +24,7 @@ async function createTAOverlayImage(ta: {
   const width = 2480;
   const height = 250;
   
-  console.log('TA 오버레이 이미지 생성 시작:', ta.companyName);
+  console.log('TA 오버레이 이미지 재생성 시작:', ta.companyName);
   
   // 기본 흰색 배경 생성
   const baseImage = sharp({
@@ -115,130 +116,113 @@ async function createTAOverlayImage(ta: {
     .png()
     .toBuffer();
   
-  console.log('TA 오버레이 이미지 생성 완료, 크기:', finalImage.length);
+  console.log('TA 오버레이 이미지 재생성 완료, 크기:', finalImage.length);
   return finalImage;
 }
 
-export async function GET() {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    // Firebase Admin Firestore 사용
-    const db = getAdminDb();
+    // Firebase Admin SDK를 사용하여 토큰 검증
+    const auth = getAuth(initializeFirebaseAdmin());
     
-    // TA 목록 가져오기
-    const tasRef = db.collection('tas');
-    const querySnapshot = await tasRef.orderBy('createdAt', 'desc').get();
-
-    const tas = querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data()
-    }));
-
-    return NextResponse.json({
-      success: true,
-      data: tas
-    });
-
-  } catch (error) {
-    console.error('TA 목록 조회 실패:', error);
-    return NextResponse.json(
-      { error: 'TA 목록 조회에 실패했습니다.' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    // 인증 확인
-    const authResult = await verifyIdTokenFromCookies(request.cookies);
-    if (!authResult) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Authorization 헤더에서 ID 토큰 추출
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { error: '인증 토큰이 필요합니다.' },
+        { status: 401 }
+      );
     }
 
+    const idToken = authHeader.substring(7);
+    const decodedToken = await auth.verifyIdToken(idToken);
+
+    const { id } = await params;
     const body = await request.json();
-    const { companyName, taCode, phone, address, email, logo, contactPersons } = body;
+    const { companyName, phone, email, logo } = body;
 
     // 필수 필드 검증
-    if (!companyName || !taCode || !phone || !address || !email) {
+    if (!companyName || !phone || !email) {
       return NextResponse.json(
         { error: '필수 필드가 누락되었습니다.' },
-        { status: 400}
+        { status: 400 }
       );
     }
 
     // Firebase Admin Firestore 사용
     const db = getAdminDb();
     
+    // TA 데이터 가져오기
+    const taRef = db.collection('tas').doc(id);
+    const taDoc = await taRef.get();
+
+    if (!taDoc.exists) {
+      return NextResponse.json(
+        { error: 'TA를 찾을 수 없습니다.' },
+        { status: 404 }
+      );
+    }
+
     // TA 오버레이 이미지 생성 및 저장
     let overlayImageUrl = "";
-    if (logo) {
-      try {
-        console.log('TA 오버레이 이미지 생성 시작:', companyName);
-        
-        const overlayBuffer = await createTAOverlayImage({
-          companyName,
-          phone,
-          email,
-          logo
-        });
-        
-        // Firebase Storage에 오버레이 이미지 저장
-        const { getStorage } = await import('firebase-admin/storage');
-        const { initializeFirebaseAdmin } = await import('@/lib/firebase-admin');
-        
-        const storage = getStorage(initializeFirebaseAdmin());
-        const bucket = storage.bucket();
-        
-        const overlayFileName = `ta-overlays/${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.png`;
-        const overlayFile = bucket.file(overlayFileName);
-        
-        await overlayFile.save(overlayBuffer, {
-          metadata: {
-            contentType: 'image/png',
-            cacheControl: 'public, max-age=31536000'
-          }
-        });
-        
-        // 공개 URL 생성
-        await overlayFile.makePublic();
-        overlayImageUrl = `https://storage.googleapis.com/${bucket.name}/${overlayFileName}`;
-        
-        console.log('TA 오버레이 이미지 저장 완료:', overlayImageUrl);
-      } catch (overlayError) {
-        console.error('TA 오버레이 이미지 생성 실패:', overlayError);
-        // 오버레이 생성 실패해도 TA 등록은 계속 진행
-      }
+    try {
+      console.log('TA 오버레이 이미지 재생성 시작:', companyName);
+      
+      const overlayBuffer = await createTAOverlayImage({
+        companyName,
+        phone,
+        email,
+        logo
+      });
+      
+      // Firebase Storage에 오버레이 이미지 저장
+      const { getStorage } = await import('firebase-admin/storage');
+      const storage = getStorage();
+      const bucket = storage.bucket();
+      
+      const overlayFileName = `ta-overlays/${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.png`;
+      const overlayFile = bucket.file(overlayFileName);
+      
+      await overlayFile.save(overlayBuffer, {
+        metadata: {
+          contentType: 'image/png',
+          cacheControl: 'public, max-age=31536000'
+        }
+      });
+      
+      // 공개 URL 생성
+      await overlayFile.makePublic();
+      overlayImageUrl = `https://storage.googleapis.com/${bucket.name}/${overlayFileName}`;
+      
+      console.log('TA 오버레이 이미지 재생성 완료:', overlayImageUrl);
+    } catch (overlayError) {
+      console.error('TA 오버레이 이미지 재생성 실패:', overlayError);
+      return NextResponse.json(
+        { error: '오버레이 이미지 재생성에 실패했습니다.' },
+        { status: 500 }
+      );
     }
-    
-    // TA 데이터 생성
-    const taData = {
-      companyName,
-      taCode,
-      phone,
-      address,
-      email,
-      logo: logo || "",
-      overlayImage: overlayImageUrl, // 새로 추가된 필드
-      contactPersons: contactPersons || [],
-      createdAt: new Date(),
-      createdBy: authResult.uid,
-      updatedAt: new Date(),
-      updatedBy: authResult.uid
-    };
 
-    // Firestore에 저장
-    const docRef = await db.collection('tas').add(taData);
+    // Firestore에서 오버레이 이미지 URL 업데이트
+    await taRef.update({
+      overlayImage: overlayImageUrl,
+      updatedAt: new Date(),
+      updatedBy: decodedToken.uid
+    });
 
     return NextResponse.json({
       success: true,
-      id: docRef.id,
-      message: 'TA가 성공적으로 등록되었습니다.'
+      message: '오버레이 이미지가 성공적으로 재생성되었습니다.',
+      overlayImageUrl
     });
 
   } catch (error) {
-    console.error('TA 저장 실패:', error);
+    console.error('오버레이 재생성 실패:', error);
     return NextResponse.json(
-      { error: 'TA 저장에 실패했습니다.' },
+      { error: '오버레이 재생성에 실패했습니다.' },
       { status: 500 }
     );
   }

@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import CustomerSelectionModal from '@/components/CustomerSelectionModal';
 import TASelectionModal from '@/components/TASelectionModal';
+import FlightSelectionModal from '@/components/FlightSelectionModal';
 
 const BOOKING_FORM_TEXTS = {
   ko: {
@@ -99,6 +100,9 @@ const BOOKING_FORM_TEXTS = {
     addSegment: "구간 추가",
     removeSegment: "삭제",
     segment: "구간",
+    selectAirport: "공항 선택",
+    flightDates: "항공편 날짜",
+    departureDate: "출발일",
     // 섹션 제목 추가
     hotelInfo: "호텔 정보",
     airlineInfo: "항공 정보",
@@ -196,6 +200,9 @@ const BOOKING_FORM_TEXTS = {
     addSegment: "Add Segment",
     removeSegment: "Remove",
     segment: "Segment",
+    selectAirport: "Select Airport",
+    flightDates: "Flight Dates",
+    departureDate: "Departure Date",
     // 섹션 제목 추가
     hotelInfo: "Hotel Information",
     airlineInfo: "Airline Information",
@@ -214,6 +221,23 @@ interface Customer {
   passportExpiry: string;
 }
 
+interface FlightSegment {
+  departure: string;
+  arrival: string;
+  date: string;
+  selectedFlights: Array<{
+    id: string;
+    flightNumber: string;
+    airline: string;
+    departureTime: string;
+    arrivalTime: string;
+    departure: string;
+    arrival: string;
+    date: string;
+    webPrice?: number;
+  }>;
+}
+
 interface FormData {
   part?: 'AIR' | 'CINT';
   agentName?: string;
@@ -221,15 +245,8 @@ interface FormData {
   tourStartDate?: string;
   tourEndDate?: string;
   // AIR 전용 필드
-  airline?: string;
-  departureRoute?: string;
-  returnRoute?: string;
-  flightType?: string;
-  returnDepartureRoute?: string;
-  returnArrivalRoute?: string;
-  multiDepartureRoute?: string;
-  multiArrivalRoute?: string;
-  flightSegments?: Array<{ departure: string; arrival: string }>;
+  flightType?: 'oneway' | 'roundtrip' | 'multicity';
+  flightSegments?: FlightSegment[];
   // CINT 전용 필드
   country?: string;
   region?: string;
@@ -294,7 +311,8 @@ export default function NewBookingPage() {
   const [loading, setLoading] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showTASelectionModal, setShowTASelectionModal] = useState(false);
-  const [flightSegments, setFlightSegments] = useState([{ departure: '', arrival: '' }]);
+  const [showFlightSelectionModal, setShowFlightSelectionModal] = useState(false);
+  const [currentFlightSegment, setCurrentFlightSegment] = useState<{ index: number; route: string; date: string } | null>(null);
 
   useEffect(() => {
     const setupAuth = async () => {
@@ -313,7 +331,6 @@ export default function NewBookingPage() {
 
   const handlePartSelection = (part: 'AIR' | 'CINT') => {
     setSelectedPart(part);
-    setFlightSegments([{ departure: '', arrival: '' }]);
     
     // 파트에 따른 초기 데이터 설정
     const initialData: FormData = {
@@ -323,15 +340,8 @@ export default function NewBookingPage() {
       tourStartDate: '',
       tourEndDate: '',
       // AIR 전용 필드
-      airline: '',
-      departureRoute: '',
-      returnRoute: '',
-      flightType: '',
-      returnDepartureRoute: '',
-      returnArrivalRoute: '',
-      multiDepartureRoute: '',
-      multiArrivalRoute: '',
-      flightSegments: [{ departure: '', arrival: '' }],
+      flightType: undefined,
+      flightSegments: [],
       // CINT 전용 필드
       country: '',
       region: '',
@@ -356,7 +366,51 @@ export default function NewBookingPage() {
   };
 
   const updateFormData = (field: string, value: string | number | boolean) => {
-    setFormData((prev: FormData) => ({ ...prev, [field]: value }));
+    setFormData((prev: FormData) => {
+      const newData = { ...prev, [field]: value };
+      
+      // 여정 유형이 선택되면 초기 구간 생성
+      if (field === 'flightType' && value) {
+        const flightType = value as 'oneway' | 'roundtrip' | 'multicity';
+        const initialSegments: FlightSegment[] = [];
+        
+        if (flightType === 'oneway') {
+          initialSegments.push({
+            departure: '',
+            arrival: '',
+            date: '',
+            selectedFlights: []
+          });
+        } else if (flightType === 'roundtrip') {
+          initialSegments.push(
+            {
+              departure: '',
+              arrival: '',
+              date: '',
+              selectedFlights: []
+            },
+            {
+              departure: '',
+              arrival: '',
+              date: '',
+              selectedFlights: []
+            }
+          );
+        } else if (flightType === 'multicity') {
+          initialSegments.push({
+            departure: '',
+            arrival: '',
+            date: '',
+            selectedFlights: []
+          });
+        }
+        
+        newData.flightSegments = initialSegments;
+      }
+      
+      return newData;
+    });
+    
     if (errors[field]) {
       setErrors((prev: Record<string, string>) => ({ ...prev, [field]: '' }));
     }
@@ -440,38 +494,75 @@ export default function NewBookingPage() {
   };
 
   const addFlightSegment = () => {
-    const newSegments = [...flightSegments, { departure: '', arrival: '' }];
-    setFlightSegments(newSegments);
+    const newSegment: FlightSegment = {
+      departure: '',
+      arrival: '',
+      date: '',
+      selectedFlights: []
+    };
+    
     setFormData((prev: FormData) => ({
       ...prev,
-      flightSegments: newSegments
+      flightSegments: [...(prev.flightSegments || []), newSegment]
     }));
   };
 
   const removeFlightSegment = (index: number) => {
-    if (flightSegments.length > 1) {
-      const newSegments = flightSegments.filter((_, i) => i !== index);
-      setFlightSegments(newSegments);
-      setFormData((prev: FormData) => ({
-        ...prev,
-        flightSegments: newSegments
-      }));
-    }
+    setFormData((prev: FormData) => {
+      const currentSegments = prev.flightSegments || [];
+      if (currentSegments.length > 1) {
+        return {
+          ...prev,
+          flightSegments: currentSegments.filter((_, i) => i !== index)
+        };
+      }
+      return prev;
+    });
   };
 
-  const updateFlightSegment = (index: number, field: 'departure' | 'arrival', value: string) => {
-    setFlightSegments(prev => 
-      prev.map((segment, i) => 
-        i === index ? { ...segment, [field]: value } : segment
-      )
-    );
-    
-    // formData에도 저장
+  const updateFlightSegment = (index: number, field: 'departure' | 'arrival' | 'date', value: string) => {
     setFormData((prev: FormData) => ({
       ...prev,
-      flightSegments: flightSegments.map((segment, i) => 
+      flightSegments: prev.flightSegments?.map((segment, i) => 
         i === index ? { ...segment, [field]: value } : segment
-      )
+      ) || []
+    }));
+  };
+
+  // 항공편 선택 모달 열기
+  const openFlightSelection = (index: number) => {
+    const segment = formData.flightSegments?.[index];
+    if (!segment || !segment.departure || !segment.arrival || !segment.date) {
+      alert('출발지, 도착지, 날짜를 모두 입력해주세요.');
+      return;
+    }
+    
+    const route = `${segment.departure}-${segment.arrival}`;
+    setCurrentFlightSegment({ index, route, date: segment.date });
+    setShowFlightSelectionModal(true);
+  };
+
+  // 항공편 선택 완료
+  const handleFlightSelection = (selectedFlights: Array<{
+    id: string;
+    flightNumber: string;
+    airline: string;
+    departureTime: string;
+    arrivalTime: string;
+    departure: string;
+    arrival: string;
+    date: string;
+    webPrice?: number;
+  }>) => {
+    if (!currentFlightSegment) return;
+    
+    setFormData((prev: FormData) => ({
+      ...prev,
+      flightSegments: prev.flightSegments?.map((segment, i) => 
+        i === currentFlightSegment.index 
+          ? { ...segment, selectedFlights }
+          : segment
+      ) || []
     }));
   };
 
@@ -573,7 +664,8 @@ export default function NewBookingPage() {
               </span>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* 첫 번째 행: 에이전트명, 에이전트코드 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {texts.agentName}
@@ -607,7 +699,10 @@ export default function NewBookingPage() {
                   readOnly
                 />
               </div>
-              
+            </div>
+            
+            {/* 투어 시작일/종료일 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {texts.tourStartDate}
@@ -631,68 +726,69 @@ export default function NewBookingPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-
-              {selectedPart === 'CINT' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {texts.country}
-                    </label>
-                    <select
-                      value={formData.country || ''}
-                      onChange={(e) => updateFormData('country', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">국가 선택</option>
-                      <option value="KR">한국</option>
-                      <option value="PH">필리핀</option>
-                      <option value="JP">일본</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {texts.region}
-                    </label>
-                    <select
-                      value={formData.region || ''}
-                      onChange={(e) => updateFormData('region', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">지역 선택</option>
-                      <option value="seoul">서울</option>
-                      <option value="cebu">세부</option>
-                      <option value="tokyo">도쿄</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {texts.localLandName}
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.localLandName || ''}
-                      onChange={(e) => updateFormData('localLandName', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {texts.localLandCode}
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.localLandCode || ''}
-                      onChange={(e) => updateFormData('localLandCode', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
-                      readOnly
-                    />
-                  </div>
-                </>
-              )}
             </div>
+
+            {/* CINT 전용 필드들 */}
+            {selectedPart === 'CINT' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {texts.country}
+                  </label>
+                  <select
+                    value={formData.country || ''}
+                    onChange={(e) => updateFormData('country', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">국가 선택</option>
+                    <option value="KR">한국</option>
+                    <option value="PH">필리핀</option>
+                    <option value="JP">일본</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {texts.region}
+                  </label>
+                  <select
+                    value={formData.region || ''}
+                    onChange={(e) => updateFormData('region', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">지역 선택</option>
+                    <option value="seoul">서울</option>
+                    <option value="cebu">세부</option>
+                    <option value="tokyo">도쿄</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {texts.localLandName}
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.localLandName || ''}
+                    onChange={(e) => updateFormData('localLandName', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {texts.localLandCode}
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.localLandCode || ''}
+                    onChange={(e) => updateFormData('localLandCode', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
+                    readOnly
+                  />
+                </div>
+              </div>
+            )}
           </motion.div>
 
           {/* 호텔 정보 - CINT 전용 */}
@@ -779,29 +875,6 @@ export default function NewBookingPage() {
             </div>
             
             <div className="space-y-6">
-              {/* 항공사 선택 */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {texts.airlineSelection}
-                </label>
-                <select
-                  value={formData.airline || ''}
-                  onChange={(e) => updateFormData('airline', e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
-                >
-                  <option value="">{texts.airlineSelection} 선택</option>
-                  <option value="LJ">진에어 (LJ)</option>
-                  <option value="BX">에어부산 (BX)</option>
-                  <option value="7C">제주항공 (7C)</option>
-                  <option value="KE">대한항공 (KE)</option>
-                  <option value="OZ">아시아나항공 (OZ)</option>
-                  <option value="TW">티웨이항공 (TW)</option>
-                  <option value="RS">에어서울 (RS)</option>
-                  <option value="PR">필리핀항공 (PR)</option>
-                  <option value="5J">세부퍼시픽 (5J)</option>
-                </select>
-              </div>
-
               {/* 여정 유형 선택 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -851,158 +924,496 @@ export default function NewBookingPage() {
                     {texts.flightInfo}
                   </h3>
                   
-                  {formData.flightType === 'oneway' && (
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            {texts.departure}
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="예: ICN (인천)"
-                            value={formData.departureRoute || ''}
-                            onChange={(e) => updateFormData('departureRoute', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            {texts.arrival}
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="예: CEB (세부)"
-                            value={formData.returnRoute || ''}
-                            onChange={(e) => updateFormData('returnRoute', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {formData.flightType === 'roundtrip' && (
-                    <div className="space-y-4">
-                      <div className="bg-blue-50 p-4 rounded-lg">
-                        <h4 className="text-sm font-medium text-blue-800 mb-3">{texts.outbound}</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              {texts.departure}
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="예: ICN (인천)"
-                              value={formData.departureRoute || ''}
-                              onChange={(e) => updateFormData('departureRoute', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              {texts.arrival}
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="예: CEB (세부)"
-                              value={formData.returnRoute || ''}
-                              onChange={(e) => updateFormData('returnRoute', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="bg-green-50 p-4 rounded-lg">
-                        <h4 className="text-sm font-medium text-green-800 mb-3">{texts.inbound}</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              {texts.departure}
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="예: CEB (세부)"
-                              value={formData.returnDepartureRoute || ''}
-                              onChange={(e) => updateFormData('returnDepartureRoute', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              {texts.arrival}
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="예: ICN (인천)"
-                              value={formData.returnArrivalRoute || ''}
-                              onChange={(e) => updateFormData('returnArrivalRoute', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {formData.flightType === 'multicity' && (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-lg font-semibold text-gray-900">{texts.flightSegments}</h4>
-                        <button
-                          type="button"
-                          onClick={addFlightSegment}
-                          className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
-                        >
-                          + {texts.addSegment}
-                        </button>
-                      </div>
-                      
-                      {flightSegments.map((segment, index) => (
-                        <div key={index} className="bg-purple-50 p-4 rounded-lg">
-                          <div className="flex items-center justify-between mb-3">
-                            <h5 className="text-sm font-medium text-purple-800">{texts.segment} {index + 1}</h5>
-                            {flightSegments.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => removeFlightSegment(index)}
-                                className="text-red-600 hover:text-red-800 text-sm"
-                              >
-                                {texts.removeSegment}
-                              </button>
-                            )}
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* 공항 코드 드롭다운 컴포넌트 */}
+                  <div className="space-y-4">
+                    {formData.flightType === 'oneway' && (
+                      <div className="space-y-4">
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
                                 {texts.departure}
                               </label>
-                              <input
-                                type="text"
-                                placeholder="예: ICN (인천)"
-                                value={segment.departure}
-                                onChange={(e) => updateFlightSegment(index, 'departure', e.target.value)}
+                              <select
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              />
+                                onChange={(e) => {
+                                  if (formData.flightSegments && formData.flightSegments.length > 0) {
+                                    updateFlightSegment(0, 'departure', e.target.value);
+                                  }
+                                }}
+                              >
+                                <option value="">공항 선택</option>
+                                <option value="ICN">ICN (인천)</option>
+                                <option value="PUS">PUS (부산)</option>
+                                <option value="TAE">TAE (대구)</option>
+                                <option value="MNL">MNL (마닐라)</option>
+                                <option value="CEB">CEB (세부)</option>
+                                <option value="TAG">TAG (타그빌라란)</option>
+                                <option value="CRK">CRK (클라크)</option>
+                                <option value="KLO">KLO (칼리보)</option>
+                              </select>
                             </div>
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">
                                 {texts.arrival}
                               </label>
-                              <input
-                                type="text"
-                                placeholder="예: CEB (세부)"
-                                value={segment.arrival}
-                                onChange={(e) => updateFlightSegment(index, 'arrival', e.target.value)}
+                              <select
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                onChange={(e) => {
+                                  if (formData.flightSegments && formData.flightSegments.length > 0) {
+                                    updateFlightSegment(0, 'arrival', e.target.value);
+                                  }
+                                }}
+                              >
+                                <option value="">공항 선택</option>
+                                <option value="ICN">ICN (인천)</option>
+                                <option value="PUS">PUS (부산)</option>
+                                <option value="TAE">TAE (대구)</option>
+                                <option value="MNL">MNL (마닐라)</option>
+                                <option value="CEB">CEB (세부)</option>
+                                <option value="TAG">TAG (타그빌라란)</option>
+                                <option value="CRK">CRK (클라크)</option>
+                                <option value="KLO">KLO (칼리보)</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                날짜
+                              </label>
+                              <input
+                                type="date"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                onChange={(e) => {
+                                  if (formData.flightSegments && formData.flightSegments.length > 0) {
+                                    updateFlightSegment(0, 'date', e.target.value);
+                                  }
+                                }}
                               />
                             </div>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                        
+                        {/* 항공편 선택 버튼 */}
+                        <div className="flex items-center justify-between">
+                          <button
+                            type="button"
+                            onClick={() => openFlightSelection(0)}
+                            disabled={!formData.flightSegments?.[0]?.departure || !formData.flightSegments?.[0]?.arrival || !formData.flightSegments?.[0]?.date}
+                            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                          >
+                            항공편 선택 ({formData.flightSegments?.[0]?.selectedFlights?.length || 0})
+                          </button>
+                        </div>
+                        
+                        {/* 선택된 항공편 표시 */}
+                        {formData.flightSegments?.[0]?.selectedFlights && formData.flightSegments[0].selectedFlights.length > 0 && (
+                          <div className="space-y-2">
+                            {formData.flightSegments[0].selectedFlights.map((flight, flightIndex) => (
+                              <div key={flightIndex} className="bg-white p-3 rounded border">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div className="font-medium">{flight.flightNumber}</div>
+                                    <div className="text-sm text-gray-600">{flight.airline}</div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-sm">{flight.departureTime} - {flight.arrivalTime}</div>
+                                    <div className="text-xs text-gray-500">{flight.departure} → {flight.arrival}</div>
+                                  </div>
+                                </div>
+                                <div className="mt-2 flex items-center space-x-2">
+                                  <input
+                                    type="number"
+                                    placeholder="웹 가격"
+                                    value={flight.webPrice || ''}
+                                    onChange={(e) => {
+                                      const newFlights = [...formData.flightSegments![0].selectedFlights];
+                                      newFlights[flightIndex] = { ...flight, webPrice: e.target.value ? parseFloat(e.target.value) : undefined };
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        flightSegments: prev.flightSegments?.map((seg, i) => 
+                                          i === 0 ? { ...seg, selectedFlights: newFlights } : seg
+                                        ) || []
+                                      }));
+                                    }}
+                                    className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded"
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {formData.flightType === 'roundtrip' && (
+                      <div className="space-y-4">
+                        <div className="bg-blue-50 p-4 rounded-lg">
+                          <h4 className="text-sm font-medium text-blue-800 mb-3">{texts.outbound}</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {texts.departure}
+                              </label>
+                              <select
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                onChange={(e) => {
+                                  if (formData.flightSegments && formData.flightSegments.length > 0) {
+                                    updateFlightSegment(0, 'departure', e.target.value);
+                                  }
+                                }}
+                              >
+                                <option value="">공항 선택</option>
+                                <option value="ICN">ICN (인천)</option>
+                                <option value="PUS">PUS (부산)</option>
+                                <option value="TAE">TAE (대구)</option>
+                                <option value="MNL">MNL (마닐라)</option>
+                                <option value="CEB">CEB (세부)</option>
+                                <option value="TAG">TAG (타그빌라란)</option>
+                                <option value="CRK">CRK (클라크)</option>
+                                <option value="KLO">KLO (칼리보)</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {texts.arrival}
+                              </label>
+                              <select
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                onChange={(e) => {
+                                  if (formData.flightSegments && formData.flightSegments.length > 0) {
+                                    updateFlightSegment(0, 'arrival', e.target.value);
+                                  }
+                                }}
+                              >
+                                <option value="">공항 선택</option>
+                                <option value="ICN">ICN (인천)</option>
+                                <option value="PUS">PUS (부산)</option>
+                                <option value="TAE">TAE (대구)</option>
+                                <option value="MNL">MNL (마닐라)</option>
+                                <option value="CEB">CEB (세부)</option>
+                                <option value="TAG">TAG (타그빌라란)</option>
+                                <option value="CRK">CRK (클라크)</option>
+                                <option value="KLO">KLO (칼리보)</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                날짜
+                              </label>
+                              <input
+                                type="date"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                onChange={(e) => {
+                                  if (formData.flightSegments && formData.flightSegments.length > 0) {
+                                    updateFlightSegment(0, 'date', e.target.value);
+                                  }
+                                }}
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* 항공편 선택 버튼 - 가는편 */}
+                          <div className="mt-3">
+                            <button
+                              type="button"
+                              onClick={() => openFlightSelection(0)}
+                              disabled={!formData.flightSegments?.[0]?.departure || !formData.flightSegments?.[0]?.arrival || !formData.flightSegments?.[0]?.date}
+                              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                            >
+                              가는편 항공편 선택 ({formData.flightSegments?.[0]?.selectedFlights?.length || 0})
+                            </button>
+                          </div>
+                          
+                          {/* 선택된 항공편 표시 - 가는편 */}
+                          {formData.flightSegments?.[0]?.selectedFlights && formData.flightSegments[0].selectedFlights.length > 0 && (
+                            <div className="mt-3 space-y-2">
+                              {formData.flightSegments[0].selectedFlights.map((flight, flightIndex) => (
+                                <div key={flightIndex} className="bg-white p-3 rounded border">
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <div className="font-medium">{flight.flightNumber}</div>
+                                      <div className="text-sm text-gray-600">{flight.airline}</div>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="text-sm">{flight.departureTime} - {flight.arrivalTime}</div>
+                                      <div className="text-xs text-gray-500">{flight.departure} → {flight.arrival}</div>
+                                    </div>
+                                  </div>
+                                  <div className="mt-2 flex items-center space-x-2">
+                                    <input
+                                      type="number"
+                                      placeholder="웹 가격"
+                                      value={flight.webPrice || ''}
+                                      onChange={(e) => {
+                                        const newFlights = [...formData.flightSegments![0].selectedFlights];
+                                        newFlights[flightIndex] = { ...flight, webPrice: e.target.value ? parseFloat(e.target.value) : undefined };
+                                        setFormData(prev => ({
+                                          ...prev,
+                                          flightSegments: prev.flightSegments?.map((seg, i) => 
+                                            i === 0 ? { ...seg, selectedFlights: newFlights } : seg
+                                          ) || []
+                                        }));
+                                      }}
+                                      className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded"
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="bg-green-50 p-4 rounded-lg">
+                          <h4 className="text-sm font-medium text-green-800 mb-3">{texts.inbound}</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {texts.departure}
+                              </label>
+                              <select
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                onChange={(e) => {
+                                  if (formData.flightSegments && formData.flightSegments.length > 1) {
+                                    updateFlightSegment(1, 'departure', e.target.value);
+                                  }
+                                }}
+                              >
+                                <option value="">공항 선택</option>
+                                <option value="ICN">ICN (인천)</option>
+                                <option value="PUS">PUS (부산)</option>
+                                <option value="TAE">TAE (대구)</option>
+                                <option value="MNL">MNL (마닐라)</option>
+                                <option value="CEB">CEB (세부)</option>
+                                <option value="TAG">TAG (타그빌라란)</option>
+                                <option value="CRK">CRK (클라크)</option>
+                                <option value="KLO">KLO (칼리보)</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {texts.arrival}
+                              </label>
+                              <select
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                onChange={(e) => {
+                                  if (formData.flightSegments && formData.flightSegments.length > 1) {
+                                    updateFlightSegment(1, 'arrival', e.target.value);
+                                  }
+                                }}
+                              >
+                                <option value="">공항 선택</option>
+                                <option value="ICN">ICN (인천)</option>
+                                <option value="PUS">PUS (부산)</option>
+                                <option value="TAE">TAE (대구)</option>
+                                <option value="MNL">MNL (마닐라)</option>
+                                <option value="CEB">CEB (세부)</option>
+                                <option value="TAG">TAG (타그빌라란)</option>
+                                <option value="CRK">CRK (클라크)</option>
+                                <option value="KLO">KLO (칼리보)</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                날짜
+                              </label>
+                              <input
+                                type="date"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                onChange={(e) => {
+                                  if (formData.flightSegments && formData.flightSegments.length > 1) {
+                                    updateFlightSegment(1, 'date', e.target.value);
+                                  }
+                                }}
+                              />
+                            </div>
+                          </div>
+                          
+                          {/* 항공편 선택 버튼 - 오는편 */}
+                          <div className="mt-3">
+                            <button
+                              type="button"
+                              onClick={() => openFlightSelection(1)}
+                              disabled={!formData.flightSegments?.[1]?.departure || !formData.flightSegments?.[1]?.arrival || !formData.flightSegments?.[1]?.date}
+                              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                            >
+                              오는편 항공편 선택 ({formData.flightSegments?.[1]?.selectedFlights?.length || 0})
+                            </button>
+                          </div>
+                          
+                          {/* 선택된 항공편 표시 - 오는편 */}
+                          {formData.flightSegments?.[1]?.selectedFlights && formData.flightSegments[1].selectedFlights.length > 0 && (
+                            <div className="mt-3 space-y-2">
+                              {formData.flightSegments[1].selectedFlights.map((flight, flightIndex) => (
+                                <div key={flightIndex} className="bg-white p-3 rounded border">
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <div className="font-medium">{flight.flightNumber}</div>
+                                      <div className="text-sm text-gray-600">{flight.airline}</div>
+                                    </div>
+                                    <div className="text-right">
+                                      <div className="text-sm">{flight.departureTime} - {flight.arrivalTime}</div>
+                                      <div className="text-xs text-gray-500">{flight.departure} → {flight.arrival}</div>
+                                    </div>
+                                  </div>
+                                  <div className="mt-2 flex items-center space-x-2">
+                                    <input
+                                      type="number"
+                                      placeholder="웹 가격"
+                                      value={flight.webPrice || ''}
+                                      onChange={(e) => {
+                                        const newFlights = [...formData.flightSegments![1].selectedFlights];
+                                        newFlights[flightIndex] = { ...flight, webPrice: e.target.value ? parseFloat(e.target.value) : undefined };
+                                        setFormData(prev => ({
+                                          ...prev,
+                                          flightSegments: prev.flightSegments?.map((seg, i) => 
+                                            i === 1 ? { ...seg, selectedFlights: newFlights } : seg
+                                          ) || []
+                                        }));
+                                      }}
+                                      className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded"
+                                    />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                                         {formData.flightType === 'multicity' && (
+                       <div className="space-y-4">
+                         <div className="flex items-center justify-between">
+                           <h4 className="text-lg font-semibold text-gray-900">{texts.flightSegments}</h4>
+                           <button
+                             type="button"
+                             onClick={addFlightSegment}
+                             disabled={(formData.flightSegments?.length || 0) >= 4}
+                             className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                           >
+                             + {texts.addSegment}
+                           </button>
+                         </div>
+                         
+                         {formData.flightSegments?.map((segment, index) => (
+                           <div key={index} className="bg-purple-50 p-4 rounded-lg">
+                             <div className="flex items-center justify-between mb-3">
+                               <h5 className="text-sm font-medium text-purple-800">{texts.segment} {index + 1}</h5>
+                               {formData.flightSegments && formData.flightSegments.length > 1 && (
+                                 <button
+                                   type="button"
+                                   onClick={() => removeFlightSegment(index)}
+                                   className="text-red-600 hover:text-red-800 text-sm"
+                                 >
+                                   {texts.removeSegment}
+                                 </button>
+                               )}
+                             </div>
+                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
+                               <div>
+                                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                                   {texts.departure}
+                                 </label>
+                                 <select
+                                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                   onChange={(e) => updateFlightSegment(index, 'departure', e.target.value)}
+                                 >
+                                   <option value="">공항 선택</option>
+                                   <option value="ICN">ICN (인천)</option>
+                                   <option value="PUS">PUS (부산)</option>
+                                   <option value="TAE">TAE (대구)</option>
+                                   <option value="MNL">MNL (마닐라)</option>
+                                   <option value="CEB">CEB (세부)</option>
+                                   <option value="TAG">TAG (타그빌라란)</option>
+                                   <option value="CRK">CRK (클라크)</option>
+                                   <option value="KLO">KLO (칼리보)</option>
+                                 </select>
+                               </div>
+                               <div>
+                                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                                   {texts.arrival}
+                                 </label>
+                                 <select
+                                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                   onChange={(e) => updateFlightSegment(index, 'arrival', e.target.value)}
+                                 >
+                                   <option value="">공항 선택</option>
+                                   <option value="ICN">ICN (인천)</option>
+                                   <option value="PUS">PUS (부산)</option>
+                                   <option value="TAE">TAE (대구)</option>
+                                   <option value="MNL">MNL (마닐라)</option>
+                                   <option value="CEB">CEB (세부)</option>
+                                   <option value="TAG">TAG (타그빌라란)</option>
+                                   <option value="CRK">CRK (클라크)</option>
+                                   <option value="KLO">KLO (칼리보)</option>
+                                 </select>
+                               </div>
+                               <div>
+                                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                                   날짜
+                                 </label>
+                                 <input
+                                   type="date"
+                                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                   onChange={(e) => updateFlightSegment(index, 'date', e.target.value)}
+                                 />
+                               </div>
+                             </div>
+                             
+                             {/* 항공편 선택 버튼 */}
+                             <div className="flex items-center justify-between">
+                               <button
+                                 type="button"
+                                 onClick={() => openFlightSelection(index)}
+                                 disabled={!segment.departure || !segment.arrival || !segment.date}
+                                 className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                               >
+                                 항공편 선택 ({segment.selectedFlights?.length || 0})
+                               </button>
+                             </div>
+                             
+                             {/* 선택된 항공편 표시 */}
+                             {segment.selectedFlights && segment.selectedFlights.length > 0 && (
+                               <div className="mt-3 space-y-2">
+                                 {segment.selectedFlights.map((flight, flightIndex) => (
+                                   <div key={flightIndex} className="bg-white p-3 rounded border">
+                                     <div className="flex items-center justify-between">
+                                       <div>
+                                         <div className="font-medium">{flight.flightNumber}</div>
+                                         <div className="text-sm text-gray-600">{flight.airline}</div>
+                                       </div>
+                                       <div className="text-right">
+                                         <div className="text-sm">{flight.departureTime} - {flight.arrivalTime}</div>
+                                         <div className="text-xs text-gray-500">{flight.departure} → {flight.arrival}</div>
+                                       </div>
+                                     </div>
+                                     <div className="mt-2 flex items-center space-x-2">
+                                       <input
+                                         type="number"
+                                         placeholder="웹 가격"
+                                         value={flight.webPrice || ''}
+                                         onChange={(e) => {
+                                           const newFlights = [...segment.selectedFlights];
+                                           newFlights[flightIndex] = { ...flight, webPrice: e.target.value ? parseFloat(e.target.value) : undefined };
+                                           setFormData(prev => ({
+                                             ...prev,
+                                             flightSegments: prev.flightSegments?.map((seg, i) => 
+                                               i === index ? { ...seg, selectedFlights: newFlights } : seg
+                                             ) || []
+                                           }));
+                                         }}
+                                         className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded"
+                                       />
+                                     </div>
+                                   </div>
+                                 ))}
+                               </div>
+                             )}
+                           </div>
+                         ))}
+                       </div>
+                     )}
+                  </div>
                 </div>
               )}
             </div>
@@ -1352,6 +1763,14 @@ export default function NewBookingPage() {
           isOpen={showTASelectionModal}
           onClose={() => setShowTASelectionModal(false)}
           onSelect={handleTASelect}
+        />
+
+        <FlightSelectionModal
+          isOpen={showFlightSelectionModal}
+          onClose={() => setShowFlightSelectionModal(false)}
+          onSelect={handleFlightSelection}
+          route={currentFlightSegment?.route || ''}
+          date={currentFlightSegment?.date || ''}
         />
       </main>
     </div>

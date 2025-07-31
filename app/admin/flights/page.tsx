@@ -5,6 +5,7 @@ import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from '@heroicons/react/2
 import { FlightSchedule } from '@/types/flight';
 import { apiRequest } from '@/lib/api-client';
 import Image from 'next/image';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
 
 interface FlightRoute {
   route: string;
@@ -120,10 +121,14 @@ export default function FlightsPage() {
       const year = currentDate.getFullYear();
       const month = currentDate.getMonth() + 1;
       
+      console.log(`🔄 항공편 로딩 시작: ${selectedRoute}, ${year}-${month}`);
+      
       const response = await apiRequest(`/api/flights/schedules?route=${selectedRoute}&year=${year}&month=${month}`);
       
       if (response.success) {
-        setFlights((response as { flights: FlightSchedule[] }).flights || []);
+        const flightData = (response as { flights: FlightSchedule[] }).flights || [];
+        console.log(`✅ 항공편 로딩 완료: ${selectedRoute}, ${year}-${month}, 총 ${flightData.length}개`);
+        setFlights(flightData);
       } else {
         console.error('항공편 로드 실패:', response.error);
         setFlights([]);
@@ -392,8 +397,8 @@ export default function FlightsPage() {
 
             {/* 날짜 상세정보 모달 */}
             {showDetailModal && selectedDate && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
+              <div className="fixed inset-0 bg-transparent flex items-center justify-center z-50 backdrop-blur-sm" onClick={closeModal}>
+                <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
                   {/* 모달 헤더 */}
                   <div className="flex items-center justify-between p-6 border-b border-gray-200">
                     <h2 className="text-xl font-semibold text-gray-900">
@@ -589,6 +594,23 @@ export default function FlightsPage() {
                   {isProcessingMonth ? '1개월 데이터 수집 중...' : '1개월 데이터 수집'}
                 </button>
 
+                {/* 새로운 API 처리 로딩 표시 */}
+                {(isProcessingNewApi || isProcessingMonth) && (
+                  <div className="fixed inset-0 bg-transparent flex items-center justify-center z-50 backdrop-blur-sm">
+                    <div className="bg-white p-8 rounded-lg shadow-xl">
+                      <LoadingSpinner 
+                        size="lg" 
+                        text={
+                          isProcessingNewApi 
+                            ? (lang === 'ko' ? 'API 데이터 처리 중...' : 'Processing API data...')
+                            : (lang === 'ko' ? '1개월 데이터 수집 중...' : 'Collecting monthly data...')
+                        } 
+                        lang={lang}
+                      />
+                    </div>
+                  </div>
+                )}
+
                 {isProcessingMonth && monthProgress.total > 0 && (
                   <div className="mt-4 p-3 bg-blue-50 rounded-md">
                     <div className="text-sm text-blue-700 mb-2">
@@ -618,12 +640,13 @@ export default function FlightsPage() {
 
         {/* 로딩 표시 */}
         {loading && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-lg">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                <p>{lang === 'ko' ? '항공편 로딩 중...' : 'Loading flights...'}</p>
-              </div>
+          <div className="fixed inset-0 bg-transparent flex items-center justify-center z-50 backdrop-blur-sm">
+            <div className="bg-white p-8 rounded-lg shadow-xl">
+              <LoadingSpinner 
+                size="lg" 
+                text={lang === 'ko' ? '항공편 로딩 중...' : 'Loading flights...'} 
+                lang={lang}
+              />
             </div>
           </div>
         )}

@@ -28,6 +28,37 @@ const parseLocalTime = (localTimeStr: string): Date => {
 
 export class NewFlightService {
   private static db = getAdminDb();
+  
+  // 메모리 캐시 (5분 유효)
+  private static cache = new Map<string, { data: FlightSchedule[], timestamp: number }>();
+  private static CACHE_DURATION = 5 * 60 * 1000; // 5분
+
+  /**
+   * 캐시 키 생성
+   */
+  private static getCacheKey(route: string, year: number, month: number): string {
+    return `flights_${route}_${year}_${month}`;
+  }
+
+  /**
+   * 캐시에서 데이터 조회
+   */
+  private static getFromCache(key: string): FlightSchedule[] | null {
+    const cached = this.cache.get(key);
+    if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
+      console.log(`📦 캐시에서 데이터 조회: ${key}`);
+      return cached.data;
+    }
+    return null;
+  }
+
+  /**
+   * 캐시에 데이터 저장
+   */
+  private static setCache(key: string, data: FlightSchedule[]): void {
+    this.cache.set(key, { data, timestamp: Date.now() });
+    console.log(`💾 캐시에 데이터 저장: ${key}, ${data.length}개`);
+  }
 
   /**
    * 새로운 항공 API를 호출하고 응답을 처리합니다
@@ -446,6 +477,58 @@ export class NewFlightService {
       return flights.sort((a, b) => a.departureTime.localeCompare(b.departureTime));
     } catch (error) {
       console.error('❌ 항공편 조회 실패:', error);
+      return [];
+    }
+  }
+
+  /**
+   * 특정 루트의 월별 항공편을 한 번에 조회합니다 (최적화된 버전)
+   * @param route 루트 (예: CEB-ICN)
+   * @param year 년도
+   * @param month 월 (1-12)
+   * @returns 항공편 목록
+   */
+  static async getFlightsByRouteAndMonth(route: string, year: number, month: number): Promise<FlightSchedule[]> {
+    try {
+      console.log(`🔄 월별 항공편 조회 시작: ${route}, ${year}-${month}`);
+      
+      // 캐시 확인
+      const cacheKey = this.getCacheKey(route, year, month);
+      const cachedData = this.getFromCache(cacheKey);
+      if (cachedData) {
+        return cachedData;
+      }
+      
+      const flights: FlightSchedule[] = [];
+      const daysInMonth = new Date(year, month, 0).getDate();
+      
+      // 병렬 처리로 모든 날짜를 동시에 조회
+      const promises = [];
+      
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const promise = this.getFlightsByRouteAndDate(route, dateStr);
+        promises.push(promise);
+      }
+      
+      // 모든 날짜의 데이터를 병렬로 조회
+      const results = await Promise.all(promises);
+      
+      // 결과를 하나로 합치고 정렬
+      results.forEach(dayFlights => {
+        flights.push(...dayFlights);
+      });
+      
+      const sortedFlights = flights.sort((a, b) => a.departureTime.localeCompare(b.departureTime));
+      
+      // 캐시에 저장
+      this.setCache(cacheKey, sortedFlights);
+      
+      console.log(`✅ 월별 항공편 조회 완료: ${route}, ${year}-${month}, 총 ${sortedFlights.length}개`);
+      
+      return sortedFlights;
+    } catch (error) {
+      console.error('❌ 월별 항공편 조회 실패:', error);
       return [];
     }
   }

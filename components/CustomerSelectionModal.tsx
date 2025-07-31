@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Search, User, Phone, Mail, Calendar } from 'lucide-react';
 import { useLanguage } from '@/components/LanguageContext';
+import { apiRequest } from '@/lib/api-client';
 
 interface Traveler {
   id: string;
@@ -114,19 +115,18 @@ export default function CustomerSelectionModal({ isOpen, onClose, onSelect }: Cu
         clearTimeout(timeout);
       }
     };
-  }, [searchTerm, travelers, searchTimeout]);
+  }, [searchTerm, travelers]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchTravelers = async () => {
     setLoading(true);
     setError(null);
     
     try {
-      const response = await fetch('/api/travelers');
-      const data = await response.json();
+      const response = await apiRequest<{ travelers: Traveler[] }>('/api/travelers');
       
-      if (response.ok) {
-        setTravelers(data.travelers || []);
-        setFilteredTravelers(data.travelers || []);
+      if (response.success && response.data?.travelers) {
+        setTravelers(response.data.travelers);
+        setFilteredTravelers(response.data.travelers);
       } else {
         setError('여행객 목록을 불러오는데 실패했습니다.');
       }
@@ -147,9 +147,25 @@ export default function CustomerSelectionModal({ isOpen, onClose, onSelect }: Cu
     if (!date) return '-';
     
     try {
-      // Firestore Timestamp 객체인 경우
+      // Firestore Timestamp 객체인 경우 (toDate 메서드가 있는 경우)
       if (date && typeof date === 'object' && (date as { toDate?: () => Date }).toDate) {
         return (date as { toDate: () => Date }).toDate().toLocaleDateString('ko-KR');
+      }
+      
+      // Firestore Timestamp 객체인 경우 (_seconds, _nanoseconds 형태)
+      if (date && typeof date === 'object' && (date as { _seconds?: number })._seconds) {
+        const parsedDate = new Date((date as { _seconds: number })._seconds * 1000);
+        if (!isNaN(parsedDate.getTime())) {
+          return parsedDate.toLocaleDateString('ko-KR');
+        }
+      }
+      
+      // 객체인 경우 (seconds, nanoseconds)
+      if (date && typeof date === 'object' && (date as { seconds?: number }).seconds) {
+        const parsedDate = new Date((date as { seconds: number }).seconds * 1000);
+        if (!isNaN(parsedDate.getTime())) {
+          return parsedDate.toLocaleDateString('ko-KR');
+        }
       }
       
       // 문자열인 경우
@@ -163,14 +179,6 @@ export default function CustomerSelectionModal({ isOpen, onClose, onSelect }: Cu
       // 숫자인 경우 (timestamp)
       if (typeof date === 'number') {
         const parsedDate = new Date(date);
-        if (!isNaN(parsedDate.getTime())) {
-          return parsedDate.toLocaleDateString('ko-KR');
-        }
-      }
-      
-      // 객체인 경우 (seconds, nanoseconds)
-      if (date && typeof date === 'object' && (date as { seconds?: number }).seconds) {
-        const parsedDate = new Date((date as { seconds: number }).seconds * 1000);
         if (!isNaN(parsedDate.getTime())) {
           return parsedDate.toLocaleDateString('ko-KR');
         }
