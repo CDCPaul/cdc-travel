@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { getStorage } from 'firebase-admin/storage';
 import sharp from 'sharp';
-import { ARIAL_FONT_BASE64 } from '@/lib/fonts';
 
 // HTML 엔티티 이스케이프 함수
 function escapeHtml(text: string): string {
@@ -108,45 +107,31 @@ async function createTAOverlayImage(ta: {
     }
   }
   
-  // TA 정보 텍스트 생성 (오른쪽 정렬)
-  const textSvg = `
-    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="2" dy="2" stdDeviation="3" flood-color="rgba(0,0,0,0.3)"/>
-        </filter>
-        <style>
-          @font-face {
-            font-family: 'Arial';
-            src: url('data:font/ttf;base64,${ARIAL_FONT_BASE64}') format('truetype');
-          }
-        </style>
-      </defs>
-      
-      <!-- 회사명 (오른쪽 정렬) -->
-      <text x="${width - 100}" y="100" font-family="Arial, sans-serif" font-size="90" font-weight="bold" 
-            fill="#333333" filter="url(#shadow)" text-anchor="end">
-        ${escapeHtml(ta.companyName)}
-      </text>
-      
-      <!-- 전화번호 (오른쪽 정렬) -->
-      <text x="${width - 100}" y="160" font-family="Arial, sans-serif" font-size="40" 
-            fill="#666666" filter="url(#shadow)" text-anchor="end">
-        📞 ${escapeHtml(ta.phone)}
-      </text>
-      
-      <!-- 이메일 (오른쪽 정렬) -->
-      <text x="${width - 100}" y="220" font-family="Arial, sans-serif" font-size="40" 
-            fill="#666666" filter="url(#shadow)" text-anchor="end">
-        ✉️ ${escapeHtml(ta.email)}
-      </text>
-    </svg>
-  `;
-  
-  const textBuffer = Buffer.from(textSvg);
-  const textImage = await sharp(textBuffer)
-    .png()
-    .toBuffer();
+  // 텍스트 이미지 생성 (Sharp의 텍스트 렌더링 사용)
+  const textImage = await sharp({
+    create: {
+      width: width,
+      height: height,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 0 }
+    }
+  })
+  .composite([
+    {
+      input: Buffer.from(`<svg width="${width}" height="${height}">
+        <text x="${width - 100}" y="100" font-family="Arial, Helvetica, sans-serif" font-size="90" font-weight="bold" 
+              fill="#333333" text-anchor="end">${escapeHtml(ta.companyName)}</text>
+        <text x="${width - 100}" y="160" font-family="Arial, Helvetica, sans-serif" font-size="40" 
+              fill="#666666" text-anchor="end">📞 ${escapeHtml(ta.phone)}</text>
+        <text x="${width - 100}" y="220" font-family="Arial, Helvetica, sans-serif" font-size="40" 
+              fill="#666666" text-anchor="end">✉️ ${escapeHtml(ta.email)}</text>
+      </svg>`),
+      top: 0,
+      left: 0
+    }
+  ])
+  .png()
+  .toBuffer();
   
   composites.push({
     input: textImage,
