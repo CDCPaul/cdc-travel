@@ -1,4 +1,15 @@
 {
+  "functions": {
+    "app/api/ta/route.ts": {
+      "runtime": "@vercel/node@18"
+    },
+    "app/api/ta/[id]/route.ts": {
+      "runtime": "@vercel/node@18"
+    },
+    "app/api/ta/[id]/regenerate-overlay/route.ts": {
+      "runtime": "@vercel/node@18"
+    }
+  },
   "crons": [
     {
       "path": "/api/exchange-rate/auto-update",
