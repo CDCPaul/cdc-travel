@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
 import { initializeFirebaseAdmin } from '@/lib/firebase-admin';
-import { OAuthService } from '@/lib/oauth-service';
+import { GmailTokenManager } from '@/lib/gmail-token-manager';
 import { google } from 'googleapis';
 import sharp from 'sharp';
 
@@ -142,6 +142,13 @@ export async function POST(request: NextRequest) {
     const subject = formData.get('subject') as string;
     const content = formData.get('content') as string;
     const attachments = JSON.parse(formData.get('attachments') as string || '[]');
+    
+    // 디버깅: attachments 데이터 확인
+    console.log('받은 attachments 데이터:', attachments);
+    if (attachments.length > 0) {
+      console.log('첫 번째 attachment의 fileName:', attachments[0].fileName);
+      console.log('첫 번째 attachment의 type:', attachments[0].type);
+    }
 
     if (!taIds || !Array.isArray(taIds) || taIds.length === 0) {
       return NextResponse.json(
@@ -173,24 +180,22 @@ export async function POST(request: NextRequest) {
     const decodedToken = await auth.verifyIdToken(idToken);
     const userId = decodedToken.uid;
 
-    // OAuthService를 사용하여 유효한 access token 가져오기 (자동 갱신 포함)
-    const accessToken = await OAuthService.getValidAccessToken(userId);
+    // Gmail 토큰 매니저를 사용하여 유효한 Gmail access token 가져오기 (자동 갱신 포함)
+    const { token: accessToken, needsReauth } = await GmailTokenManager.getValidGmailToken(userId);
     
-    if (!accessToken) {
-      console.log('유효한 Google Access Token을 찾을 수 없습니다.');
+    if (!accessToken || needsReauth) {
+      console.log('유효한 Gmail Access Token을 찾을 수 없습니다.');
       console.log('사용자 ID:', userId);
       
-      // Firestore에서 토큰 데이터 확인
-      const db = getAdminDb();
-      const tokenDoc = await db.collection('oauth_tokens').doc(userId).get();
-      if (tokenDoc.exists) {
-        console.log('저장된 토큰 데이터:', tokenDoc.data());
-      } else {
-        console.log('oauth_tokens 컬렉션에 토큰 데이터가 없습니다.');
-      }
+      // Gmail 인증 URL 생성
+      const gmailAuthUrl = GmailTokenManager.generateAuthUrl(userId);
       
       return NextResponse.json(
-        { error: 'Google Access Token이 필요합니다. 다시 로그인해주세요.', requiresReauth: true },
+        { 
+          error: 'Gmail API 권한이 필요합니다. Gmail 권한을 허용해주세요.', 
+          requiresGmailAuth: true,
+          gmailAuthUrl 
+        },
         { status: 401 }
       );
     }
@@ -200,17 +205,23 @@ export async function POST(request: NextRequest) {
     // Firebase Admin Firestore 사용
     const db = getAdminDb();
     
-    // 선택된 TA들의 이메일 주소 가져오기
+    // 선택된 TA들의 이메일 주소 가져오기 (30개씩 배치로 처리)
     const tasRef = db.collection('tas');
-    const querySnapshot = await tasRef.where('__name__', 'in', taIds).get();
-    
     const emailAddresses: string[] = [];
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
-      if (data.email) {
-        emailAddresses.push(data.email);
-      }
-    });
+    
+    // 30개씩 나누어서 배치로 쿼리
+    const batchSize = 30;
+    for (let i = 0; i < taIds.length; i += batchSize) {
+      const batch = taIds.slice(i, i + batchSize);
+      const querySnapshot = await tasRef.where('__name__', 'in', batch).get();
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.email) {
+          emailAddresses.push(data.email);
+        }
+      });
+    }
 
     if (emailAddresses.length === 0) {
       return NextResponse.json(
@@ -274,14 +285,43 @@ export async function POST(request: NextRequest) {
     }
 
     
-    // 첨부파일이 있는 경우 멀티파트 메시지 구성
-    let emailContent: string;
+    // 이메일은 각 TA별로 개별 발송됨 (아래 로직에서 처리)
 
-    if (attachments && attachments.length > 0) {
-      // 멀티파트 메시지 구성 (첨부파일 포함)
-      const boundary = `boundary_${Date.now()}`;
-      
-      emailContent = `To: ${emailAddresses.join(', ')}
+    // 최대 70개까지만 한 번에 발송
+    if (taIds.length > 70) {
+      return NextResponse.json(
+        { error: '한 번에 최대 70개까지만 발송할 수 있습니다. 현재 선택된 TA 수: ' + taIds.length },
+        { status: 400 }
+      );
+    }
+
+    // 각 TA별로 개별 이메일 발송
+    const messageIds: string[] = [];
+    let successCount = 0;
+
+    for (const taId of taIds) {
+      try {
+        // TA 정보 가져오기
+        const taDoc = await db.collection('tas').doc(taId).get();
+        if (!taDoc.exists) {
+          console.warn(`TA ${taId}를 찾을 수 없습니다.`);
+          continue;
+        }
+        
+                 const taData = taDoc.data();
+         if (!taData || !taData.email || typeof taData.email !== 'string') {
+           console.warn(`TA ${taId}의 이메일 주소가 없습니다.`);
+           continue;
+         }
+
+        // 해당 TA의 이메일 내용 생성
+        let taEmailContent: string;
+        
+        if (attachments && attachments.length > 0) {
+          // 첨부파일이 있는 경우 멀티파트 메시지
+          const boundary = `boundary_${Date.now()}_${taId}`;
+          
+          taEmailContent = `To: ${taData.email}
 Subject: ${subject}
 MIME-Version: 1.0
 Content-Type: multipart/mixed; boundary="${boundary}"
@@ -293,102 +333,114 @@ ${content}${signature}
 
 `;
 
-      // 각 TA별로 오버레이된 이미지 생성 및 첨부
-      for (const taId of taIds) {
-        try {
-          // TA 정보 가져오기
-          const taDoc = await db.collection('tas').doc(taId).get();
-          if (!taDoc.exists) {
-            console.warn(`TA ${taId}를 찾을 수 없습니다.`);
-            continue;
-          }
-          
-          const taData = taDoc.data();
-          
-          if (!taData) {
-            console.warn(`TA ${taId}의 데이터가 없습니다.`);
-            continue;
-          }
-          
-          // 각 첨부파일에 대해 TA별로 가공된 이미지 생성
+          // 해당 TA의 첨부파일만 추가
           for (const attachment of attachments) {
             try {
               let processedBuffer: Buffer;
               let fileName: string;
               
+              console.log(`처리 중인 attachment:`, {
+                type: attachment.type,
+                fileName: attachment.fileName,
+                name: attachment.name,
+                id: attachment.id
+              });
+              
               if (attachment.type === 'poster') {
-                // 전단지인 경우: TA 로고를 오버레이한 전단지 생성 (WebP로 변환)
-                processedBuffer = await createPosterWithTALogo(attachment.fileUrl, taData as TAData);
-                fileName = `${taData.companyName}_${attachment.fileName.replace('.png', '.webp')}`;
+                // 전단지인 경우: TA 로고를 오버레이한 전단지 생성
+                processedBuffer = await createPosterWithTALogo(attachment.fileUrl, {
+                  companyName: taData.companyName || 'Unknown',
+                  phone: taData.phone || '',
+                  email: taData.email,
+                  logo: taData.logo
+                });
+                // 전단지는 WebP로 변환되므로 확장자 변경
+                const originalName = attachment.fileName || attachment.name || 'poster.png';
+                // 확장자 제거 후 .webp 추가
+                fileName = originalName.replace(/\.[^.]*$/, '') + '.webp';
+                console.log(`전단지 파일명 처리: ${originalName} -> ${fileName}`);
               } else {
                 // IT/레터인 경우: 원본 파일 사용
                 const fileResponse = await fetch(attachment.fileUrl);
                 processedBuffer = Buffer.from(await fileResponse.arrayBuffer());
-                fileName = `${taData.companyName}_${attachment.fileName}`;
+                const originalName = attachment.fileName || attachment.name || 'document';
+                // 확장자가 없으면 .pdf 추가
+                fileName = originalName.endsWith('.pdf') ? originalName : originalName + '.pdf';
+                console.log(`IT/레터 파일명 처리: ${originalName} -> ${fileName}`);
               }
               
               const base64File = processedBuffer.toString('base64');
               
-              emailContent += `--${boundary}
-Content-Type: ${attachment.type === 'poster' ? 'image/webp' : 'application/pdf'}; name="${fileName.replace('.png', '.webp')}"
+              taEmailContent += `--${boundary}
+Content-Type: ${attachment.type === 'poster' ? 'image/webp' : 'application/pdf'}; name="${fileName}"
 Content-Transfer-Encoding: base64
-Content-Disposition: attachment; filename="${fileName.replace('.png', '.webp')}"
+Content-Disposition: attachment; filename="${fileName}"
 
 ${base64File}
 
 `;
             } catch (error) {
-              console.error(`TA ${taData.companyName}의 첨부파일 처리 실패: ${attachment.fileName}`, error);
+              console.error(`TA ${taData.companyName || 'Unknown'}의 첨부파일 처리 실패: ${attachment.fileName}`, error);
             }
           }
-        } catch (error) {
-          console.error(`TA ${taId} 처리 실패:`, error);
-        }
-      }
-      
-      emailContent += `--${boundary}--`;
-    } else {
-      // 일반 텍스트 메시지 (첨부파일 없음)
-      emailContent = `To: ${emailAddresses.join(', ')}
+          
+          taEmailContent += `--${boundary}--`;
+        } else {
+          // 일반 텍스트 메시지
+          taEmailContent = `To: ${taData.email}
 Subject: ${subject}
 Content-Type: text/html; charset=utf-8
 MIME-Version: 1.0
 
 ${content}${signature}`;
+        }
+
+        const encodedMessage = Buffer.from(taEmailContent).toString('base64').replace(/\+/g, '-').replace(/\//g, '_');
+
+        const message = {
+          raw: encodedMessage
+        };
+
+        // Gmail API로 개별 이메일 발송
+        const response = await gmail.users.messages.send({
+          userId: 'me',
+          requestBody: message
+        });
+
+        if (response.data.id) {
+          messageIds.push(response.data.id);
+        }
+        successCount++;
+        
+        console.log(`✅ TA ${taData.companyName || 'Unknown'} 이메일 발송 완료: ${taData.email}`);
+        
+      } catch (error) {
+        console.error(`TA ${taId} 이메일 발송 실패:`, error);
+      }
     }
 
-    const encodedMessage = Buffer.from(emailContent).toString('base64').replace(/\+/g, '-').replace(/\//g, '_');
-
-    const message = {
-      raw: encodedMessage
-    };
-
-    // Gmail API로 이메일 발송
-    const response = await gmail.users.messages.send({
-      userId: 'me',
-      requestBody: message
-    });
-
-    console.log('✅ 이메일 발송 완료:', response.data.id);
+    console.log(`✅ 총 ${successCount}개 TA에게 이메일 발송 완료`);
 
     // 발송 기록을 Firestore에 저장
     const emailRecord = {
-      messageId: response.data.id,
+      messageIds: messageIds,
       taIds: taIds,
       subject: subject,
       content: content,
       attachments: attachments || [],
       sentAt: new Date(),
       sentBy: decodedToken.email,
-      status: 'sent'
+      status: 'sent',
+      successCount: successCount
     };
 
     await db.collection('email_history').add(emailRecord);
 
     return NextResponse.json({
       success: true,
-      messageId: response.data.id,
-      sentCount: emailAddresses.length
+      messageIds: messageIds,
+      sentCount: successCount,
+      totalTAs: taIds.length
     });
 
   } catch (error) {

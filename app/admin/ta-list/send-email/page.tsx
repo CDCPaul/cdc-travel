@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { auth } from "../../../../lib/firebase";
 import Image from "next/image";
 import TiptapEditor from "../../../../components/ui/TiptapEditor";
+import GmailAuthModal from "../../../../components/GmailAuthModal";
 
 // 다국어 텍스트
 const TEXT = {
@@ -111,6 +112,10 @@ export default function SendEmailPage() {
   // 첨부파일 선택 관련 상태
   const [showAttachmentModal, setShowAttachmentModal] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  
+  // Gmail 인증 관련 상태
+  const [showGmailAuthModal, setShowGmailAuthModal] = useState(false);
+  const [gmailAuthUrl, setGmailAuthUrl] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedType, setSelectedType] = useState<'all' | 'poster' | 'itinerary' | 'letter'>('all');
   const [isLoadingAttachments, setIsLoadingAttachments] = useState(false);
@@ -363,7 +368,7 @@ export default function SendEmailPage() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     
     // 검증
@@ -491,13 +496,22 @@ export default function SendEmailPage() {
       const result = await emailResponse.json();
 
       if (!emailResponse.ok) {
-        // 토큰 만료로 인한 실패인 경우 갱신 시도
+        // Gmail 권한이 필요한 경우
+        if (result.requiresGmailAuth) {
+          console.log('Gmail 권한이 필요합니다.');
+          setGmailAuthUrl(result.gmailAuthUrl);
+          setShowGmailAuthModal(true);
+          setIsLoading(false);
+          return;
+        }
+        
+        // 기존 Firebase 토큰 만료로 인한 실패인 경우 갱신 시도
         if (result.requiresReauth) {
           const { TokenManager } = await import('../../../../lib/token-manager');
           const newToken = await TokenManager.refreshToken();
           
           if (newToken) {
-            console.log('토큰이 갱신되었습니다. 다시 시도합니다.');
+            console.log('Firebase 토큰이 갱신되었습니다. 다시 시도합니다.');
             // 토큰 갱신 후 다시 발송 시도
             handleSubmit(e);
             return;
@@ -569,7 +583,21 @@ export default function SendEmailPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selectedTAs, emailSubject, emailContent, selectedAttachments, includeLogo, router, lang, cleanupGeneratedFiles]);
+
+  // Gmail 인증 완료 후 처리
+  const handleGmailAuthComplete = useCallback(() => {
+    console.log('Gmail 인증이 완료되었습니다. 이메일 발송을 재시도합니다.');
+    setShowGmailAuthModal(false);
+    
+    // 잠시 후 이메일 발송 재시도
+    setTimeout(() => {
+      const lastEvent = {
+        preventDefault: () => {}
+      } as React.FormEvent<HTMLFormElement>;
+      handleSubmit(lastEvent);
+    }, 2000); // 2초 후 재시도
+  }, [handleSubmit]);
 
   if (isLoadingData) {
     return (
@@ -1075,6 +1103,14 @@ export default function SendEmailPage() {
           </div>
         </div>
       )}
+
+      {/* Gmail 인증 모달 */}
+      <GmailAuthModal
+        isOpen={showGmailAuthModal}
+        onClose={() => setShowGmailAuthModal(false)}
+        gmailAuthUrl={gmailAuthUrl}
+        onAuthComplete={handleGmailAuthComplete}
+      />
     </div>
   );
 } 

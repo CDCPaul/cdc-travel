@@ -49,6 +49,7 @@ interface Product {
   price: { KRW?: string; PHP?: string; USD?: string };
   region: { ko: string; en: string };
   country?: { en: string; ko: string };
+  countries?: Array<{ en: string; ko: string; code: string }>; // 다중 국가 선택 지원
   imageUrls?: string[];
   schedule?: Array<{
     day: number;
@@ -58,12 +59,11 @@ interface Product {
       spotImage?: string;
     }>;
   }>;
-  highlights?: Array<{
-    spotId: string;
-    spotName: { ko: string; en: string };
-  }>;
   includedItems?: string[];
   notIncludedItems?: string[];
+  // 상품 상세 설명 필드 추가
+  detailedDescription?: { ko: string; en: string };
+  detailImages?: string[]; // 상품 상세 설명용 이미지들
   flightCombos?: Array<{
     departure: {
       airline: { ko: string; en: string };
@@ -82,6 +82,75 @@ interface Product {
       arriveTime: string;
     };
   }>;
+  // 아이콘 정보 섹션 추가
+  iconInfo?: {
+    tripDuration?: { ko: string; en: string }; // 여행기간 (예: "5박7일")
+    airline?: { ko: string; en: string }; // 항공사 정보 (예: "티웨이 항공 직항")
+    groupSize?: { ko: string; en: string }; // 그룹 규모 (예: "소형 3인")
+    guideFee?: string; // 가이드비 (예: "$70")
+    selectInfo?: { ko: string; en: string }; // 선택 정보 (예: "선택관광 있음")
+  };
+
+  // 새로운 예약 시스템 필드들 추가
+  visitingCities?: {
+    ko: string[];  // ["남부 시드니", "시드니", "블루 마운틴"]
+    en: string[];  // ["Southern Sydney", "Sydney", "Blue Mountains"]
+  };
+
+  bookingStatus?: {
+    currentBookings: number;     // 현재 예약인원 (14명)
+    availableSeats: number;      // 여유좌석 (0명)
+    minimumPax: number;          // 최소 출발인원 (6명)
+    maxCapacity: number;         // 최대 수용인원
+  };
+
+  departureOptions?: Array<{
+    departureDate: string;     // 출발일 "2025-09-03"
+    returnDate: string;        // 도착일/종료일 "2025-09-07"
+  }>;
+
+  detailedPricing?: {
+    adult: {
+      age: string;           // "만 12세 이상"
+      priceKRW: number;      // 1250800
+      pricePHP?: number;     // PHP 가격
+      priceUSD?: number;     // USD 가격
+    };
+    childExtraBed: {
+      age: string;           // "만 12세 미만"
+      priceKRW: number;      // 1250800
+      pricePHP?: number;
+      priceUSD?: number;
+    };
+    childNoBed: {
+      age: string;           // "만 12세 미만"  
+      priceKRW: number;      // 1250800
+      pricePHP?: number;
+      priceUSD?: number;
+    };
+    infant: {
+      age: string;           // "만 2세 미만"
+      priceKRW: number;      // 300000
+      pricePHP?: number;
+      priceUSD?: number;
+    };
+  };
+
+  additionalInfo?: {
+    fuelSurcharge: {
+      ko: string;          // "유류할증료 127,600원 포함"
+      en: string;          // "Fuel surcharge 127,600 KRW included"
+    };
+    taxes: {
+      ko: string;          // "제세공과금 0원 포함"  
+      en: string;          // "Taxes 0 KRW included"
+    };
+  };
+
+  localExpenses?: {
+    adult: number;         // 성인 현지 필수 경비 (USD)
+    child: number;         // 아동 현지 필수 경비 (USD)  
+  };
 }
 
 const TEXTS = {
@@ -91,9 +160,11 @@ const TEXTS = {
     backToTours: "← 투어 목록으로",
     duration: "기간",
     region: "지역",
-    highlights: "하이라이트",
     schedule: "일정",
     day: "일차",
+    productDetails: "상품 상세 정보",
+    showFullSchedule: "전체 일정 보기",
+    hideSchedule: "일정 접기",
     includedItems: "포함 사항",
     notIncludedItems: "불포함 사항",
     price: "가격",
@@ -108,9 +179,11 @@ const TEXTS = {
     backToTours: "← Back to Tours",
     duration: "Duration",
     region: "Region",
-    highlights: "Highlights",
     schedule: "Schedule",
     day: "Day",
+    productDetails: "Product Details",
+    showFullSchedule: "Show Full Schedule",
+    hideSchedule: "Hide Schedule",
     includedItems: "Included Items",
     notIncludedItems: "Not Included Items",
     price: "Price",
@@ -497,6 +570,10 @@ function SpotDetailModal({ spot, onClose, lang }: { spot: Spot; onClose: () => v
                       fill
                       className="object-cover transition-opacity duration-300"
                       sizes="(max-width: 768px) 100vw, (max-width: 1200px) 80vw, 60vw"
+                      onError={() => {
+                        console.log('Main image load error:', allImages[currentImageIndex]);
+                      }}
+                      unoptimized
                       priority
                     />
                   )}
@@ -948,6 +1025,58 @@ export default function TourDetailPage() {
   const [isMapModalOpen, setIsMapModalOpen] = useState(false); // 지도 모달 상태
   const [isFullMapModalOpen, setIsFullMapModalOpen] = useState(false); // 전체 지도 모달 상태
   const [spotsWithCoordinates, setSpotsWithCoordinates] = useState<{ [day: number]: Spot[] }>({});
+  
+  // 전체 내용 확장/축소 상태 (스케줄 + 상품상세 + 이미지 등 모든 것)
+  const [isScheduleExpanded, setIsScheduleExpanded] = useState(false);
+  
+  // 스크롤 네비게이션을 위한 상태와 ref
+  const [currentActiveDay, setCurrentActiveDay] = useState<number>(1);
+  const [navHeight, setNavHeight] = useState<number>(84);
+  
+  // 스마트 리모콘을 위한 상태
+  const [remotePosition, setRemotePosition] = useState({ top: 100, show: true });
+  
+  // 여행기간 선택을 위한 상태
+  const [showDateModal, setShowDateModal] = useState(false);
+  const [selectedDepartureOption, setSelectedDepartureOption] = useState<number>(0);
+  
+  // 예약 인터페이스 상태
+  const [bookingCounts, setBookingCounts] = useState({
+    adult: 1,
+    childExtraBed: 0,
+    childNoBed: 0,
+    infant: 0
+  });
+  
+  // 개별 가격 (PHP 기준)
+  const prices = {
+    adult: product?.detailedPricing?.adult?.pricePHP || 29888,
+    childExtraBed: product?.detailedPricing?.childExtraBed?.pricePHP || 29888,
+    childNoBed: product?.detailedPricing?.childNoBed?.pricePHP || 26888,
+    infant: product?.detailedPricing?.infant?.pricePHP || 5100
+  };
+  
+  // 총액 계산
+  const totalAmount = (bookingCounts.adult * prices.adult) + 
+                      (bookingCounts.childExtraBed * prices.childExtraBed) + 
+                      (bookingCounts.childNoBed * prices.childNoBed) + 
+                      (bookingCounts.infant * prices.infant);
+  
+  // 인원 수 조정 함수
+  const updateCount = (type: 'adult' | 'childExtraBed' | 'childNoBed' | 'infant', increment: boolean) => {
+    setBookingCounts(prev => ({
+      ...prev,
+      [type]: increment 
+        ? prev[type] + 1 
+        : Math.max(0, prev[type] - 1)
+    }));
+  };
+  
+
+  const currentActiveDayRef = useRef<number>(1);
+  const scheduleContainerRef = useRef<HTMLDivElement>(null);
+  const scheduleTabsRef = useRef<HTMLDivElement>(null);
+  const dayRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
 
   // 스팟 좌표 데이터 가져오기
   const fetchSpotsWithCoordinates = async (schedule: Product['schedule']) => {
@@ -1018,6 +1147,115 @@ export default function TourDetailPage() {
     fetchIncludeNotInclude();
   }, [product, lang]);
 
+  // 네비게이션바 높이 측정
+  useEffect(() => {
+    const measureNavHeight = () => {
+      const navElement = document.querySelector('nav[class*="fixed"]') as HTMLElement;
+      if (navElement) {
+        const height = navElement.offsetHeight;
+        console.log('Navigation height measured:', height);
+        setNavHeight(height);
+      }
+    };
+    
+    measureNavHeight();
+    window.addEventListener('resize', measureNavHeight);
+    
+    return () => window.removeEventListener('resize', measureNavHeight);
+  }, []);
+
+  // currentActiveDay와 ref 동기화
+  useEffect(() => {
+    currentActiveDayRef.current = currentActiveDay;
+  }, [currentActiveDay]);
+
+  // 스크롤 네비게이션 유틸리티 함수들
+  const scrollToDay = useCallback((dayNumber: number) => {
+    const dayElement = dayRefs.current[dayNumber];
+    if (dayElement) {
+      const elementTop = dayElement.offsetTop;
+      const tabsHeight = scheduleTabsRef.current?.offsetHeight || 60;
+      
+      // 동적 네비게이션바 높이 + 스티키 탭 높이 + 여유공간(20px)
+      const targetScrollTop = elementTop - navHeight - tabsHeight - 20;
+      
+      console.log('Scroll to day:', dayNumber, 'elementTop:', elementTop, 'navHeight:', navHeight, 'targetScrollTop:', targetScrollTop);
+      
+      window.scrollTo({
+        top: Math.max(0, targetScrollTop),
+        behavior: 'smooth'
+      });
+    }
+  }, [navHeight]);
+
+  // 스크롤 기반 활성 날짜 감지 - 더 간단하고 확실한 방식
+  useEffect(() => {
+    if (!product?.schedule || product.schedule.length === 0) return;
+
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY + navHeight + 100; // 네비게이션바 + 여유공간
+      
+      let activeDay = 1; // 기본값
+      let minDistance = Infinity;
+      
+      // 각 DAY 요소의 위치를 확인하여 가장 가까운 요소 찾기
+      Object.entries(dayRefs.current).forEach(([dayStr, dayElement]) => {
+        if (dayElement) {
+          const dayNum = parseInt(dayStr);
+          const elementTop = dayElement.offsetTop;
+          const distance = Math.abs(elementTop - scrollPosition);
+          
+          console.log(`📍 Day ${dayNum}: elementTop=${elementTop}, scrollPos=${scrollPosition}, distance=${distance}`);
+          
+          if (distance < minDistance) {
+            minDistance = distance;
+            activeDay = dayNum;
+          }
+        }
+      });
+      
+      if (activeDay !== currentActiveDayRef.current) {
+        console.log(`✅ Active day changed from ${currentActiveDayRef.current} to ${activeDay}`);
+        currentActiveDayRef.current = activeDay;
+        setCurrentActiveDay(activeDay);
+      }
+      
+      // 스마트 리모콘 위치 계산
+      const scrollY = window.scrollY;
+      const viewportHeight = window.innerHeight;
+      const documentHeight = document.documentElement.scrollHeight;
+      
+      // 상단 기본 위치에서 시작하여 스크롤에 따라 이동
+      const baseTop = 100; // 기본 상단 위치
+      const maxScroll = documentHeight - viewportHeight;
+      const scrollPercent = maxScroll > 0 ? scrollY / maxScroll : 0;
+      
+      // 스크롤에 따라 위치 조정 (최대 200px까지 아래로)
+      const calculatedTop = baseTop + (scrollPercent * 200);
+      const shouldShow = scrollY > 50; // 50px 스크롤 후 표시
+      
+      setRemotePosition({ 
+        top: Math.min(calculatedTop, viewportHeight - 400), // 화면 하단에서 400px 여백
+        show: shouldShow 
+      });
+
+    };
+
+    // 스크롤 이벤트 리스너 등록
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    
+    // 초기 실행
+    setTimeout(handleScroll, 500); // DOM 렌더링 후 실행
+    
+    console.log(`🎯 Scroll-based day detection setup complete. NavHeight: ${navHeight}px`);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [product?.schedule, navHeight]);
+
+
+
   // 투어 데이터 불러오기
   useEffect(() => {
     const fetchData = async () => {
@@ -1029,7 +1267,75 @@ export default function TourDetailPage() {
         
         if (docSnap.exists()) {
           const data = docSnap.data() as Product;
-          setProduct({ ...data, id: docSnap.id });
+          
+          // 테스트용 임시 데이터 추가 (실제로는 Firestore에서 가져와야 함)
+          const productWithTestData = {
+            ...data,
+            id: docSnap.id,
+            // 아이콘 정보 테스트 데이터
+            iconInfo: data.iconInfo || {
+              tripDuration: { ko: '3박4일', en: '3N4D' },
+              airline: { ko: '티웨이 항공 직항', en: 'Tway Direct Flight' },
+              groupSize: { ko: '소형 4인', en: 'Small Group 4pax' },
+              guideFee: '$80',
+              selectInfo: { ko: '선택관광 있음', en: 'Optional Tour Available' }
+            },
+            detailedDescription: {
+              ko: `🌟 특별한 부산 여행을 위한 완벽한 가이드 🌟
+
+이 투어는 부산의 숨겨진 매력과 대표 명소들을 모두 경험할 수 있도록 특별히 구성되었습니다.
+
+✈️ 편안한 여행
+- 항공료, 숙박비, 가이드비 모두 포함된 올인클루시브 패키지
+- 전문 가이드가 함께하는 안전하고 알찬 여행
+- 현지 맛집과 핫플레이스 완전 정복
+
+🏨 프리미엄 숙박
+- 부산 중심가 4성급 호텔 숙박
+- 해운대 오션뷰 또는 시티뷰 객실
+- 조식 포함으로 편리한 아침 시간
+
+🍱 현지 미식 체험  
+- 부산 3대 맛집 투어 포함
+- 신선한 해산물과 전통 한식
+- 현지인만 아는 숨겨진 맛집 방문
+
+📸 인스타 핫플레이스
+- 감천문화마을 포토존
+- 해운대 블루라인파크
+- 송도 스카이워크 등 SNS 필수 스팟`,
+              en: `🌟 Perfect Guide for Special Busan Travel 🌟
+
+This tour is specially designed to experience both hidden charms and representative attractions of Busan.
+
+✈️ Comfortable Travel
+- All-inclusive package including airfare, accommodation, and guide fees
+- Safe and fulfilling travel with professional guides
+- Complete conquest of local restaurants and hot places
+
+🏨 Premium Accommodation  
+- 4-star hotel accommodation in downtown Busan
+- Haeundae ocean view or city view rooms
+- Breakfast included for convenient morning time
+
+🍱 Local Culinary Experience
+- Busan's top 3 restaurant tour included
+- Fresh seafood and traditional Korean cuisine
+- Visit to hidden restaurants known only to locals
+
+📸 Instagram Hot Places
+- Gamcheon Culture Village photo zones
+- Haeundae Blue Line Park  
+- Songdo Skywalk and other essential SNS spots`
+            },
+            detailImages: [
+              'https://firebasestorage.googleapis.com/v0/b/cdc-home-fb4d1/o/products%2F1752477922810_SS_Busan_CDC.webp?alt=media&token=example1',
+              'https://firebasestorage.googleapis.com/v0/b/cdc-home-fb4d1/o/spots%2F1750949554259_Gamcheon%20Culture%20Village_1.webp?alt=media&token=example2',
+              'https://firebasestorage.googleapis.com/v0/b/cdc-home-fb4d1/o/spots%2F1750947152397_BIFF_1.webp?alt=media&token=example3'
+            ]
+          };
+          
+          setProduct(productWithTestData);
           
           // 투어 클릭수 증가
           try {
@@ -1041,6 +1347,10 @@ export default function TourDetailPage() {
           // 스팟 좌표 데이터 가져오기
           if (data.schedule) {
             await fetchSpotsWithCoordinates(data.schedule);
+            // 첫 번째 일차로 초기화
+            const firstDay = data.schedule[0]?.day || 1;
+            setCurrentActiveDay(firstDay);
+            currentActiveDayRef.current = firstDay;
           }
         } else {
           console.error('Product not found');
@@ -1099,37 +1409,34 @@ export default function TourDetailPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
         >
-          {/* Product Header */}
-          <div className="text-center mb-6">
-            <h1 className="text-4xl font-bold mb-2">{safeLang(product.title, lang)}</h1>
-          </div>
-
-          {/* Product Image Slider (3:2 비율 - 1200x800) */}
+          {/* Product Header - 모데투어 스타일 좌우 분할 레이아웃 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            {/* 왼쪽: 상품 이미지 */}
+            <div className="order-2 lg:order-1">
           {product.imageUrls && product.imageUrls.length > 0 ? (
-            <div className="relative w-full" style={{ aspectRatio: '3 / 2', maxWidth: '1200px', maxHeight: '800px' }}>
+                <div className="relative w-full h-full min-h-[400px] lg:min-h-[500px]" style={{ aspectRatio: '4 / 3' }}>
               <Swiper
                 modules={[SwiperNavigation, Pagination]}
                 navigation={true}
                 pagination={{ clickable: true }}
                 loop={product.imageUrls.length > 1}
-                className="w-full h-full rounded-lg"
+                    className="w-full h-full rounded-xl shadow-lg"
               >
                 {product.imageUrls.map((imageUrl, index) => (
                   <SwiperSlide key={index}>
-                    <div className="relative w-full h-full bg-gray-100">
+                        <div className="relative w-full h-full bg-gray-100 rounded-xl overflow-hidden">
                       <Image
                         src={imageUrl}
                         alt={`${safeLang(product.title, lang)} - 이미지 ${index + 1}`}
                         fill
-                        className="object-contain"
+                            className="object-cover"
                         priority={index === 0}
                         onError={(e) => {
-                          // 이미지 로딩 실패 시 fallback 표시
+                              console.log('Swiper image load error:', imageUrl);
                           const target = e.target as HTMLImageElement;
                           target.style.display = 'none';
-                          const fallback = target.parentElement?.querySelector('.swiper-fallback') as HTMLElement;
-                          if (fallback) fallback.style.display = 'flex';
                         }}
+                            unoptimized
                       />
                       {/* Fallback 이미지 */}
                       <div className="swiper-fallback absolute inset-0 flex items-center justify-center bg-gray-200" 
@@ -1142,72 +1449,419 @@ export default function TourDetailPage() {
               </Swiper>
             </div>
           ) : (
-            <div className="relative w-full rounded-lg overflow-hidden bg-gray-200 flex items-center justify-center" style={{ aspectRatio: '3 / 2', maxWidth: '1200px', maxHeight: '800px' }}>
+                <div className="relative w-full h-full min-h-[400px] lg:min-h-[500px] rounded-xl overflow-hidden bg-gray-200 flex items-center justify-center" style={{ aspectRatio: '4 / 3' }}>
               <span className="text-gray-500">이미지 없음</span>
             </div>
           )}
-
-          {/* 상품기본정보 영역 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:[grid-template-columns:0.8fr_1.4fr_0.8fr] gap-4 mb-6 text-center">
-            <div className="bg-gray-50 p-4 rounded-lg flex flex-col items-center justify-center">
-              <h3 className="font-semibold text-gray-700 mb-1">{texts.price}</h3>
-              <p className="text-lg">{getPHPPrice(product.price)}</p>
             </div>
-            <div className="bg-gray-50 p-4 rounded-lg flex flex-col items-center justify-center min-w-[160px] break-keep">
-              <h3 className="font-semibold text-gray-700 mb-1">{texts.period}</h3>
-              <div className="text-center">
-                {product.duration?.startDate && product.duration?.endDate && (
-                  <p className="text-lg font-medium">
+
+            {/* 오른쪽: 상품 정보 */}
+            <div className="order-1 lg:order-2 flex flex-col justify-start space-y-6">
+              {/* 상품 제목 */}
+              <div>
+                <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-3 leading-tight">{safeLang(product.title, lang)}</h1>
+                
+                {/* 상품 태그 또는 카테고리 */}
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <span className="inline-block bg-blue-100 text-blue-800 text-xs font-medium px-3 py-1 rounded-full">
+                    {safeLang(product.region, lang) || '여행상품'}
+                  </span>
+                  {product.nights && product.days && (
+                    <span className="inline-block bg-green-100 text-green-800 text-xs font-medium px-3 py-1 rounded-full">
+                      {getNightsDaysText(product.nights, product.days, lang)}
+                    </span>
+                  )}
+            </div>
+              </div>
+
+              {/* 가격 정보 - 강조 */}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border-l-4 border-blue-500">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600 font-medium">{texts.price}</p>
+                    <p className="text-2xl lg:text-3xl font-bold text-blue-600">{getPHPPrice(product.price)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500 mb-1">1인 기준</p>
+                    <p className="text-xs text-gray-500">{texts.included}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 여행 기간 및 지역 정보 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-gray-50 rounded-lg p-4 flex flex-col">
+                  <h3 className="text-sm font-semibold text-gray-600 mb-2 flex items-center">
+                    📅 {texts.duration}
+                  </h3>
+                  {product.duration?.startDate && product.duration?.endDate ? (
+                    <p className="text-base font-medium text-gray-900">
                     {product.duration.startDate} ~ {product.duration.endDate}
                   </p>
-                )}
-                {product.nights && product.days && (
-                  <p className="text-sm text-gray-500 mt-1">
-                    {getNightsDaysText(product.nights, product.days, lang)}
+                  ) : (
+                    <p className="text-base text-gray-500">날짜 미정</p>
+                  )}
+                </div>
+
+                <div className="bg-gray-50 rounded-lg p-4 flex flex-col">
+                  <h3 className="text-sm font-semibold text-gray-600 mb-2 flex items-center">
+                    📍 {texts.region}
+                  </h3>
+                  <p className="text-base font-medium text-gray-900">
+                    {safeLang(product.region, lang) || '-'}
                   </p>
-                )}
               </div>
             </div>
-            <div className="bg-gray-50 p-4 rounded-lg flex flex-col items-center justify-center">
-              <h3 className="font-semibold text-gray-700 mb-1">{texts.region}</h3>
-              <p className="text-lg">{safeLang(product.region, lang) || '-'}</p>
+
+                                        {/* 아이콘 정보 섹션 - 모데투어 스타일 */}
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-gray-600 mb-4">여행 정보</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                {/* 여행기간 */}
+                <div className="flex flex-col items-center text-center p-2">
+                  <div className="w-8 h-8 mb-1 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+            </div>
+                  <span className="text-xs text-gray-500 font-medium mb-1">
+                    {lang === 'ko' ? '여행기간' : 'Duration'}
+                  </span>
+                  <span className="text-xs text-gray-800 font-semibold leading-tight">
+                    {product.departureOptions && product.departureOptions.length > 0 && product.departureOptions[selectedDepartureOption] && product.departureOptions[selectedDepartureOption].departureDate && product.departureOptions[selectedDepartureOption].returnDate
+                      ? `${product.departureOptions[selectedDepartureOption].departureDate} ~ ${product.departureOptions[selectedDepartureOption].returnDate}`
+                      : product.iconInfo?.tripDuration 
+                        ? safeLang(product.iconInfo.tripDuration, lang) 
+                        : `${product.nights}박${product.days}일`}
+                  </span>
+          </div>
+
+                {/* 항공사 */}
+                <div className="flex flex-col items-center text-center p-2">
+                  <div className="w-8 h-8 mb-1 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-gray-600" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
+                    </svg>
+                  </div>
+                  <span className="text-xs text-gray-500 font-medium mb-1">
+                    {lang === 'ko' ? '항공사' : 'Airline'}
+                  </span>
+                  <span className="text-xs text-gray-800 font-semibold leading-tight">
+                    {product.iconInfo?.airline ? safeLang(product.iconInfo.airline, lang) : lang === 'ko' ? '항공편 직항' : 'Direct Flight'}
+                  </span>
+          </div>
+
+                {/* 그룹 규모 */}
+                <div className="flex flex-col items-center text-center p-2">
+                  <div className="w-8 h-8 mb-1 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2m8-10a4 4 0 100-8 4 4 0 000 8zm8.5 2.5a4 4 0 100-8 4 4 0 000 8z" />
+                    </svg>
+                    </div>
+                  <span className="text-xs text-gray-500 font-medium mb-1">
+                    {lang === 'ko' ? '그룹규모' : 'Group Size'}
+                  </span>
+                  <span className="text-xs text-gray-800 font-semibold leading-tight">
+                    {product.iconInfo?.groupSize ? safeLang(product.iconInfo.groupSize, lang) : lang === 'ko' ? '소형 그룹' : 'Small Group'}
+                  </span>
+              </div>
+
+                {/* 가이드비 */}
+                <div className="flex flex-col items-center text-center p-2">
+                  <div className="w-8 h-8 mb-1 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                    </svg>
+            </div>
+                  <span className="text-xs text-gray-500 font-medium mb-1">
+                    {lang === 'ko' ? '가이드비' : 'Guide Fee'}
+                  </span>
+                  <span className="text-xs text-gray-800 font-semibold leading-tight">
+                    {product.iconInfo?.guideFee || (lang === 'ko' ? '가이드 경비' : 'Guide Fee')}
+                  </span>
+                </div>
+
+                {/* 선택관광 */}
+                <div className="flex flex-col items-center text-center p-2">
+                  <div className="w-8 h-8 mb-1 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <span className="text-xs text-gray-500 font-medium mb-1">
+                    {lang === 'ko' ? '선택관광' : 'Optional Tour'}
+                  </span>
+                  <span className="text-xs text-gray-800 font-semibold leading-tight">
+                    {product.iconInfo?.selectInfo ? safeLang(product.iconInfo.selectInfo, lang) : lang === 'ko' ? '선택관광 있음' : 'Available'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            
+
+              {/* 예약 관련 버튼들 (추후 추가 예정) */}
+              <div className="flex flex-col sm:flex-row gap-3 pt-4">
+                <button className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+                  💌 {lang === 'ko' ? '문의하기' : 'Contact'}
+                </button>
+                <button className="flex-1 bg-white border-2 border-blue-600 text-blue-600 hover:bg-blue-50 font-semibold py-3 px-6 rounded-lg transition-all duration-300">
+                  ❤️ {lang === 'ko' ? '찜하기' : 'Save'}
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Description */}
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold mb-3">상품 설명</h2>
-            <p className="text-gray-700 leading-relaxed">{safeLang(product.description, lang)}</p>
+
+
+          {/* 하이라이트 기능 제거됨 */}
+
+          {/* 여행 주요정보 섹션 */}
+          <div className="mb-8 bg-white rounded-xl p-6 shadow-lg border border-gray-100">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-1 h-8 bg-gradient-to-b from-green-500 to-emerald-600 rounded-full"></div>
+              <h2 className="text-2xl font-bold text-gray-800">
+                {lang === 'ko' ? '여행 주요일정' : 'Trip Information'}
+              </h2>
+            </div>
+
+            {/* 한 줄로 통합된 여행 정보 */}
+            <div className="bg-gradient-to-r from-gray-50 to-blue-50 rounded-lg p-4 border border-gray-200">
+              <div className="flex flex-col lg:flex-row lg:items-center gap-4 lg:gap-8">
+                
+                {/* 방문도시 */}
+                {product.visitingCities && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">🏙️</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-gray-700 text-sm">
+                        {lang === 'ko' ? '방문도시:' : 'Cities:'}
+                      </span>
+                      <span className="text-gray-700 text-sm">
+                        {product.visitingCities && typeof product.visitingCities === 'object' && product.visitingCities[lang] 
+                          ? Array.isArray(product.visitingCities[lang]) 
+                            ? product.visitingCities[lang].join(', ')
+                            : product.visitingCities[lang]
+                          : typeof product.visitingCities === 'string' 
+                            ? product.visitingCities 
+                            : '정보 없음'
+                        }
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 구분선 */}
+                <div className="hidden lg:block w-px h-6 bg-gray-300"></div>
+
+                {/* 선택된 여행기간 */}
+                {product.departureOptions && product.departureOptions.length > 0 && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">📅</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-gray-700 text-sm">
+                        {lang === 'ko' ? '선택된 여행:' : 'Selected:'}
+                      </span>
+                      <span className="text-blue-600 font-medium text-sm">
+                        {product.departureOptions[selectedDepartureOption] ? (
+                          <>
+                            {new Date(product.departureOptions[selectedDepartureOption].departureDate).toLocaleDateString(lang === 'ko' ? 'ko-KR' : 'en-US', {
+                              month: 'short',
+                              day: 'numeric', 
+                              weekday: 'short'
+                            })} ~ {new Date(product.departureOptions[selectedDepartureOption].returnDate).toLocaleDateString(lang === 'ko' ? 'ko-KR' : 'en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              weekday: 'short'
+                            })}
+                          </>
+                        ) : (
+                          lang === 'ko' ? '기간 선택 필요' : 'Select period'
+                        )}
+                      </span>
+                      <button 
+                        onClick={() => setShowDateModal(true)}
+                        className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-md text-xs font-medium transition-colors duration-200"
+                      >
+                        {lang === 'ko' ? '변경' : 'Change'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 구분선 */}
+                <div className="hidden lg:block w-px h-6 bg-gray-300"></div>
+
+                {/* 출발옵션 요약 */}
+                {product.departureOptions && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">✈️</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-gray-700 text-sm">
+                        {lang === 'ko' ? '출발옵션:' : 'Options:'}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {product.departureOptions && Array.isArray(product.departureOptions) ? (
+                          product.departureOptions.map((option, index) => (
+                            <button 
+                      key={index}
+                              onClick={() => setSelectedDepartureOption(index)}
+                              className={`px-2 py-1 rounded-full text-xs font-medium transition-colors duration-200 cursor-pointer ${
+                                selectedDepartureOption === index 
+                                  ? 'bg-purple-500 text-white' 
+                                  : 'bg-gray-200 text-gray-700 hover:bg-purple-100 hover:text-purple-600'
+                              }`}
+                            >
+                              {lang === 'ko' ? `${index + 1}차` : `${index + 1}st`}
+                            </button>
+                          ))
+                        ) : typeof product.departureOptions === 'string' ? (
+                          <span className="text-gray-700 text-sm">{product.departureOptions}</span>
+                        ) : (
+                          <span className="text-gray-500 text-sm">{lang === 'ko' ? '정보 없음' : 'No info'}</span>
+                        )}
+                    </div>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            </div>
           </div>
 
-          {/* Highlights */}
-          {product.highlights && product.highlights.length > 0 && (
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold mb-3">{texts.highlights}</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {product.highlights.map((highlight, index) => {
-                  // 해당 spot 정보 찾기 (일정에서)
-                  const allSpots = product.schedule?.flatMap(day => day.spots) || [];
-                  const spot = allSpots.find(s => s.spotId === highlight.spotId);
-                  if (!spot) return null;
-                  return (
-                    <div
-                      key={index}
-                      className="flex items-center gap-2 cursor-pointer hover:underline"
-                      onClick={() => setSelectedSpot(spot)}
-                    >
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                      <span>{safeLang(highlight.spotName, lang)}</span>
+          {/* 상품가격 섹션 */}
+          {product.detailedPricing && (
+            <div className="mb-8 bg-white rounded-xl p-6 shadow-lg border border-gray-100">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-1 h-8 bg-gradient-to-b from-yellow-500 to-orange-600 rounded-full"></div>
+                <h2 className="text-2xl font-bold text-gray-800">
+                  {lang === 'ko' ? '상품가격' : 'Pricing Details'}
+                </h2>
                     </div>
-                  );
-                })}
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 성인 가격 */}
+                {product.detailedPricing.adult && (
+                    <div className="bg-gradient-to-br from-slate-50 to-gray-50 rounded-lg p-4 border border-slate-200">
+                      <h3 className="text-sm font-semibold text-gray-600 mb-3 text-center">
+                        {lang === 'ko' ? '성인 가격' : 'Adult Price'}
+                        <div className="text-xs text-gray-500 mt-1">
+                          {lang === 'ko' ? '(만 12세 이상)' : '(12+ years)'}
+                        </div>
+                      </h3>
+                      <div className="text-center">
+                        {Number(product.detailedPricing.adult.priceKRW) > 0 && (
+                          <span className="font-bold text-lg text-gray-800">
+                            ₩{Number(product.detailedPricing.adult.priceKRW).toLocaleString()}
+                          </span>
+                        )}
+                        {Number(product.detailedPricing.adult.pricePHP) > 0 && (
+                          <span className="font-bold text-lg text-gray-800">
+                            ₱{Number(product.detailedPricing.adult.pricePHP).toLocaleString()}
+                          </span>
+                        )}
+                        {Number(product.detailedPricing.adult.priceUSD) > 0 && (
+                          <span className="font-bold text-lg text-gray-800">
+                            ${Number(product.detailedPricing.adult.priceUSD).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                )}
+
+                {/* 아동 Extra Bed 가격 */}
+                {product.detailedPricing.childExtraBed && (
+                    <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-lg p-4 border border-blue-200">
+                      <h3 className="text-sm font-semibold text-gray-600 mb-3 text-center">
+                        {lang === 'ko' ? '아동 Extra Bed' : 'Child Extra Bed'}
+                        <div className="text-xs text-gray-500 mt-1">
+                          {lang === 'ko' ? '(만 2세 ~ 11세)' : '(2-11 years)'}
+                        </div>
+                      </h3>
+                      <div className="text-center">
+                        {Number(product.detailedPricing.childExtraBed.priceKRW) > 0 && (
+                          <span className="font-bold text-lg text-gray-800">
+                            ₩{Number(product.detailedPricing.childExtraBed.priceKRW).toLocaleString()}
+                          </span>
+                        )}
+                        {Number(product.detailedPricing.childExtraBed.pricePHP) > 0 && (
+                          <span className="font-bold text-lg text-gray-800">
+                            ₱{Number(product.detailedPricing.childExtraBed.pricePHP).toLocaleString()}
+                          </span>
+                        )}
+                        {Number(product.detailedPricing.childExtraBed.priceUSD) > 0 && (
+                          <span className="font-bold text-lg text-gray-800">
+                            ${Number(product.detailedPricing.childExtraBed.priceUSD).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                )}
+
+                {/* 아동 No Bed 가격 */}
+                {product.detailedPricing.childNoBed && (
+                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-4 border border-green-200">
+                      <h3 className="text-sm font-semibold text-gray-600 mb-3 text-center">
+                        {lang === 'ko' ? '아동 No Bed' : 'Child No Bed'}
+                        <div className="text-xs text-gray-500 mt-1">
+                          {lang === 'ko' ? '(만 2세 ~ 11세)' : '(2-11 years)'}
+                        </div>
+                      </h3>
+                      <div className="text-center">
+                        {Number(product.detailedPricing.childNoBed.priceKRW) > 0 && (
+                          <span className="font-bold text-lg text-gray-800">
+                            ₩{Number(product.detailedPricing.childNoBed.priceKRW).toLocaleString()}
+                          </span>
+                        )}
+                        {Number(product.detailedPricing.childNoBed.pricePHP) > 0 && (
+                          <span className="font-bold text-lg text-gray-800">
+                            ₱{Number(product.detailedPricing.childNoBed.pricePHP).toLocaleString()}
+                          </span>
+                        )}
+                        {Number(product.detailedPricing.childNoBed.priceUSD) > 0 && (
+                          <span className="font-bold text-lg text-gray-800">
+                            ${Number(product.detailedPricing.childNoBed.priceUSD).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                )}
+
+                {/* 유아 가격 */}
+                {product.detailedPricing.infant && (
+                    <div className="bg-gradient-to-br from-pink-50 to-rose-50 rounded-lg p-4 border border-pink-200">
+                      <h3 className="text-sm font-semibold text-gray-600 mb-3 text-center">
+                        {lang === 'ko' ? '유아' : 'Infant'}
+                        <div className="text-xs text-gray-500 mt-1">
+                          {lang === 'ko' ? '(만 24개월 미만)' : '(Under 24 months)'}
+                        </div>
+                      </h3>
+                      <div className="text-center">
+                        {Number(product.detailedPricing.infant.priceKRW) > 0 && (
+                          <span className="font-bold text-lg text-gray-800">
+                            ₩{Number(product.detailedPricing.infant.priceKRW).toLocaleString()}
+                          </span>
+                        )}
+                        {Number(product.detailedPricing.infant.pricePHP) > 0 && (
+                          <span className="font-bold text-lg text-gray-800">
+                            ₱{Number(product.detailedPricing.infant.pricePHP).toLocaleString()}
+                          </span>
+                        )}
+                        {Number(product.detailedPricing.infant.priceUSD) > 0 && (
+                          <span className="font-bold text-lg text-gray-800">
+                            ${Number(product.detailedPricing.infant.priceUSD).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                )}
               </div>
             </div>
           )}
 
           {/* Schedule */}
           {product.schedule && product.schedule.length > 0 && (
-            <div className="mb-6">
+            <div className="mb-6" ref={scheduleContainerRef}>
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold">{texts.schedule}</h2>
                 {/* 전체 일정 지도보기 버튼 */}
@@ -1218,16 +1872,21 @@ export default function TourDetailPage() {
                   🗺️ {lang === 'ko' ? '전체 일정 지도보기' : 'Full Schedule Map'}
                 </button>
               </div>
-              {/* Day Tabs */}
-              <div className="flex gap-2 mb-4 overflow-x-auto">
+              
+              {/* Sticky Navigation Tabs */}
+              <div
+                ref={scheduleTabsRef}
+                className="sticky z-40 flex gap-3 mb-4 overflow-x-auto bg-gradient-to-r from-blue-50 to-white rounded-lg p-3 transition-all duration-300 scrollbar-hide shadow-2xl border-b-4 border-blue-300 backdrop-blur-sm"
+                style={{ top: `${navHeight}px` }}
+              >
                 {product.schedule.map((day) => (
                   <button
                     key={day.day}
-                    onClick={() => setActiveDay(day.day)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      activeDay === day.day
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    onClick={() => scrollToDay(day.day)}
+                    className={`px-5 py-3 rounded-xl text-sm font-bold transition-all duration-300 whitespace-nowrap border-2 ${
+                      currentActiveDay === day.day
+                        ? 'bg-blue-600 text-white shadow-2xl scale-110 border-blue-800 ring-2 ring-blue-300 ring-opacity-50'
+                        : 'bg-white text-gray-600 shadow-md hover:bg-blue-100 hover:text-blue-700 hover:scale-105 border-gray-200 hover:border-blue-300'
                     }`}
                   >
                     {texts.day} {day.day}
@@ -1235,56 +1894,310 @@ export default function TourDetailPage() {
                 ))}
               </div>
 
-              {/* Day Content */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="font-semibold">
-                    {texts.day} {activeDay}
-                  </h3>
-                  {/* 지도보기 버튼 */}
-                  <button
-                    onClick={() => setIsMapModalOpen(true)}
-                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium"
+              {/* All Days Content - 더보기 기능 포함 */}
+              <div className="space-y-6">
+                {/* Day 1 - 항상 표시 (일부 또는 전체) */}
+                {product.schedule?.[0] && (
+                  <div
+                    ref={(el) => { dayRefs.current[product.schedule?.[0]?.day || 1] = el; }}
+                    data-day={product.schedule?.[0]?.day}
+                    className="bg-gray-50 rounded-lg p-6 scroll-mt-32"
                   >
-                    🗺️ {texts.viewMap}
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-xl font-bold text-gray-800 flex items-center gap-3">
+                        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-white text-sm font-bold ${
+                          currentActiveDay === (product.schedule?.[0]?.day || 1) ? 'bg-blue-600' : 'bg-gray-500'
+                        }`}>
+                          {product.schedule?.[0]?.day}
+                        </span>
+                        {texts.day} {product.schedule?.[0]?.day}
+                  </h3>
+                      {/* 해당 일차 지도보기 버튼 */}
+                  <button
+                        onClick={() => {
+                          setActiveDay(product.schedule?.[0]?.day || 1);
+                          setIsMapModalOpen(true);
+                        }}
+                        className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium flex items-center gap-2"
+                      >
+                        🗺️ {lang === 'ko' ? `${product.schedule?.[0]?.day}일차 지도` : `Day ${product.schedule?.[0]?.day} Map`}
                   </button>
                 </div>
+                    
                 <div className="space-y-3">
-                  {product.schedule
-                    .find(d => d.day === activeDay)
-                    ?.spots.map((spot, index) => (
-                      <div
+                      {/* Day 1의 스팟들 - 처음 3개 또는 전체 */}
+                      {(isScheduleExpanded ? product.schedule?.[0]?.spots : product.schedule?.[0]?.spots?.slice(0, 3) || []).map((spot, index) => (
+                        <motion.div
                         key={index}
-                        className="flex items-center gap-3 p-3 bg-white rounded-lg cursor-pointer hover:bg-blue-50"
+                          className="flex items-center gap-3 p-4 bg-white rounded-lg cursor-pointer hover:bg-blue-50 hover:shadow-md transition-all duration-200 border border-gray-100"
                         onClick={async () => {
                           setSelectedSpot(spot);
-                          // 스팟 클릭수 증가
                           try {
                             await incrementSpotClick(spot.spotId);
                           } catch (error) {
                             console.error('Failed to increment spot click:', error);
                           }
                         }}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3, delay: index * 0.1 }}
                       >
+                          <span className="flex-shrink-0 w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-sm font-bold">
+                            {index + 1}
+                          </span>
                         {spot.spotImage && (
                           <Image 
                             src={spot.spotImage} 
                             alt={safeLang(spot.spotName, lang)} 
-                            width={40} 
-                            height={40} 
-                            style={{ width: 40, height: 40, objectFit: 'cover' }} 
-                          />
-                        )}
-                        <span>{safeLang(spot.spotName, lang)}</span>
+                              width={48} 
+                              height={48} 
+                              className="rounded-lg object-cover"
+                              style={{ width: 48, height: 48 }}
+                              onError={(e) => {
+                                console.log('Image load error:', spot.spotImage);
+                                e.currentTarget.style.display = 'none';
+                              }}
+                              loading="lazy"
+                              unoptimized
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <span className="font-medium text-gray-800 block truncate">
+                              {safeLang(spot.spotName, lang)}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {lang === 'ko' ? '클릭하여 상세보기' : 'Click for details'}
+                            </span>
                       </div>
+                        </motion.div>
                     ))}
+                      
+                      {/* 페이드 효과 (축소 상태일 때만) */}
+                      {!isScheduleExpanded && (product.schedule?.[0]?.spots?.length || 0) > 3 && (
+                        <div className="relative">
+                          <div className="absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-gray-50 to-transparent pointer-events-none" />
                 </div>
+                      )}
               </div>
             </div>
           )}
 
-          {/* Included/Not Included Items */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* 스케줄 더보기/접기 버튼 */}
+                {((product.schedule?.length || 0) > 1 || (product.schedule?.[0]?.spots?.length || 0) > 3) && (
+                  <div className="text-center py-8">
+                    <button
+                      onClick={() => setIsScheduleExpanded(!isScheduleExpanded)}
+                      className="group inline-flex items-center gap-4 px-12 py-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-2xl font-bold shadow-2xl hover:shadow-emerald-500/25 transform hover:scale-105 transition-all duration-300 text-lg"
+                    >
+                      <span>
+                        {isScheduleExpanded ? texts.hideSchedule : texts.showFullSchedule}
+                      </span>
+                      <motion.div
+                        animate={{ rotate: isScheduleExpanded ? 180 : 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="flex items-center"
+                      >
+                        <svg 
+                          width="24" 
+                          height="24" 
+                          viewBox="0 0 24 24" 
+                          fill="none" 
+                          stroke="currentColor" 
+                          strokeWidth="3"
+                          className="group-hover:animate-pulse"
+                        >
+                          <polyline points="6,9 12,15 18,9" />
+                        </svg>
+                      </motion.div>
+                      {!isScheduleExpanded && (
+                        <span className="bg-white/20 px-3 py-1 rounded-full text-sm">
+                          +{(product.schedule?.length || 1) - 1}일
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* 나머지 Day들 - 확장 상태일 때만 표시 */}
+                <AnimatePresence>
+                  {isScheduleExpanded && (product.schedule?.slice(1) || []).map((daySchedule, dayIndex) => (
+                    <motion.div
+                      key={daySchedule.day}
+                      ref={(el) => { dayRefs.current[daySchedule.day] = el; }}
+                      data-day={daySchedule.day}
+                      className="bg-gray-50 rounded-lg p-6 scroll-mt-32"
+                      initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -20, scale: 0.98 }}
+                      transition={{ duration: 0.4, delay: dayIndex * 0.1 }}
+                      layout
+                    >
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xl font-bold text-gray-800 flex items-center gap-3">
+                          <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-white text-sm font-bold ${
+                            currentActiveDay === daySchedule.day ? 'bg-blue-600' : 'bg-gray-500'
+                          }`}>
+                            {daySchedule.day}
+                          </span>
+                          {texts.day} {daySchedule.day}
+                        </h3>
+                        <button
+                          onClick={() => {
+                            setActiveDay(daySchedule.day);
+                            setIsMapModalOpen(true);
+                          }}
+                          className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium flex items-center gap-2"
+                        >
+                          🗺️ {lang === 'ko' ? `${daySchedule.day}일차 지도` : `Day ${daySchedule.day} Map`}
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        {daySchedule.spots.map((spot, index) => (
+                          <motion.div
+                            key={index}
+                            className="flex items-center gap-3 p-4 bg-white rounded-lg cursor-pointer hover:bg-blue-50 hover:shadow-md transition-all duration-200 border border-gray-100"
+                            onClick={async () => {
+                              setSelectedSpot(spot);
+                              try {
+                                await incrementSpotClick(spot.spotId);
+                              } catch (error) {
+                                console.error('Failed to increment spot click:', error);
+                              }
+                            }}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.3, delay: index * 0.05 }}
+                          >
+                            <span className="flex-shrink-0 w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-sm font-bold">
+                              {index + 1}
+                            </span>
+                            {spot.spotImage && (
+                              <Image 
+                                src={spot.spotImage} 
+                                alt={safeLang(spot.spotName, lang)} 
+                                width={48} 
+                                height={48} 
+                                className="rounded-lg object-cover"
+                                style={{ width: 48, height: 48 }}
+                                onError={(e) => {
+                                  console.log('Image load error:', spot.spotImage);
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                                loading="lazy"
+                                unoptimized
+                              />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <span className="font-medium text-gray-800 block truncate">
+                                {safeLang(spot.spotName, lang)}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                {lang === 'ko' ? '클릭하여 상세보기' : 'Click for details'}
+                              </span>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+            </div>
+          )}
+
+          {/* Product Details - 확장 시에만 표시 */}
+          <AnimatePresence>
+            {isScheduleExpanded && (product.detailedDescription || product.detailImages) && (
+              <motion.section
+                className="mb-8 bg-white rounded-xl shadow-lg p-8 border border-gray-100"
+                initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -20, scale: 0.98 }}
+                transition={{ duration: 0.6, delay: 0.3 }}
+              >
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-1 h-8 bg-gradient-to-b from-blue-500 to-purple-600 rounded-full"></div>
+                <h2 className="text-3xl font-bold text-gray-800">{texts.productDetails}</h2>
+              </div>
+              
+              {/* 상품 상세 설명 텍스트 */}
+              {product.detailedDescription && (
+                <div className="mb-8">
+                  <div 
+                    className="prose prose-lg max-w-none text-gray-700 leading-relaxed whitespace-pre-line"
+                    style={{
+                      fontSize: '16px',
+                      lineHeight: '1.8',
+                      letterSpacing: '0.3px'
+                    }}
+                    dangerouslySetInnerHTML={{
+                      __html: safeLang(product.detailedDescription, lang).replace(/\n/g, '<br>')
+                    }}
+                  />
+                </div>
+              )}
+              
+              {/* 상품 상세 이미지들 */}
+              {product.detailImages && product.detailImages.length > 0 && (
+                <div className="space-y-6">
+                  <div className="text-center">
+                    <div className="inline-block bg-gradient-to-r from-blue-100 to-purple-100 px-6 py-3 rounded-full">
+                      <span className="text-lg font-semibold text-gray-700">
+                        📸 {lang === 'ko' ? '상품 상세 이미지' : 'Product Detail Images'}
+                        <span className="ml-2 text-sm text-gray-500">
+                          ({product.detailImages.length}장)
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {/* 모든 이미지 표시 */}
+                  {product.detailImages.map((imageUrl, index) => (
+                    <motion.div 
+                      key={index} 
+                      className="relative w-full bg-gray-50 rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300"
+                      initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{ duration: 0.5, delay: index * 0.1 }}
+                      whileHover={{ scale: 1.02 }}
+                    >
+                      <Image
+                        src={imageUrl}
+                        alt={`${safeLang(product.title, lang)} 상세 이미지 ${index + 1}`}
+                        width={1000}
+                        height={800}
+                        className="w-full h-auto"
+                        style={{ maxWidth: '100%', height: 'auto' }}
+                        onError={() => {
+                          console.log('Detail image load error:', imageUrl);
+                        }}
+                        unoptimized
+                        loading="lazy"
+                        placeholder="blur"
+                        blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJ4riRBlHLilSlFLG8sWmTGMNY2bTT8lVJdXKjqRYHDv8AL3LeyMx2CfVgKqIqUDEYUKBCXNFHVL//2Q=="
+                      />
+                      <div className="absolute bottom-2 right-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-xs">
+                        {index + 1} / {product.detailImages?.length || 0}
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+              </motion.section>
+            )}
+          </AnimatePresence>
+
+          {/* Included/Not Included Items - 확장 시에만 표시 */}
+          <AnimatePresence>
+            {isScheduleExpanded && (
+              <motion.div 
+                className="grid grid-cols-1 md:grid-cols-2 gap-6"
+                initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -20, scale: 0.98 }}
+                transition={{ duration: 0.6, delay: 0.4 }}
+              >
             {includedItems.length > 0 && (
               <div>
                 <h2 className="text-2xl font-bold mb-3">{texts.includedItems}</h2>
@@ -1312,11 +2225,20 @@ export default function TourDetailPage() {
                 </div>
               </div>
             )}
-          </div>
-        </motion.section>
-        {/* 항공편 조합 정보 */}
-        {product.flightCombos && product.flightCombos.length > 0 && (
-          <section className="w-full max-w-4xl mt-8 mb-8">
+              </motion.div>
+            )}
+                </AnimatePresence>
+                
+                {/* 항공편 조합 정보 - 확장 시에만 표시 */}
+                <AnimatePresence>
+                  {isScheduleExpanded && product.flightCombos && product.flightCombos.length > 0 && (
+                    <motion.section 
+                      className="w-full max-w-4xl mt-8 mb-8"
+                      initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -20, scale: 0.98 }}
+                      transition={{ duration: 0.6, delay: 0.5 }}
+                    >
             <h2 className="text-2xl font-bold mb-4">{lang === 'ko' ? '항공편 정보' : 'Flight Information'}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {product.flightCombos.map((combo, idx) => (
@@ -1336,8 +2258,10 @@ export default function TourDetailPage() {
                 </div>
               ))}
             </div>
-          </section>
+            </motion.section>
         )}
+        </AnimatePresence>
+
         <AnimatePresence>
           {selectedSpot && (
             <SpotDetailModal
@@ -1363,6 +2287,333 @@ export default function TourDetailPage() {
             />
           )}
         </AnimatePresence>
+        
+        {/* 예약 리모콘 - 우측 절대 위치 */}
+        {remotePosition.show && (
+          <div 
+            className="fixed right-6 z-50 w-80 max-w-[90vw] transition-all duration-300 ease-out"
+            style={{ top: `${remotePosition.top}px` }}
+          >
+            <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+              {/* 출발/도착 정보 */}
+              <div className="bg-gray-50 p-3 text-sm">
+                                {product?.departureOptions && product.departureOptions.length > 0 ? (
+                  <>
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-gray-600">
+                        • {lang === 'ko' 
+                          ? (product.countries?.[0]?.ko || '출발지') + ' 출발'
+                          : 'Departure from ' + (product.countries?.[0]?.en || 'Origin')
+                        }
+                      </span>
+                      <span className="text-gray-900 font-medium">
+                        {new Date(product.departureOptions[selectedDepartureOption].departureDate).toLocaleDateString(lang === 'ko' ? 'ko-KR' : 'en-US', { 
+                          year: 'numeric', 
+                          month: '2-digit', 
+                          day: '2-digit',
+                          weekday: 'short'
+                        })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">
+                        • {lang === 'ko' 
+                          ? (product.countries?.[0]?.ko || '도착지') + ' 도착'
+                          : 'Arrival at ' + (product.countries?.[0]?.en || 'Destination')
+                        }
+                      </span>
+                      <span className="text-gray-900 font-medium">
+                        {new Date(product.departureOptions[selectedDepartureOption].returnDate).toLocaleDateString(lang === 'ko' ? 'ko-KR' : 'en-US', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          weekday: 'short'
+                        })}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center text-gray-500">
+                    {lang === 'ko' ? '출발 일정 정보가 없습니다' : 'No departure schedule available'}
+                  </div>
+                )}
+              </div>
+              
+              {/* 출발일 변경 버튼 */}
+              <div className="p-4">
+                <button 
+                  onClick={() => setShowDateModal(true)}
+                  className="w-full bg-slate-600 text-white py-3 rounded-lg font-medium text-sm hover:bg-slate-700 transition-colors"
+                >
+                  {lang === 'ko' ? '출발일 변경' : 'Change Date'}
+                </button>
+              </div>
+              
+              {/* 예약인원 선택 */}
+              <div className="px-4 pb-4">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">
+                  {lang === 'ko' ? '예약인원 선택' : 'Select Passengers'}
+                </h3>
+                
+                {/* 성인 */}
+                <div className="flex justify-between items-center mb-3 pb-3 border-b border-gray-100">
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {lang === 'ko' ? '성인' : 'Adult'} ⓘ
+                    </p>
+                    <p className="text-lg font-bold text-gray-900">
+                      ₱{prices.adult.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => updateCount('adult', false)}
+                      className="w-8 h-8 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50"
+                      disabled={bookingCounts.adult <= 0}
+                    >
+                      −
+                    </button>
+                    <span className="w-8 text-center font-medium">{bookingCounts.adult}</span>
+                    <button 
+                      onClick={() => updateCount('adult', true)}
+                      className="w-8 h-8 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                
+                {/* 아동 Extra Bed */}
+                <div className="flex justify-between items-center mb-3 pb-3 border-b border-gray-100">
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {lang === 'ko' ? '아동 Extra Bed' : 'Child Extra Bed'} ⓘ
+                    </p>
+                    <p className="text-lg font-bold text-gray-900">
+                      ₱{prices.childExtraBed.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => updateCount('childExtraBed', false)}
+                      className="w-8 h-8 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50"
+                      disabled={bookingCounts.childExtraBed <= 0}
+                    >
+                      −
+                    </button>
+                    <span className="w-8 text-center font-medium">{bookingCounts.childExtraBed}</span>
+                    <button 
+                      onClick={() => updateCount('childExtraBed', true)}
+                      className="w-8 h-8 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                
+                {/* 아동 NO BED */}
+                <div className="flex justify-between items-center mb-3 pb-3 border-b border-gray-100">
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {lang === 'ko' ? '아동 NO BED' : 'Child NO BED'} ⓘ
+                    </p>
+                    <p className="text-lg font-bold text-gray-900">
+                      ₱{prices.childNoBed.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => updateCount('childNoBed', false)}
+                      className="w-8 h-8 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50"
+                      disabled={bookingCounts.childNoBed <= 0}
+                    >
+                      −
+                    </button>
+                    <span className="w-8 text-center font-medium">{bookingCounts.childNoBed}</span>
+                    <button 
+                      onClick={() => updateCount('childNoBed', true)}
+                      className="w-8 h-8 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                
+                {/* 유아 */}
+                <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-100">
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {lang === 'ko' ? '유아' : 'Infant'} ⓘ
+                    </p>
+                    <p className="text-lg font-bold text-gray-900">
+                      ₱{prices.infant.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => updateCount('infant', false)}
+                      className="w-8 h-8 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50"
+                      disabled={bookingCounts.infant <= 0}
+                    >
+                      −
+                    </button>
+                    <span className="w-8 text-center font-medium">{bookingCounts.infant}</span>
+                    <button 
+                      onClick={() => updateCount('infant', true)}
+                      className="w-8 h-8 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                
+                {/* 현지 필수 경비 */}
+                {product.localExpenses && (
+                  <div className="mb-4">
+                    <div className="flex justify-between text-sm text-gray-600 mb-1">
+                      <span>
+                        {lang === 'ko' ? '현지 필수 경비 ⓘ' : 'Local Essential Expenses ⓘ'}
+                      </span>
+                      <div className="text-right">
+                        <div>
+                          {lang === 'ko' ? '성인' : 'Adult'} $ {product.localExpenses.adult}
+                        </div>
+                        <div>
+                          {lang === 'ko' ? '아동' : 'Child'} $ {product.localExpenses.child}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* 총 금액 */}
+                <div className="mb-4 pt-3 border-t-2 border-gray-200">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xl font-bold text-gray-900">
+                      {lang === 'ko' ? '총 금액' : 'Total Amount'}
+                    </span>
+                    <span className="text-2xl font-bold text-teal-600">
+                      ₱{totalAmount.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1 text-right">
+                    <div>
+                      {lang === 'ko' ? '유류할증료+세제공과금 포함' : 'Including fuel surcharge and taxes'}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* 예약 버튼들 */}
+                <div className="flex gap-2">
+                  <button className="w-12 h-12 border border-gray-300 rounded-lg flex items-center justify-center hover:bg-gray-50">
+                    ♡
+                  </button>
+                  <button className="flex-1 bg-teal-600 text-white py-3 rounded-lg font-bold hover:bg-teal-700 transition-colors">
+                    {lang === 'ko' ? '예약문의' : 'Book Now'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* 여행기간 선택 모달 */}
+        {showDateModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl max-w-md w-full max-h-[80vh] overflow-y-auto">
+              {/* 모달 헤더 */}
+              <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                <h2 className="text-xl font-bold text-gray-900">
+                  {lang === 'ko' ? '여행기간 선택' : 'Select Travel Period'}
+                </h2>
+                <button 
+                  onClick={() => setShowDateModal(false)}
+                  className="text-gray-400 hover:text-gray-600 text-2xl font-light"
+                >
+                  ×
+                </button>
+              </div>
+              
+              {/* 모달 내용 */}
+              <div className="p-6">
+                <p className="text-gray-600 text-sm mb-4">
+                  {lang === 'ko' 
+                    ? '원하시는 여행 일정을 선택해주세요.' 
+                    : 'Please select your preferred travel dates.'}
+                </p>
+                
+                <div className="space-y-3">
+                  {product.departureOptions && product.departureOptions.map((option, index) => (
+                    <div 
+                      key={index}
+                      onClick={() => {
+                        setSelectedDepartureOption(index);
+                        setShowDateModal(false);
+                      }}
+                      className={`p-4 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
+                        selectedDepartureOption === index 
+                          ? 'border-blue-500 bg-blue-50' 
+                          : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="text-blue-600 font-medium text-sm">
+                            {lang === 'ko' ? `${index + 1}차` : `${index + 1}st`}
+                          </span>
+                          <div>
+                            <div className="font-medium text-gray-900 text-sm">
+                              {new Date(option.departureDate).toLocaleDateString('ko-KR', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                weekday: 'short'
+                              })}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {lang === 'ko' ? '출발' : 'Departure'}
+                            </div>
+                          </div>
+                          <span className="text-gray-400 text-lg">→</span>
+                          <div>
+                            <div className="font-medium text-gray-900 text-sm">
+                              {new Date(option.returnDate).toLocaleDateString('ko-KR', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                weekday: 'short'
+                              })}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {lang === 'ko' ? '귀국' : 'Return'}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center">
+                          <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                            {lang === 'ko' ? '예약가능' : 'Available'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              {/* 모달 푸터 */}
+              <div className="p-6 border-t border-gray-200">
+                <button 
+                  onClick={() => setShowDateModal(false)}
+                  className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 px-4 rounded-lg font-medium text-sm transition-colors duration-200"
+                >
+                  {lang === 'ko' ? '닫기' : 'Close'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        </motion.section>
       </main>
     </div>
   );
