@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb } from '@/lib/firebase-admin';
-import { verifyIdTokenFromCookies } from '@/lib/auth-server';
+import { requireAuth } from '@/lib/auth-server';
 import sharp from 'sharp';
 
 // HTML 엔티티 이스케이프 함수
@@ -111,43 +111,41 @@ async function createTAOverlayImage(ta: {
   return finalImage;
 }
 
-export async function GET() {
-  try {
-    // Firebase Admin Firestore 사용
-    const db = getAdminDb();
-    
-    // TA 목록 가져오기
-    const tasRef = db.collection('tas');
-    const querySnapshot = await tasRef.orderBy('createdAt', 'desc').get();
+export async function GET(request: NextRequest) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  return requireAuth(request, async (_req, _user) => {
+    try {
+      // Firebase Admin Firestore 사용
+      const db = getAdminDb();
+      
+      // TA 목록 가져오기
+      const tasRef = db.collection('tas');
+      const querySnapshot = await tasRef.orderBy('createdAt', 'desc').get();
 
-    const tas = querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+      const tas = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data()
+      }));
 
-    return NextResponse.json({
-      success: true,
-      data: tas
-    });
+      return new Response(
+        JSON.stringify({ success: true, data: tas }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
 
-  } catch (error) {
-    console.error('TA 목록 조회 실패:', error);
-    return NextResponse.json(
-      { error: 'TA 목록 조회에 실패했습니다.' },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('TA 목록 조회 실패:', error);
+      return new Response(
+        JSON.stringify({ error: 'TA 목록 조회에 실패했습니다.' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+  });
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    // 인증 확인
-    const authResult = await verifyIdTokenFromCookies(request.cookies);
-    if (!authResult) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const body = await request.json();
+  return requireAuth(request, async (req, user) => {
+    try {
+      const body = await req.json();
     const { companyName, taCode, phone, address, email, logo, contactPersons } = body;
 
     // 필수 필드 검증
@@ -213,25 +211,29 @@ export async function POST(request: NextRequest) {
       overlayImage: overlayImageUrl, // 새로 추가된 필드
       contactPersons: contactPersons || [],
       createdAt: new Date(),
-      createdBy: authResult.uid,
+      createdBy: user.uid,
       updatedAt: new Date(),
-      updatedBy: authResult.uid
+      updatedBy: user.uid
     };
 
     // Firestore에 저장
     const docRef = await db.collection('tas').add(taData);
 
-    return NextResponse.json({
-      success: true,
-      id: docRef.id,
-      message: 'TA가 성공적으로 등록되었습니다.'
-    });
+      return new Response(
+        JSON.stringify({
+          success: true,
+          id: docRef.id,
+          message: 'TA가 성공적으로 등록되었습니다.'
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
 
-  } catch (error) {
-    console.error('TA 저장 실패:', error);
-    return NextResponse.json(
-      { error: 'TA 저장에 실패했습니다.' },
-      { status: 500 }
-    );
-  }
+    } catch (error) {
+      console.error('TA 저장 실패:', error);
+      return new Response(
+        JSON.stringify({ error: 'TA 저장에 실패했습니다.' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+  });
 } 

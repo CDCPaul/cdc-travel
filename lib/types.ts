@@ -73,6 +73,9 @@ export interface Ebook {
   description: { ko: string; en: string };
   fileUrl: string;
   thumbUrl?: string;
+  pageImageUrls?: string[]; // 🚀 플리핑북용 이미지 배열
+  pageCount?: number; // 총 페이지 수
+  ebookId?: string; // 파일 관리용 ID
   isPublic: boolean;
   createdAt: number; // timestamp(ms)
   updatedAt: number; // timestamp(ms)

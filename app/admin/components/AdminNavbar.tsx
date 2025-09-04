@@ -61,12 +61,12 @@ const MAIN_MENU = {
 
 const BOOKING_MENU = {
   ko: [
-    { label: "신규부킹목록", href: "/admin/bookings" },
-    { label: "확정예약목록", href: "/admin/bookings/confirmed" },
+    { label: "통합예약관리", href: "/admin/bookings" },
+    { label: "새 예약 등록", href: "/admin/bookings/new" },
   ],
   en: [
-    { label: "New Booking List", href: "/admin/bookings" },
-    { label: "Confirmed Bookings", href: "/admin/bookings/confirmed" },
+    { label: "Integrated Booking Management", href: "/admin/bookings" },
+    { label: "New Booking Registration", href: "/admin/bookings/new" },
   ]
 };
 

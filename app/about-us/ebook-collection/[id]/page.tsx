@@ -5,26 +5,16 @@ import { db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { Ebook } from "@/lib/types";
 import HTMLFlipBook from "react-pageflip";
-import * as pdfjsLib from "pdfjs-dist";
 import { useLanguage } from "@/components/LanguageContext";
 
-// PDF.js 워커 설정 (클라이언트 사이드에서만)
-if (typeof window !== "undefined") {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.mjs";
-}
-
-interface PageImage {
-  src: string;
-  pageNumber: number;
-}
+// 🚀 서버사이드 변환된 이미지 배열로 플리핑북 구현
 
 export default function EbookDetailPage() {
   const { id } = useParams();
   const { lang } = useLanguage();
   const [ebook, setEbook] = useState<Ebook | null>(null);
   const [loading, setLoading] = useState(true);
-  const [pageImages, setPageImages] = useState<PageImage[]>([]);
-  const [pdfLoading, setPdfLoading] = useState(true);
+  const [pdfLoading, setPdfLoading] = useState(false); // 🔥 초기값을 false로 변경
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
 
@@ -74,56 +64,49 @@ export default function EbookDetailPage() {
     fetchEbook();
   }, [id]);
 
-  // PDF를 이미지로 변환
+  // 🔥 서버사이드 변환된 이미지 배열 확인 (강제 업데이트)
   useEffect(() => {
-    async function loadPdfImages() {
-      if (!ebook?.fileUrl) return;
+    console.log('🚀 [DEBUG] useEffect 실행됨!', new Date().toLocaleTimeString());
+    
+    if (ebook) {
+      console.log('📚 [CRITICAL] eBook 데이터 확인:', {
+        id: ebook.id,
+        title: ebook.title,
+        hasFileUrl: !!ebook.fileUrl,
+        hasPageImageUrls: !!ebook.pageImageUrls,
+        pageImageUrlsLength: ebook.pageImageUrls?.length || 0,
+        pageCount: ebook.pageCount || 0,
+        pageImageUrls: ebook.pageImageUrls,
+        fullEbookData: ebook
+      });
       
-      setPdfLoading(true);
-      setPdfError(null);
-      
-      try {
-        const pdf = await pdfjsLib.getDocument(ebook.fileUrl).promise;
-        const images: PageImage[] = [];
-        
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const viewport = page.getViewport({ scale: 1.5 });
-          
-          const canvas = document.createElement("canvas");
-          const context = canvas.getContext("2d");
-          
-          if (!context) {
-            throw new Error("Canvas context를 가져올 수 없습니다");
-          }
-          
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-          
-          await page.render({ 
-            canvasContext: context, 
-            viewport 
-          }).promise;
-          
-          images.push({
-            src: canvas.toDataURL(),
-            pageNumber: i
-          });
-        }
-        
-        setPageImages(images);
-      } catch (err) {
-        console.error("PDF 로딩 오류:", err);
-        setPdfError("PDF 로딩 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
-      } finally {
-        setPdfLoading(false);
+      // 🔥 강제 알림으로 확인
+      if (!ebook.pageImageUrls || ebook.pageImageUrls.length === 0) {
+        console.error('❌ [CRITICAL] pageImageUrls가 없습니다!', ebook);
+      } else {
+        console.log('✅ [SUCCESS] pageImageUrls 존재:', ebook.pageImageUrls.length, '개');
       }
+    } else {
+      console.log('⚠️ [WARNING] eBook 데이터가 없습니다');
+    }
+
+    if (ebook?.pageImageUrls && ebook.pageImageUrls.length > 0) {
+      console.log(`📚 플리핑북 준비 완료: ${ebook.pageImageUrls.length}페이지`);
+      console.log('🔧 [FORCE] setPdfLoading(false) 실행');
+      setPdfLoading(false);
+      setPdfError(null);
+    } else if (ebook?.fileUrl && !ebook?.pageImageUrls) {
+      // 이미지가 아직 변환되지 않은 경우 fallback으로 PDF 뷰어 사용
+      console.log('⚠️ 이미지 변환 대기중, PDF 뷰어로 표시');
+      console.log('🔧 [FALLBACK] setPdfLoading(false) 실행');
+      setPdfLoading(false);
+      setPdfError(null);
     }
     
-    if (ebook?.fileUrl) {
-      loadPdfImages();
-    }
-  }, [ebook]);
+    // 🔥 강제 상태 업데이트 체크
+    console.log('🔧 [STATE] pdfLoading 현재 값:', pdfLoading);
+    console.log('🔧 [STATE] pdfError 현재 값:', pdfError);
+  }, [ebook, pdfLoading, pdfError]);
 
   const TOP_BAR_HEIGHT = windowSize.width < 768 ? 56 : 72;
 
@@ -177,12 +160,13 @@ export default function EbookDetailPage() {
             maxHeight: windowSize.height - TOP_BAR_HEIGHT,
           }}
         >
-          {pdfLoading && (
+          {loading && !ebook && (
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#7b4a1e] mx-auto mb-4"></div>
               <p className="text-gray-500 text-sm md:text-base">
                 PDF 로딩 중...<br />
-                Loading PDF...
+                Loading PDF...<br />
+                <small>🔧 DEBUG: pdfLoading={pdfLoading ? 'true' : 'false'}</small>
               </p>
             </div>
           )}
@@ -194,46 +178,63 @@ export default function EbookDetailPage() {
             </div>
           )}
 
-          {!pdfLoading && !pdfError && pageImages.length > 0 && (
+          {!pdfError && ebook && (
             <div className="shadow-2xl rounded-lg overflow-hidden w-full h-full flex items-center justify-center">
-              <div className="relative w-full h-full">
-                <HTMLFlipBook
-                  {...{
-                    width: windowSize.width < 768 ? windowSize.width - 20 : Math.min(1200, windowSize.width - 40),
-                    height: windowSize.height - TOP_BAR_HEIGHT,
-                    size: "stretch",
-                    minWidth: 300,
-                    maxWidth: windowSize.width < 768 ? windowSize.width - 20 : Math.min(1400, windowSize.width - 40),
-                    minHeight: 400,
-                    maxHeight: windowSize.height - TOP_BAR_HEIGHT,
-                    maxShadowOpacity: 0.5,
-                    showCover: windowSize.width >= 768,
-                    mobileScrollSupport: true,
-                    flippingTime: 1000,
-                    usePortrait: windowSize.width < 768,
-                    startPage: 0,
-                    autoSize: true,
-                    className: "shadow-2xl rounded-lg h-full"
-                  } as React.ComponentProps<typeof HTMLFlipBook>}
-                >
-                  {pageImages.map((page) => (
-                    <div 
-                      key={page.pageNumber} 
-                      className="w-full h-full flex items-center justify-center bg-white"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img 
-                        src={page.src} 
-                        alt={`페이지 ${page.pageNumber}`}
-                        className="w-full h-full object-contain"
-                        loading="lazy"
-                      />
-                    </div>
-                  ))}
-                </HTMLFlipBook>
-                {/* 가운데 구분선 */}
-                <div className="pointer-events-none absolute top-0 bottom-0 left-1/2 w-[2px] -translate-x-1/2 bg-[#d1bfa3] z-20" />
-              </div>
+              {/* 🚀 플리핑북 (이미지 배열 변환 완료 시) */}
+              {ebook.pageImageUrls && ebook.pageImageUrls.length > 0 ? (
+                <div className="relative w-full h-full">
+                  <HTMLFlipBook
+                    {...{
+                      width: windowSize.width < 768 ? windowSize.width - 20 : Math.min(1200, windowSize.width - 40),
+                      height: windowSize.height - TOP_BAR_HEIGHT,
+                      size: "stretch",
+                      minWidth: 300,
+                      maxWidth: windowSize.width < 768 ? windowSize.width - 20 : Math.min(1400, windowSize.width - 40),
+                      minHeight: 400,
+                      maxHeight: windowSize.height - TOP_BAR_HEIGHT,
+                      maxShadowOpacity: 0.5,
+                      showCover: windowSize.width >= 768,
+                      mobileScrollSupport: true,
+                      flippingTime: 1000,
+                      usePortrait: windowSize.width < 768,
+                      startPage: 0,
+                      autoSize: true,
+                      className: "shadow-2xl rounded-lg h-full"
+                    } as React.ComponentProps<typeof HTMLFlipBook>}
+                  >
+                    {ebook.pageImageUrls.map((imageUrl, index) => (
+                      <div 
+                        key={index} 
+                        className="w-full h-full flex items-center justify-center bg-white"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img 
+                          src={imageUrl} 
+                          alt={`페이지 ${index + 1}`}
+                          className="w-full h-full object-contain"
+                          loading="lazy"
+                        />
+                      </div>
+                    ))}
+                  </HTMLFlipBook>
+                  {/* 가운데 구분선 */}
+                  <div className="pointer-events-none absolute top-0 bottom-0 left-1/2 w-[2px] -translate-x-1/2 bg-[#d1bfa3] z-20" />
+                </div>
+              ) : (
+                /* ⚠️ Fallback: PDF 직접 표시 (이미지 변환 대기 중일 때) */
+                <div className="w-full h-full bg-white flex items-center justify-center">
+                  <iframe
+                    src={ebook.fileUrl}
+                    className="w-full h-full border-0"
+                    title={`eBook: ${ebook?.title?.[lang]}`}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      minHeight: '400px'
+                    }}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 /** @type {import('next').NextConfig} */
 const nextConfig: NextConfig = {
+  // 🔍 디버깅: React Strict Mode 임시 비활성화
+  reactStrictMode: false,
   images: {
     remotePatterns: [
       {

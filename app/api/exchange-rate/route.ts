@@ -1,42 +1,36 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyIdTokenFromCookies } from '@/lib/auth-server';
+import { NextRequest } from 'next/server';
+import { requireAuth } from '@/lib/auth-server';
 import { ExchangeRateService } from '@/lib/exchange-rate';
 
 export async function GET(request: NextRequest) {
-  try {
-    // URL 파라미터 확인
-    const { searchParams } = new URL(request.url);
-    const forceUpdate = searchParams.get('update') === 'true';
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  return requireAuth(request, async (req, _user) => {
+    try {
+      // URL 파라미터 확인
+      const { searchParams } = new URL(req.url);
+      const forceUpdate = searchParams.get('update') === 'true';
 
-    // 강제 업데이트는 인증 필요, 일반 조회는 공개
-    if (forceUpdate) {
-      // 인증 확인 (관리자 강제 업데이트만)
-      const authResult = await verifyIdTokenFromCookies(request.cookies);
-      if (!authResult) {
-        return NextResponse.json({ error: 'Unauthorized - Admin access required for force update' }, { status: 401 });
+      let exchangeRate;
+      
+      if (forceUpdate) {
+        // 강제 업데이트 (관리자용)
+        exchangeRate = await ExchangeRateService.updateExchangeRate();
+      } else {
+        // 일반 조회 (캐시된 데이터 우선)
+        exchangeRate = await ExchangeRateService.getTodayExchangeRate();
       }
+
+      return new Response(
+        JSON.stringify({ success: true, data: exchangeRate }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+
+    } catch (error) {
+      console.error('환율 데이터 조회 실패:', error);
+      return new Response(
+        JSON.stringify({ error: 'Failed to fetch exchange rate' }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } }
+      );
     }
-
-    let exchangeRate;
-    
-    if (forceUpdate) {
-      // 강제 업데이트 (관리자용)
-      exchangeRate = await ExchangeRateService.updateExchangeRate();
-    } else {
-      // 일반 조회 (캐시된 데이터 우선, 공개 접근)
-      exchangeRate = await ExchangeRateService.getTodayExchangeRate();
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: exchangeRate
-    });
-
-  } catch (error) {
-    console.error('환율 데이터 조회 실패:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch exchange rate' },
-      { status: 500 }
-    );
-  }
+  });
 } 

@@ -1,9 +1,18 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { GoogleAuthProvider } from 'firebase/auth';
+import { 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
+  setPersistence, 
+  browserLocalPersistence, 
+  browserSessionPersistence
+} from 'firebase/auth';
 import { useRouter } from 'next/navigation';
-import { signInWithGoogle } from '@/lib/auth-lazy';
+import { auth, googleProvider } from '@/lib/firebase';
+import { setGoogleAccessTokenCookie } from '@/lib/auth';
 
 export default function AdminLogin() {
   const [error, setError] = useState('');
@@ -14,23 +23,71 @@ export default function AdminLogin() {
   useEffect(() => {
     const savedRememberMe = localStorage.getItem('admin_remember_me') === 'true';
     setRememberMe(savedRememberMe);
-  }, []);
+    
+    // Firebase 연결 사전 확인
+    if (auth && googleProvider) {
+      console.log('✅ Firebase 인증 모듈이 준비되었습니다');
+    } else {
+      console.warn('⚠️ Firebase 인증 모듈 로딩 중...');
+    }
+    
+    // 리다이렉트 로그인 결과 확인
+    const checkRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          console.log('✅ 리다이렉트 로그인 성공:', result.user.email);
+          
+          // 도메인 검증
+          if (!result.user.email?.endsWith('@cebudirectclub.com')) {
+            await auth.signOut();
+            setError('@cebudirectclub.com 도메인의 계정만 로그인할 수 있습니다.');
+            return;
+          }
+          
+          // 토큰 처리 및 리다이렉트
+          const credential = GoogleAuthProvider.credentialFromResult(result);
+          const accessToken = credential?.accessToken;
+          
+          if (accessToken) {
+            // Firebase ID Token 획득 및 쿠키 저장 (동기적 처리)
+            const idToken = await result.user.getIdToken();
+            const { setAuthCookie } = await import('@/lib/auth');
+            
+            setGoogleAccessTokenCookie(accessToken);
+            setAuthCookie(idToken);
+            console.log("리다이렉트 로그인: 토큰들이 쿠키에 저장되었습니다");
+            
+            localStorage.setItem('admin_remember_me', savedRememberMe.toString());
+            
+            // 백그라운드에서 서버 저장
+            fetch('/api/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ idToken, googleAccessToken: accessToken }),
+            }).then(response => {
+              if (response.ok) {
+                console.log('✅ 리다이렉트 로그인: 서버 저장 완료');
+              }
+            }).catch(console.warn);
+            
+            router.replace('/admin/dashboard');
+          }
+        }
+      } catch (error) {
+        console.error('리다이렉트 결과 확인 실패:', error);
+      }
+    };
+    
+    checkRedirectResult();
+  }, [router]);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError('');
     
     try {
-      // Lazy import로 Firebase 인증 함수들 로드
-      const {
-        signInWithPopup,
-        setPersistence,
-        browserLocalPersistence,
-        browserSessionPersistence,
-        auth,
-        googleProvider
-      } = await signInWithGoogle();
-      
+      // Firebase 인증이 초기화되었는지 확인
       if (!auth || !googleProvider) {
         setError('Firebase 인증이 초기화되지 않았습니다.');
         return;
@@ -43,8 +100,31 @@ export default function AdminLogin() {
         await setPersistence(auth, browserSessionPersistence);
       }
 
-      // Google 로그인 팝업
-      const result = await signInWithPopup(auth, googleProvider);
+      // Google 로그인 팝업 (에러 처리 개선)
+      let result;
+      try {
+        result = await signInWithPopup(auth, googleProvider);
+      } catch (popupError: unknown) {
+        // 팝업이 실패한 경우 리다이렉트 방식으로 폴백
+        console.warn('팝업 로그인 실패, 리다이렉트 방식으로 전환:', popupError);
+        
+        // Firebase Auth 에러 체크
+        const isAuthError = popupError && typeof popupError === 'object' && 'code' in popupError && 'message' in popupError;
+        const errorCode = isAuthError ? (popupError as {code: string}).code : '';
+        const errorMessage = isAuthError ? (popupError as {message: string}).message : '';
+        
+        if (errorCode === 'auth/popup-blocked' || 
+            errorCode === 'auth/popup-closed-by-user' ||
+            errorMessage.includes('Cross-Origin-Opener-Policy')) {
+          
+          console.log('🔄 리다이렉트 방식으로 로그인을 시도합니다...');
+          await signInWithRedirect(auth, googleProvider);
+          return; // 리다이렉트 후에는 페이지가 새로고침되므로 여기서 종료
+        }
+        
+        // 다른 에러는 재시도
+        throw popupError;
+      }
       const user = result.user;
       
       // 도메인 검증 (@cebudirectclub.com)
@@ -67,38 +147,50 @@ export default function AdminLogin() {
       
       console.log("Google access token 획득 성공");
       
-      // 토큰 만료 시간 설정
-      const { TokenManager } = await import('../../../lib/token-manager');
-      TokenManager.setTokenExpiry();
-      
-      // Google Access Token을 쿠키에 저장
-      const { setGoogleAccessTokenCookie } = await import('../../../lib/auth');
+      // Google Access Token을 쿠키에 저장 (즉시 사용 가능)
       setGoogleAccessTokenCookie(accessToken);
       
-      // 서버에 로그인 정보 전송
-      const idToken = await user.getIdToken();
-      console.log('Google Access Token:', accessToken);
+      console.log("Google access token이 클라이언트에 저장되었습니다");
       
-      const loginResponse = await fetch('/api/login', {
+      // Firebase ID Token을 쿠키에 저장 (미들웨어에서 필요)
+      const idToken = await user.getIdToken();
+      const { setAuthCookie } = await import('@/lib/auth');
+      setAuthCookie(idToken);
+      
+      console.log("Firebase ID Token이 쿠키에 저장되었습니다");
+      
+      // localStorage 설정
+      localStorage.setItem('admin_remember_me', rememberMe.toString());
+      
+      // 백그라운드에서 서버에 로그인 정보 저장 (이미 획득한 idToken 사용)
+      fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           idToken,
           googleAccessToken: accessToken 
         }),
+      }).then(response => {
+        if (response.ok) {
+          console.log('✅ 백그라운드: 로그인 정보가 서버에 저장되었습니다.');
+        } else {
+          console.warn('⚠️ 백그라운드: 로그인 정보 저장 실패 (사용자 경험에는 영향 없음)');
+        }
+      }).catch(error => {
+        console.warn('⚠️ 백그라운드: 로그인 정보 저장 실패:', error);
       });
-
-      if (!loginResponse.ok) {
-        throw new Error('로그인 정보 저장에 실패했습니다.');
-      }
-
-      console.log('로그인 정보가 서버에 저장되었습니다.');
-
-      localStorage.setItem('admin_remember_me', rememberMe.toString());
-      router.push('/admin/dashboard');
+      
+      // 로그인 성공 후 즉시 대시보드로 이동
+      console.log('🚀 대시보드로 리다이렉트 중...');
+      router.replace('/admin/dashboard');
+      console.log('✅ 로그인 성공! 대시보드로 이동합니다.');
       
     } catch (error: unknown) {
       console.error('Google login error:', error);
+      
+      // 에러 발생 시에만 로딩 해제
+      setLoading(false);
+      
       if (error instanceof Error) {
         if (error.message.includes('popup-closed')) {
           setError('로그인 팝업이 닫혔습니다. 다시 시도해주세요.');
@@ -110,8 +202,6 @@ export default function AdminLogin() {
       } else {
         setError('로그인에 실패했습니다. 다시 시도해주세요.');
       }
-    } finally {
-      setLoading(false);
     }
   };
 

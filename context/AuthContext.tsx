@@ -1,8 +1,9 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, onAuthStateChanged, onIdTokenChanged, getIdToken } from 'firebase/auth';
+import { User, onAuthStateChanged, getIdToken } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { setupFetchInterceptor } from '@/lib/fetch-interceptor';
 
 interface AuthContextType {
   user: User | null;
@@ -26,64 +27,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     setMounted(true);
     
-    // Firebase 인증 상태 변경 리스너
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+    // 🚀 글로벌 fetch 인터셉터 활성화 (앱 시작 시 한 번만)
+    setupFetchInterceptor();
+    
+    // 🔥 단순화: Firebase 표준 방식 - 인증 상태만 감지
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       console.log('🔐 AuthContext: 인증 상태 변경됨', user?.email || '로그아웃');
       setUser(user);
       setLoading(false);
-    });
-
-    // Firebase ID 토큰 변경 리스너 (토큰 갱신 감지)
-    const unsubscribeToken = onIdTokenChanged(auth, async (user) => {
+      
       if (user) {
         try {
-          const idToken = await getIdToken(user, true); // 강제 갱신 활성화
-          console.log('🔄 AuthContext: 토큰 갱신됨', user.email);
+          // Firebase SDK가 자동으로 토큰 관리 - 필요시에만 가져옴
+          const idToken = await getIdToken(user, false);
           setToken(idToken);
+          console.log('✅ AuthContext: 사용자 로그인 완료', user.email);
         } catch (error) {
-          console.error('❌ 토큰 갱신 실패:', error);
-          // 토큰 갱신 실패 시에도 기존 토큰 유지
-          try {
-            const fallbackToken = await getIdToken(user, false);
-            setToken(fallbackToken);
-            console.log('✅ AuthContext: 폴백 토큰 사용');
-          } catch (fallbackError) {
-            console.error('❌ 폴백 토큰도 실패:', fallbackError);
-            setToken(null);
-          }
+          console.error('❌ 초기 토큰 설정 실패:', error);
+          setToken(null);
         }
       } else {
         setToken(null);
+        console.log('🔓 AuthContext: 사용자 로그아웃');
       }
     });
 
-    // 주기적 토큰 갱신 (30분마다) - 더 자주 갱신
-    const tokenRefreshInterval = setInterval(async () => {
-      const currentUser = auth.currentUser;
-      if (currentUser) {
-        try {
-          const newToken = await getIdToken(currentUser, true); // 강제 갱신 활성화
-          console.log('⏰ AuthContext: 주기적 토큰 갱신 완료', currentUser.email);
-          setToken(newToken);
-        } catch (error) {
-          console.error('❌ 주기적 토큰 갱신 실패:', error);
-          // 갱신 실패 시에도 기존 토큰 유지
-          try {
-            const fallbackToken = await getIdToken(currentUser, false);
-            setToken(fallbackToken);
-            console.log('✅ AuthContext: 주기적 폴백 토큰 사용');
-          } catch (fallbackError) {
-            console.error('❌ 주기적 폴백 토큰도 실패:', fallbackError);
-          }
-        }
-      }
-    }, 30 * 60 * 1000); // 30분 (30분 * 60초 * 1000ms)
+    // 🔥 정리: 수동 갱신 로직 모두 제거 - Firebase SDK에 맡김
+    // Firebase는 getIdToken() 호출 시 자동으로 만료 확인 후 갱신함
 
     // 컴포넌트 언마운트 시 리스너 정리
     return () => {
       unsubscribeAuth();
-      unsubscribeToken();
-      clearInterval(tokenRefreshInterval);
     };
   }, []);
 

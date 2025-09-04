@@ -257,7 +257,7 @@ export function DataTable<T>({
                 </th>
               ))}
               {actions.length > 0 && (
-                <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-44">
                   액션
                 </th>
               )}
@@ -278,12 +278,17 @@ export function DataTable<T>({
                   ))}
                   {actions.length > 0 && (
                     <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900 text-center">
-                      <div className="flex items-center justify-center space-x-1">
+                      <div className="flex items-center justify-center space-x-3">
                         {actions.map((action, actionIndex) => {
                           if (action.href) {
                             return (
                               <Link key={actionIndex} href={action.href(item)}>
-                                <Button variant={action.variant || "ghost"} size="sm" className="h-6 w-6 p-0">
+                                <Button 
+                                  variant={action.variant || "ghost"} 
+                                  size="sm" 
+                                  className="h-10 w-10 p-0 hover:bg-gray-100 border border-gray-200"
+                                  title={action.label}
+                                >
                                   {action.icon}
                                 </Button>
                               </Link>
@@ -294,8 +299,9 @@ export function DataTable<T>({
                               key={actionIndex}
                               variant={action.variant || "ghost"}
                               size="sm"
-                              className="h-6 w-6 p-0"
+                              className="h-10 w-10 p-0 hover:bg-gray-100 border border-gray-200"
                               onClick={() => action.onClick?.(item)}
+                              title={action.label}
                             >
                               {action.icon}
                             </Button>

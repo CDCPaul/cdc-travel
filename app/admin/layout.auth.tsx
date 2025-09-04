@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { verifyIdTokenFromCookies, isAdminByEmail } from '../../lib/auth-server';
+import { verifyIdTokenFromCookies } from '../../lib/auth-server';
+import { isAdmin } from '../../lib/admin-config';
 
 export default async function AuthLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
@@ -10,8 +11,8 @@ export default async function AuthLayout({ children }: { children: React.ReactNo
     redirect('/admin/login');
   }
 
-  const isAdmin = await isAdminByEmail(decodedToken.email);
-  if (!isAdmin) {
+  const adminCheck = isAdmin(decodedToken.email);
+  if (!adminCheck) {
     redirect('/admin/login');
   }
 

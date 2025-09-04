@@ -9,12 +9,22 @@
  * @returns 포맷팅된 날짜 문자열
  */
 export function formatDate(
-  date: Date | string | number,
+  date: Date | string | number | { toDate: () => Date }, // Firebase Timestamp도 처리
   format: string = 'YYYY-MM-DD'
 ): string {
-  const dateObj = typeof date === 'string' || typeof date === 'number' 
-    ? new Date(date) 
-    : date;
+  // Firebase Timestamp, Date, string, number 모두 처리
+  let dateObj: Date;
+  
+  if (typeof date === 'string' || typeof date === 'number') {
+    dateObj = new Date(date);
+  } else if (date && typeof date === 'object' && 'toDate' in date) {
+    // Firebase Timestamp 객체 처리
+    dateObj = date.toDate();
+  } else if (date instanceof Date) {
+    dateObj = date;
+  } else {
+    throw new Error('Invalid date type provided to formatDate');
+  }
 
   if (isNaN(dateObj.getTime())) {
     throw new Error('Invalid date provided to formatDate');

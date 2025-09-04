@@ -8,20 +8,67 @@ import { formatDate } from '@/lib/utils';
 import Image from 'next/image';
 import { collection, getDocs, query, orderBy, updateDoc, deleteDoc, doc as firestoreDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+// PDF.js는 동적으로 클라이언트에서만 로딩
 
-// PDF.js를 동적으로 import
-let pdfjsLib: typeof import("pdfjs-dist/legacy/build/pdf") | null = null;
+// 🔥 새로운 방식: PDF.js + Canvas로 클라이언트에서 직접 변환
+async function convertPdfToImages(pdfFile: File, ebookId: string): Promise<{ pageImageUrls: string[], pageCount: number }> {
+  console.log('📚 클라이언트에서 PDF → 이미지 변환 시작...');
+  
+  try {
+    // PDF.js 동적 로딩
+    const pdfjsLib = await import('pdfjs-dist/webpack.mjs');
+    console.log('✅ PDF.js (Webpack 버전) 사용 준비 완료');
 
-const loadPdfJs = async () => {
-  if (!pdfjsLib) {
-    const pdfjs = await import("pdfjs-dist/legacy/build/pdf");
-    pdfjsLib = pdfjs;
-    if (typeof window !== "undefined") {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.mjs";
+    // PDF 문서 로드
+    const arrayBuffer = await pdfFile.arrayBuffer();
+    const pdfDocument = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+    const pageCount = pdfDocument.numPages;
+    console.log(`📄 PDF 문서 로드 완료: ${pageCount}페이지`);
+
+    const pageImageUrls: string[] = [];
+
+    // 각 페이지를 Canvas로 렌더링 후 Firebase Storage에 업로드
+    for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+      console.log(`🖼️ ${pageNum}/${pageCount} 페이지 변환 중...`);
+      
+      const page = await pdfDocument.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 2.0 }); // 고해상도
+
+      // Canvas 생성
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      // PDF 페이지를 Canvas에 렌더링
+      await page.render({
+        canvasContext: ctx,
+        viewport: viewport
+      }).promise;
+
+      // Canvas를 Blob으로 변환
+      const blob = await new Promise<Blob>((resolve) => {
+        canvas.toBlob((blob) => resolve(blob!), 'image/png', 0.9);
+      });
+
+      // Firebase Storage에 업로드
+      const fileName = `ebooks/${ebookId}/pages/page-${pageNum}.png`;
+      const storageRef = ref(storage, fileName);
+      await uploadBytes(storageRef, blob);
+      const downloadURL = await getDownloadURL(storageRef);
+      
+      pageImageUrls.push(downloadURL);
+      console.log(`✅ ${pageNum}페이지 업로드 완료: ${downloadURL}`);
     }
+
+    console.log(`🎉 전체 변환 완료: ${pageCount}페이지`);
+    return { pageImageUrls, pageCount };
+
+  } catch (error) {
+    console.error('❌ 클라이언트 PDF 변환 실패:', error);
+    throw error;
   }
-  return pdfjsLib;
-};
+}
 
 export default function AdminEbookManagementPage() {
   // eBook 목록 상태
@@ -63,12 +110,21 @@ export default function AdminEbookManagementPage() {
     },
   });
 
-  // PDF → 썸네일 이미지 추출 함수
+  // PDF → 썸네일 이미지 추출 함수 (클라이언트 사이드에서만)
   async function extractPdfThumbnail(file: File): Promise<Blob> {
-    const pdfjs = await loadPdfJs();
+    if (typeof window === "undefined") {
+      throw new Error("PDF 처리는 클라이언트 사이드에서만 가능합니다.");
+    }
+
+    // 클라이언트에서만 PDF.js 동적 로딩 (Webpack 최적화 버전)
+    const pdfjsLib = await import("pdfjs-dist/webpack.mjs");
+    
+    // Webpack 버전은 워커 설정이 자동으로 처리됨
+    console.log('✅ PDF.js (Webpack 버전) 사용 준비 완료');
+
     const arrayBuffer = await file.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
-    const pdf = await pdfjs.getDocument(uint8Array).promise;
+    const pdf = await pdfjsLib.getDocument(uint8Array).promise;
     const page = await pdf.getPage(1);
     const viewport = page.getViewport({ scale: 1.5 });
     const canvas = document.createElement("canvas");
@@ -83,6 +139,17 @@ export default function AdminEbookManagementPage() {
   // eBook 등록 핸들러
   const handleRegister = async () => {
     setError(null);
+    
+    // 인증 상태 확인
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      setError("로그인이 필요합니다. 다시 로그인해주세요.");
+      return;
+    }
+    
+    console.log('🔐 현재 사용자:', currentUser.email);
+    console.log('🔐 UID:', currentUser.uid);
+    
     if (!titleKo.trim() || !titleEn.trim() || !descKo.trim() || !descEn.trim() || !file) {
       setError("제목(한/영), 설명(한/영), PDF 파일을 모두 입력/선택해 주세요.");
       return;
@@ -90,33 +157,53 @@ export default function AdminEbookManagementPage() {
     
     setLoading(true);
     try {
-      // PDF.js 로딩 확인
-      await loadPdfJs();
+      console.log('✅ PDF.js 사용 준비 완료');
+      
+      // ID 토큰 갱신 (Storage 권한 문제 해결용)
+      await currentUser.getIdToken(true);
+      console.log('🔐 새 ID 토큰 획득 완료');
+      
+      // eBook ID 생성 (체계적인 파일 관리용)
+      const ebookId = `ebook_${Date.now()}`;
       
       // 1. PDF 파일 Storage 업로드
       const fileExt = file.name.split('.').pop();
-      const fileName = `ebook_${Date.now()}.${fileExt}`;
+      const fileName = `${ebookId}/${ebookId}.${fileExt}`;
       const storageRef = ref(storage, `ebooks/${fileName}`);
       await uploadBytes(storageRef, file);
       const fileUrl = await getDownloadURL(storageRef);
+      console.log('✅ PDF 업로드 완료:', fileUrl);
 
       // 2. 썸네일 추출 및 업로드
       const thumbBlob = await extractPdfThumbnail(file);
-      const thumbName = `ebook_${Date.now()}_thumb.jpg`;
+      const thumbName = `${ebookId}/${ebookId}_thumb.jpg`;
       const thumbRef = ref(storage, `ebooks/${thumbName}`);
       await uploadBytes(thumbRef, thumbBlob);
       const thumbUrl = await getDownloadURL(thumbRef);
+      console.log('✅ 썸네일 업로드 완료:', thumbUrl);
 
-      // 3. Firestore에 eBook 문서 추가 (다국어)
-      await addDoc(collection(db, "ebooks"), {
+      // 🚀 3. PDF → 이미지 변환 (클라이언트에서 직접 처리)
+      console.log('🔄 PDF → 이미지 변환 시작... (새로운 클라이언트 방식)');
+      const { pageImageUrls, pageCount: convertedPageCount } = await convertPdfToImages(file, ebookId);
+      console.log(`✅ ${convertedPageCount}개 페이지 클라이언트 변환 완료`);
+      console.log('📸 생성된 이미지 URLs:', pageImageUrls);
+
+      // 4. Firestore에 eBook 문서 추가 (다국어 + 이미지 URLs)
+      const ebookData = {
         title: { ko: titleKo, en: titleEn },
         description: { ko: descKo, en: descEn },
         fileUrl,
         thumbUrl: thumbUrl,
-        isPublic: false,
+        pageImageUrls: pageImageUrls, // 🚀 플리핑북용 이미지 배열
+        pageCount: convertedPageCount,
+        ebookId: ebookId, // 파일 관리용 ID
+        isPublic: true, // 🚀 자동 공개로 설정
         createdAt: new Date(),
         createdBy: auth.currentUser?.uid || "unknown"
-      });
+      };
+      
+      console.log('💾 Firestore에 저장할 데이터:', ebookData);
+      await addDoc(collection(db, "ebooks"), ebookData);
 
       // 4. 폼 초기화
       setTitleKo("");
@@ -338,7 +425,7 @@ export default function AdminEbookManagementPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {ebook.createdAt ? formatDate(ebook.createdAt) : 'N/A'}
+                    {ebook.createdAt ? formatDate(ebook.createdAt, 'YYYY-MM-DD HH:mm:ss') : 'N/A'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">

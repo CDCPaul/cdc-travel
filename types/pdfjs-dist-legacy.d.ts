@@ -41,9 +41,60 @@ declare module 'pdfjs-dist/legacy/build/pdf' {
       destroy(): void;
     }
   
-    // getDocument() 반환 객체
-    export function getDocument(src: string | Uint8Array): {
-      promise: Promise<PDFDocumentProxy>;
-    };
+      // getDocument() 반환 객체
+  export function getDocument(src: string | Uint8Array): {
+    promise: Promise<PDFDocumentProxy>;
+  };
+}
+
+// Webpack 최적화 버전 타입 정의
+declare module 'pdfjs-dist/webpack.mjs' {
+  // 워커 설정 객체 (자동 처리되므로 선택사항)
+  export const GlobalWorkerOptions: {
+    workerSrc: string;
+  };
+
+  // 뷰포트 타입
+  export interface PDFPageViewport {
+    width: number;
+    height: number;
+    scale: number;
+    transform: number[];
   }
+
+  // 페이지 렌더링 옵션
+  export interface PDFRenderParams {
+    canvasContext: CanvasRenderingContext2D;
+    viewport: PDFPageViewport;
+  }
+
+  // 렌더 태스크 타입
+  export interface PDFRenderTask {
+    promise: Promise<void>;
+    cancel(): void;
+  }
+
+  // 페이지 객체
+  export interface PDFPageProxy {
+    pageNumber: number;
+    getViewport(params: { scale: number }): PDFPageViewport;
+    render(params: PDFRenderParams): PDFRenderTask;
+    getTextContent(): Promise<unknown>;
+  }
+
+  // 문서 객체
+  export interface PDFDocumentProxy {
+    numPages: number;
+    getPage(pageNumber: number): Promise<PDFPageProxy>;
+    destroy(): void;
+  }
+
+  // getDocument() 반환 객체 (다양한 입력 타입 지원)
+  export function getDocument(src: string | Uint8Array | { data: string | Uint8Array }): {
+    promise: Promise<PDFDocumentProxy>;
+  };
+
+  // 버전 정보
+  export const version: string;
+}
   

@@ -77,17 +77,17 @@ export const refreshToken = async (forceRefresh: boolean = false): Promise<strin
 
 /**
  * 토큰 자동 갱신을 설정하는 함수 (실제 구현)
- * 1시간마다 토큰을 갱신하고 쿠키에 저장
+ * 45분마다 토큰을 갱신하고 쿠키에 저장 (토큰 만료 15분 전에 갱신)
  */
 export const setupTokenRefresh = () => {
   console.log('🔄 토큰 자동 갱신 설정 시작...');
   
-  // 1시간마다 토큰 갱신
+  // 45분마다 토큰 갱신 (토큰 만료 15분 전)
   const interval = setInterval(async () => {
     const user = auth.currentUser;
     if (user) {
       try {
-        const newToken = await getIdToken(user, false); // 강제 갱신 비활성화
+        const newToken = await getIdToken(user, true); // 강제 갱신 활성화
         setAuthCookie(newToken);
         console.log('✅ 토큰 자동 갱신 완료:', user.email);
       } catch (error) {
@@ -95,7 +95,7 @@ export const setupTokenRefresh = () => {
         // 갱신 실패 시에도 에러를 던지지 않음
       }
     }
-  }, 60 * 60 * 1000); // 1시간 (60분 * 60초 * 1000ms)
+  }, 45 * 60 * 1000); // 45분 (45분 * 60초 * 1000ms)
 
   // 정리 함수 반환
   return () => {
@@ -217,10 +217,10 @@ export const testTokenRefresh = async () => {
   }
 
   try {
-    // Firebase SDK의 자동 토큰 갱신 사용
-    const newIdToken = await getIdToken(user, false);
+    // 강제 토큰 갱신 테스트
+    const newIdToken = await getIdToken(user, true); // 강제 갱신 활성화
     setAuthCookie(newIdToken);
-    console.log('✅ 테스트: Firebase ID Token 확인 완료');
+    console.log('✅ 테스트: Firebase ID Token 강제 갱신 완료');
 
     console.log('✅ 토큰 갱신 테스트 완료');
   } catch (error) {
